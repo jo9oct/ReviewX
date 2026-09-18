@@ -1,0 +1,237 @@
+# ==========================================
+# Node.js / Express
+# ==========================================
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# Package manager files
+.npm/
+.yarn/
+.pnpm-store/
+
+
+# ==========================================
+# Environment Variables / Secrets
+# ==========================================
+
+.env
+.env.*
+!.env.example
+!.env.sample
+
+
+# ==========================================
+# Logs
+# ==========================================
+
+logs/
+*.log
+log/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+
+# ==========================================
+# Runtime Data
+# ==========================================
+
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+
+# ==========================================
+# Coverage / Testing
+# ==========================================
+
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+
+# ==========================================
+# Build / Distribution
+# ==========================================
+
+dist/
+build/
+out/
+.tmp/
+temp/
+.cache/
+
+
+# ==========================================
+# Security Scan Temporary Data
+# ==========================================
+
+scan-results/
+scan-output/
+scan-logs/
+scan-temp/
+scanner-output/
+scanner-temp/
+
+# Temporary payloads / evidence
+payloads/
+tmp/
+temporary/
+
+# Do not commit generated reports
+generated-reports/
+reports/generated/
+
+
+# ==========================================
+# Uploads
+# ==========================================
+
+uploads/
+upload/
+storage/
+files/
+
+# Keep empty directories if needed
+# !uploads/.gitkeep
+
+
+# ==========================================
+# Reports / Generated Files
+# ==========================================
+
+*.html
+*.pdf
+*.csv
+
+# If you have source HTML/PDF files that should
+# be committed, remove the corresponding rule.
+
+
+# ==========================================
+# Database / Local Database Files
+# ==========================================
+
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+# MongoDB local data
+data/db/
+mongodb-data/
+
+
+# ==========================================
+# OS Files
+# ==========================================
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.directory
+
+
+# ==========================================
+# IDE / Editors
+# ==========================================
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# IntelliJ / WebStorm
+.idea/
+*.iml
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+
+# ==========================================
+# Debugging
+# ==========================================
+
+.nodemon.json
+*.trace
+*.stacktrace
+
+
+# ==========================================
+# TypeScript (if added later)
+# ==========================================
+
+*.tsbuildinfo
+
+
+# ==========================================
+# Documentation / Generated API files
+# ==========================================
+
+.openapi/
+.swagger/
+.generated/
+
+
+# ==========================================
+# Docker
+# ==========================================
+
+.docker/
+docker-data/
+
+
+# ==========================================
+# Serverless
+# ==========================================
+
+.serverless/
+.aws-sam/
+
+
+# ==========================================
+# Miscellaneous
+# ==========================================
+
+*.bak
+*.tmp
+*.temp
+*.swp
+*.swo
+*.orig
+
+# Local configuration
+config.local.*
+*.local
+
+# Backup files
+*.backup
+*.old
