@@ -22,6 +22,10 @@ import {
 } from "./middleware/security.middleware.js";
 
 import {
+  analysisAccessMiddleware
+} from "./middleware/analysisAccess.middleware.js";
+
+import {
   notFound
 } from "./middleware/notFound.middleware.js";
 
@@ -64,6 +68,10 @@ app.use(
     extended: false,
     limit: "2mb"
   })
+);
+
+app.use(
+  analysisAccessMiddleware
 );
 
 app.get(

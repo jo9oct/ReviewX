@@ -20,7 +20,7 @@ export async function create(
         file:
           req.file || null,
         accessContext:
-          req.analysisAccessContext ||
+          req.analysisAccess  ||
           null
       });
 

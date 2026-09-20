@@ -78,6 +78,13 @@ const aiAnalysisSchema = new Schema(
             type: String,
             maxlength: 20000,
             default: null
+          },
+
+          securityExplanation: {
+            type: String,
+            trim: true,
+            maxlength: 10000,
+            default: null
           }
         }
       ],
@@ -105,7 +112,8 @@ const aiAnalysisSchema = new Schema(
   }
 );
 
-export const AiAnalysis = mongoose.model(
-  "AiAnalysis",
-  aiAnalysisSchema
-);
+export const AiAnalysis =
+  mongoose.model(
+    "AiAnalysis",
+    aiAnalysisSchema
+  );

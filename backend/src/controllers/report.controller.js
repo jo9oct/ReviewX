@@ -22,7 +22,7 @@ export async function create(
         type:
           req.body.type,
         access:
-          req.analysisAccessContext ||
+          req.analysisAccess  ||
           null
       });
 

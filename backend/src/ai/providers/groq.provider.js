@@ -1,5 +1,4 @@
-﻿
-import Groq from "groq-sdk";
+﻿import Groq from "groq-sdk";
 
 import {
   aiConfig
@@ -16,30 +15,36 @@ export class GroqProvider {
     this.client =
       new Groq({
         apiKey:
-          aiConfig.groq.apiKey,
-        baseURL:
-          aiConfig.groq.baseURL
+          aiConfig.groq.apiKey
       });
 
-    this.name = "groq";
+    this.name =
+      "groq";
+
     this.model =
       aiConfig.groq.model;
   }
 
-  async generate({
+  async analyze({
     system,
     user,
     maxOutputTokens
   }) {
     const response =
       await this.client.chat.completions.create({
-        model: this.model,
-        temperature: 0.1,
+        model:
+          this.model,
+
+        temperature:
+          0.1,
+
         max_tokens:
           maxOutputTokens,
+
         response_format: {
           type: "json_object"
         },
+
         messages: [
           {
             role: "system",
@@ -66,9 +71,14 @@ export class GroqProvider {
     }
 
     return {
-      provider: this.name,
-      model: this.model,
-      content: content.trim()
+      provider:
+        this.name,
+
+      model:
+        this.model,
+
+      content:
+        content.trim()
     };
   }
 }

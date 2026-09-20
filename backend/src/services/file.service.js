@@ -17,6 +17,20 @@ import {
 
 import { uploadConfig } from "../config/upload.js";
 
+const LANGUAGE_EXTENSIONS = Object.freeze({
+  javascript: ".js",
+  typescript: ".ts",
+  python: ".py",
+  java: ".java",
+  csharp: ".cs",
+  php: ".php",
+  c: ".c",
+  cpp: ".cpp",
+  html: ".html",
+  css: ".css",
+  sql: ".sql"
+});
+
 export function processUploadedFile(
   file
 ) {
@@ -32,9 +46,7 @@ export function processUploadedFile(
     );
   }
 
-  if (
-    file.buffer.length === 0
-  ) {
+  if (file.buffer.length === 0) {
     throw new BadRequestError(
       "Uploaded source file is empty."
     );
@@ -63,10 +75,14 @@ export function processUploadedFile(
   }
 
   const fileName =
-    getSafeBaseName(originalName);
+    getSafeBaseName(
+      originalName
+    );
 
   const extension =
-    getSafeExtension(fileName);
+    getSafeExtension(
+      fileName
+    );
 
   let sourceCode;
 
@@ -82,7 +98,9 @@ export function processUploadedFile(
   }
 
   sourceCode =
-    normalizeSourceCode(sourceCode);
+    normalizeSourceCode(
+      sourceCode
+    );
 
   if (isEmptySource(sourceCode)) {
     throw new BadRequestError(
@@ -91,7 +109,9 @@ export function processUploadedFile(
   }
 
   const sourceSize =
-    getSourceSize(sourceCode);
+    getSourceSize(
+      sourceCode
+    );
 
   if (
     sourceSize >
@@ -104,20 +124,29 @@ export function processUploadedFile(
 
   return Object.freeze({
     source: "upload",
+
     fileName,
+
     extension,
-    mimeType: file.mimetype,
+
+    mimeType:
+      file.mimetype,
+
     sourceCode,
+
     sourceSize
   });
 }
 
 export function processPastedCode({
   code,
-  fileName = null
+  fileName = "source",
+  language = null
 }) {
   const sourceCode =
-    normalizeSourceCode(code);
+    normalizeSourceCode(
+      code
+    );
 
   if (isEmptySource(sourceCode)) {
     throw new BadRequestError(
@@ -126,7 +155,9 @@ export function processPastedCode({
   }
 
   const sourceSize =
-    getSourceSize(sourceCode);
+    getSourceSize(
+      sourceCode
+    );
 
   if (
     sourceSize >
@@ -137,21 +168,57 @@ export function processPastedCode({
     );
   }
 
+  let safeFileName =
+    fileName || "source";
+
   let extension = null;
 
   if (fileName) {
     extension =
-      path.extname(fileName).toLowerCase();
+      path.extname(
+        fileName
+      ).toLowerCase();
 
-    getSafeExtension(fileName);
+    if (extension) {
+      getSafeExtension(
+        fileName
+      );
+    }
+  }
+
+  if (!extension) {
+    const normalizedLanguage =
+      String(
+        language || ""
+      )
+        .trim()
+        .toLowerCase();
+
+    extension =
+      LANGUAGE_EXTENSIONS[
+        normalizedLanguage
+      ] || null;
+  }
+
+  if (!extension) {
+    throw new BadRequestError(
+      "A supported programming language or file extension is required for pasted source code."
+    );
   }
 
   return Object.freeze({
     source: "paste",
-    fileName,
+
+    fileName:
+      safeFileName,
+
     extension,
-    mimeType: "text/plain",
+
+    mimeType:
+      "text/plain",
+
     sourceCode,
+
     sourceSize
   });
 }
@@ -162,13 +229,22 @@ export async function processReviewInput({
   maxSourceSize =
     uploadConfig.maxFileSize
 }) {
-  const processed = file
-    ? processUploadedFile(file)
-    : processPastedCode({
-        code: input.code,
-        fileName:
-          input.fileName || null
-      });
+  const processed =
+    file
+      ? processUploadedFile(
+          file
+        )
+      : processPastedCode({
+          code:
+            input.code,
+
+          fileName:
+            input.fileName ||
+            "source",
+
+          language:
+            input.language
+        });
 
   if (
     processed.sourceSize >
@@ -182,18 +258,27 @@ export async function processReviewInput({
   return Object.freeze({
     sourceType:
       processed.source,
+
     fileName:
       processed.fileName,
+
     fileExtension:
       processed.extension,
+
     language:
-      input.language || null,
+      input.language ||
+      null,
+
     code:
       processed.sourceCode,
+
     sourceSize:
       processed.sourceSize,
+
     companyRules:
-      Array.isArray(input.companyRules)
+      Array.isArray(
+        input.companyRules
+      )
         ? input.companyRules
         : []
   });

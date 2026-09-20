@@ -31,7 +31,7 @@ const findingAnalysis =
       Joi.string()
         .allow("")
         .max(10000)
-        .required()
+        .default("")
   });
 
 export const aiResponseSchema =
@@ -51,7 +51,8 @@ export const aiResponseSchema =
     recommendations:
       Joi.array()
         .items(
-          Joi.string().max(2000)
+          Joi.string()
+            .max(2000)
         )
         .max(20)
         .required()
@@ -73,8 +74,12 @@ export function validateAIResponse(
     );
 
   return {
-    valid: !error,
+    valid:
+      !error,
+
     value,
-    error: error || null
+
+    error:
+      error || null
   };
 }

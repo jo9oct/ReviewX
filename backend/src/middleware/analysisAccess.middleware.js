@@ -1,4 +1,3 @@
-
 import {
   normalizeAccess
 } from "../services/analysisAccess.service.js";
@@ -9,10 +8,17 @@ export function analysisAccessMiddleware(
   next
 ) {
   const access =
-    req.analysisAccess || {};
+    req.analysisAccess;
 
-  req.analysisAccess =
-    normalizeAccess(access);
+  if (
+    access === null ||
+    access === undefined
+  ) {
+    req.analysisAccess = null;
+  } else {
+    req.analysisAccess =
+      normalizeAccess(access);
+  }
 
   next();
 }

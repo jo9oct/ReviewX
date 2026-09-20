@@ -1,34 +1,38 @@
-﻿
-import { env } from "./env.js";
+﻿import { env } from "./env.js";
 
 export const cloudinaryConfig = Object.freeze({
   cloudName:
-    env.CLOUDINARY_CLOUD_NAME || "",
+    env.cloudinary.cloudName,
 
   apiKey:
-    env.CLOUDINARY_API_KEY || "",
+    env.cloudinary.apiKey,
 
   apiSecret:
-    env.CLOUDINARY_API_SECRET || "",
+    env.cloudinary.apiSecret,
 
   folder:
-    env.CLOUDINARY_REPORT_FOLDER ||
-    "code-review/reports"
+    "ReviewX/reports"
 });
 
 export function assertCloudinaryConfig() {
   const missing = [];
 
   if (!cloudinaryConfig.cloudName) {
-    missing.push("CLOUDINARY_CLOUD_NAME");
+    missing.push(
+      "CLOUDINARY_CLOUD_NAME"
+    );
   }
 
   if (!cloudinaryConfig.apiKey) {
-    missing.push("CLOUDINARY_API_KEY");
+    missing.push(
+      "CLOUDINARY_API_KEY"
+    );
   }
 
   if (!cloudinaryConfig.apiSecret) {
-    missing.push("CLOUDINARY_API_SECRET");
+    missing.push(
+      "CLOUDINARY_API_SECRET"
+    );
   }
 
   if (missing.length > 0) {

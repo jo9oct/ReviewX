@@ -1,63 +1,45 @@
-﻿
-import { env } from "./env.js";
+﻿import {
+  env
+} from "./env.js";
 
 export const aiConfig = Object.freeze({
   enabled:
-    env.AI_ENABLED !== "false",
+    env.ai.provider !== "disabled",
 
   provider:
-    env.AI_PROVIDER ||
-    "groq",
+    env.ai.provider,
 
   groq: {
     apiKey:
-      env.GROQ_API_KEY || "",
+      env.ai.groqApiKey,
 
     model:
-      env.GROQ_MODEL ||
-      "openai/gpt-oss-20b",
-
-    baseURL:
-      env.GROQ_BASE_URL ||
-      "https://api.groq.com/openai/v1"
+      env.ai.groqModel
   },
 
   openai: {
     apiKey:
-      env.OPENAI_API_KEY || "",
+      env.ai.openaiApiKey,
 
     model:
-      env.OPENAI_MODEL ||
+      env.ai.openaiModel ||
       "gpt-4o-mini",
 
     baseURL:
-      env.OPENAI_BASE_URL ||
       "https://api.openai.com/v1"
   },
 
   limits: {
     maxFindings:
-      Number(
-        env.MAX_AI_FINDINGS ||
-        20
-      ),
+      env.ai.maxFindings,
 
     maxInputChars:
-      Number(
-        env.MAX_AI_INPUT_CHARS ||
-        24000
-      ),
+      env.ai.maxInputChars,
 
     maxOutputTokens:
-      Number(
-        env.MAX_AI_OUTPUT_TOKENS ||
-        4000
-      ),
+      4000,
 
     retryDelayMs:
-      Number(
-        env.AI_RETRY_DELAY_MS ||
-        1200
-      )
+      1200
   }
 });

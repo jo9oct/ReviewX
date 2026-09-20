@@ -10,6 +10,10 @@ import {
 } from "../database/repositories/finding.repository.js";
 
 import {
+  evidenceRepository
+} from "../database/repositories/evidence.repository.js";
+
+import {
   scoreRepository
 } from "../database/repositories/score.repository.js";
 
@@ -36,6 +40,10 @@ import {
 import {
   generatePDFReport
 } from "./pdfReport.js";
+
+import {
+  normalizeAccess
+} from "../services/analysisAccess.service.js";
 
 const REPORT_DIRECTORY =
   path.resolve(
@@ -79,6 +87,17 @@ export async function generateReport({
       reviewId
     );
 
+  const evidence =
+    await evidenceRepository.findByReviewId(
+      reviewId
+    );
+
+  const findingsWithEvidence =
+    attachEvidenceToFindings({
+      findings,
+      evidence
+    });
+
   const score =
     await scoreRepository.findByReviewId(
       reviewId
@@ -93,7 +112,8 @@ export async function generateReport({
   const report =
     formatReport({
       review,
-      findings,
+      findings:
+        findingsWithEvidence,
       score,
       aiAnalysis
     });
@@ -131,12 +151,29 @@ export async function generateReport({
         reportRecord._id,
         {
           status: "completed",
+
           content,
+
           fileName:
             buildFileName(
               reviewId,
               "json"
-            )
+            ),
+
+          storageProvider:
+            "local",
+
+          storageUrl:
+            null,
+
+          publicId:
+            null,
+
+          filePath:
+            null,
+
+          error:
+            null
         }
       );
 
@@ -194,6 +231,9 @@ export async function generateReport({
         filePath:
           null,
 
+        content:
+          null,
+
         error:
           null
       }
@@ -245,13 +285,94 @@ export async function listReports(
   );
 }
 
+function attachEvidenceToFindings({
+  findings = [],
+  evidence = []
+}) {
+  if (
+    !Array.isArray(findings)
+  ) {
+    return [];
+  }
+
+  if (
+    !Array.isArray(evidence) ||
+    evidence.length === 0
+  ) {
+    return findings.map(
+      (finding) => ({
+        ...finding,
+        evidence: []
+      })
+    );
+  }
+
+  const evidenceByFindingId =
+    new Map();
+
+  for (
+    const item
+    of evidence
+  ) {
+    if (
+      !item?.findingId
+    ) {
+      continue;
+    }
+
+    const findingId =
+      String(
+        item.findingId
+      );
+
+    const existing =
+      evidenceByFindingId.get(
+        findingId
+      ) || [];
+
+    existing.push(
+      item
+    );
+
+    evidenceByFindingId.set(
+      findingId,
+      existing
+    );
+  }
+
+  return findings.map(
+    (finding) => {
+      const findingId =
+        String(
+          finding._id ||
+          finding.id ||
+          ""
+        );
+
+      return {
+        ...finding,
+
+        evidence:
+          evidenceByFindingId.get(
+            findingId
+          ) || []
+      };
+    }
+  );
+}
+
 function assertReportAccess(
   type,
   access
 ) {
+  const normalizedAccess =
+    normalizeAccess(
+      access
+    );
+
   if (
     type === "pdf" &&
-    access?.features?.pdf !== true
+    normalizedAccess.features.pdf !== true
   ) {
     throw createError(
       "PDF reports are not enabled for this analysis access.",

@@ -227,6 +227,9 @@ async function persistReviewResult({
       ? result.findings
       : [];
 
+  const findingIdsByFingerprint =
+    new Map();
+
   for (
     const finding
     of findings
@@ -236,6 +239,17 @@ async function persistReviewResult({
         ...finding,
         reviewId
       });
+
+    if (
+      finding.fingerprint
+    ) {
+      findingIdsByFingerprint.set(
+        String(
+          finding.fingerprint
+        ),
+        savedFinding._id
+      );
+    }
 
     const evidence =
       Array.isArray(
@@ -269,10 +283,85 @@ async function persistReviewResult({
   if (
     result.aiAnalysis
   ) {
+    const aiFindings =
+      Array.isArray(
+        result.aiAnalysis.findings
+      )
+        ? result.aiAnalysis.findings
+        : [];
+
+    const persistedAiFindings = [];
+
+    for (
+      const aiFinding
+      of aiFindings
+    ) {
+      const findingId =
+        findingIdsByFingerprint.get(
+          String(
+            aiFinding.findingFingerprint
+          )
+        );
+
+      if (
+        !findingId
+      ) {
+        console.warn(
+          "AI finding fingerprint does not match a persisted finding:",
+          aiFinding.findingFingerprint
+        );
+
+        continue;
+      }
+
+      persistedAiFindings.push({
+        findingId,
+
+        explanation:
+          aiFinding.explanation,
+
+        impact:
+          aiFinding.impact,
+
+        fix:
+          aiFinding.fix,
+
+        improvedCode:
+          aiFinding.improvedCode,
+
+        securityExplanation:
+          aiFinding.securityExplanation
+      });
+    }
+
     await aiAnalysisRepository
       .upsertByReviewId(
         reviewId,
-        result.aiAnalysis
+        {
+          provider:
+            result.aiAnalysis.provider,
+
+          model:
+            result.aiAnalysis.model,
+
+          status:
+            result.aiAnalysis.status,
+
+          summary:
+            result.aiAnalysis.summary,
+
+          findings:
+            persistedAiFindings,
+
+          errorMessage:
+            Array.isArray(
+              result.aiAnalysis.errors
+            )
+              ? result.aiAnalysis.errors.join(
+                  "; "
+                )
+              : null
+        }
       );
   }
 }

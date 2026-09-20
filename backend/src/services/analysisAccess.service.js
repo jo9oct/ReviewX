@@ -8,12 +8,12 @@ const DEFAULT_ACCESS = Object.freeze({
 
   limits: Object.freeze({
     maxSourceSize: 2000000,
-    maxAiFindings: 0
+    maxAiFindings: 20
   }),
 
   features: Object.freeze({
-    ai: false,
-    pdf: false
+    ai: true,
+    pdf: true
   })
 });
 
@@ -34,15 +34,31 @@ function positiveInteger(
 export function normalizeAccess(
   access = {}
 ) {
+  if (
+    access === null ||
+    access === undefined
+  ) {
+    return DEFAULT_ACCESS;
+  }
+
+  if (
+    typeof access !== "object" ||
+    Array.isArray(access)
+  ) {
+    throw new BadRequestError(
+      "Invalid analysis access context."
+    );
+  }
+
   const limits =
-    access?.limits || {};
+    access.limits || {};
 
   const features =
-    access?.features || {};
+    access.features || {};
 
   return Object.freeze({
     plan:
-      typeof access?.plan === "string"
+      typeof access.plan === "string"
         ? access.plan
         : DEFAULT_ACCESS.plan,
 
@@ -62,10 +78,14 @@ export function normalizeAccess(
 
     features: Object.freeze({
       ai:
-        features.ai === true,
+        typeof features.ai === "boolean"
+          ? features.ai
+          : DEFAULT_ACCESS.features.ai,
 
       pdf:
-        features.pdf === true
+        typeof features.pdf === "boolean"
+          ? features.pdf
+          : DEFAULT_ACCESS.features.pdf
     })
   });
 }
@@ -77,15 +97,7 @@ export async function getAnalysisAccess(
     accessContext === null ||
     accessContext === undefined
   ) {
-    return normalizeAccess();
-  }
-
-  if (
-    typeof accessContext !== "object"
-  ) {
-    throw new BadRequestError(
-      "Invalid analysis access context."
-    );
+    return DEFAULT_ACCESS;
   }
 
   return normalizeAccess(

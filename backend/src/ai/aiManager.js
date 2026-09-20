@@ -23,6 +23,48 @@ export async function analyzeWithAI({
   findings,
   access
 }) {
+  console.log(
+    "=== AI ACCESS DEBUG ==="
+  );
+
+  console.log(
+    "access:",
+    JSON.stringify(
+      access,
+      null,
+      2
+    )
+  );
+
+  console.log(
+    "access.features.ai:",
+    access?.features?.ai
+  );
+
+  console.log(
+    "access.features.pdf:",
+    access?.features?.pdf
+  );
+
+  console.log(
+    "access.limits.maxAiFindings:",
+    access?.limits?.maxAiFindings
+  );
+
+  console.log(
+    "AI enabled:",
+    aiConfig.enabled
+  );
+
+  console.log(
+    "AI provider:",
+    aiConfig.provider
+  );
+
+  console.log(
+    "======================="
+  );
+
   if (
     !aiConfig.enabled
   ) {
@@ -84,28 +126,47 @@ export async function analyzeWithAI({
         aiContext
       );
 
+    const parsed =
+      parseAIContent(
+        response.content
+      );
+
     const validation =
       validateAIResponse(
-        response
+        parsed
       );
 
     if (
       !validation.valid
     ) {
       throw new Error(
-        "AI returned an invalid response."
+        `AI returned an invalid response: ${validation.error.message}`
       );
     }
 
-    return normalizeAIResponse(
-      response,
-      {
-        provider:
-          provider.name,
-        model:
-          provider.model
-      }
-    );
+    const normalized =
+      normalizeAIResponse(
+        validation.value
+      );
+
+    return {
+      status: "completed",
+
+      provider:
+        provider.name,
+
+      model:
+        provider.model,
+
+      summary:
+        normalized.summary,
+
+      findings:
+        normalized.findings,
+
+      recommendations:
+        normalized.recommendations
+    };
   } catch (error) {
     return {
       status: "failed",
@@ -119,11 +180,9 @@ export async function analyzeWithAI({
       summary:
         null,
 
-      findings:
-        [],
+      findings: [],
 
-      recommendations:
-        [],
+      recommendations: [],
 
       errors: [
         error instanceof Error
@@ -131,5 +190,53 @@ export async function analyzeWithAI({
           : "AI analysis failed."
       ]
     };
+  }
+}
+
+function parseAIContent(
+  content
+) {
+  if (
+    typeof content !==
+    "string"
+  ) {
+    throw new Error(
+      "AI returned invalid content."
+    );
+  }
+
+  const cleaned =
+    content
+      .trim()
+      .replace(
+        /^```json\s*/i,
+        ""
+      )
+      .replace(
+        /^```\s*/i,
+        ""
+      )
+      .replace(
+        /\s*```$/i,
+        ""
+      )
+      .trim();
+
+  if (
+    !cleaned
+  ) {
+    throw new Error(
+      "AI returned empty content."
+    );
+  }
+
+  try {
+    return JSON.parse(
+      cleaned
+    );
+  } catch {
+    throw new Error(
+      "AI returned invalid JSON."
+    );
   }
 }
