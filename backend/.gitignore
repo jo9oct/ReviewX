@@ -23,6 +23,7 @@ bun-debug.log*
 .env.*
 !.env.example
 !.env.sample
+!.env.test
 
 
 # ==========================================
