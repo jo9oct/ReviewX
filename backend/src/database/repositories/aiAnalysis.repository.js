@@ -1,10 +1,32 @@
-﻿import { AiAnalysis } from "../models/aiAnalysis.model.js";
+﻿import {
+  AiAnalysis
+} from "../models/aiAnalysis.model.js";
+
 
 export async function create(
-  data
+  data,
+  options = {}
 ) {
-  return AiAnalysis.create(data);
+  if (
+    Object.keys(options).length ===
+    0
+  ) {
+    return AiAnalysis.create(data);
+  }
+
+
+  const [
+    aiAnalysis
+  ] =
+    await AiAnalysis.create(
+      [data],
+      options
+    );
+
+
+  return aiAnalysis;
 }
+
 
 export async function findByReviewId(
   reviewId
@@ -14,27 +36,41 @@ export async function findByReviewId(
   }).lean();
 }
 
+
 export async function upsertByReviewId(
   reviewId,
-  data
+  data,
+  options = {}
 ) {
   return AiAnalysis.findOneAndUpdate(
     {
       reviewId
     },
+
     {
-      $set: data,
+      $set:
+        data,
+
       $setOnInsert: {
         reviewId
       }
     },
+
     {
-      new: true,
-      upsert: true,
-      runValidators: true
+      new:
+        true,
+
+      upsert:
+        true,
+
+      runValidators:
+        true,
+
+      ...options
     }
   ).lean();
 }
+
 
 export async function deleteByReviewId(
   reviewId
@@ -44,10 +80,14 @@ export async function deleteByReviewId(
   }).lean();
 }
 
+
 export const aiAnalysisRepository =
   Object.freeze({
     create,
+
     findByReviewId,
+
     upsertByReviewId,
+
     deleteByReviewId
   });

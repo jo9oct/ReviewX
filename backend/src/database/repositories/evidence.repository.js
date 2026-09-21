@@ -1,28 +1,65 @@
-﻿
-import { Evidence } from "../models/evidence.model.js";
+﻿import {
+  Evidence
+} from "../models/evidence.model.js";
 
-export async function create(data) {
-  return Evidence.create(data);
+
+export async function create(
+  data,
+  options = {}
+) {
+  if (
+    Object.keys(options).length ===
+    0
+  ) {
+    return Evidence.create(data);
+  }
+
+
+  const [
+    evidence
+  ] =
+    await Evidence.create(
+      [data],
+      options
+    );
+
+
+  return evidence;
 }
 
-export async function createMany(evidence) {
-  if (!Array.isArray(evidence) || evidence.length === 0) {
+
+export async function createMany(
+  evidence,
+  options = {}
+) {
+  if (
+    !Array.isArray(evidence) ||
+    evidence.length === 0
+  ) {
     return [];
   }
+
 
   return Evidence.insertMany(
     evidence,
     {
-      ordered: true
+      ordered:
+        true,
+
+      ...options
     }
   );
 }
 
-export async function findById(evidenceId) {
+
+export async function findById(
+  evidenceId
+) {
   return Evidence.findById(
     evidenceId
   ).lean();
 }
+
 
 export async function findByFindingId(
   findingId
@@ -31,10 +68,12 @@ export async function findByFindingId(
     findingId
   })
     .sort({
-      createdAt: 1
+      createdAt:
+        1
     })
     .lean();
 }
+
 
 export async function findByReviewId(
   reviewId
@@ -43,10 +82,12 @@ export async function findByReviewId(
     reviewId
   })
     .sort({
-      createdAt: 1
+      createdAt:
+        1
     })
     .lean();
 }
+
 
 export async function deleteByReviewId(
   reviewId
@@ -56,11 +97,18 @@ export async function deleteByReviewId(
   });
 }
 
-export const evidenceRepository = Object.freeze({
-  create,
-  createMany,
-  findById,
-  findByFindingId,
-  findByReviewId,
-  deleteByReviewId
-});
+
+export const evidenceRepository =
+  Object.freeze({
+    create,
+
+    createMany,
+
+    findById,
+
+    findByFindingId,
+
+    findByReviewId,
+
+    deleteByReviewId
+  });

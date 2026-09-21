@@ -32,39 +32,58 @@ export function validateBody(schema) {
   };
 }
 
-export function validateReviewInput(schema) {
+export function validateReviewInput(
+  schema
+) {
   return (req, _res, next) => {
-    console.log("UPLOAD DEBUG:", {
-      body: req.body,
-      file: req.file
-        ? {
-            fieldname: req.file.fieldname,
-            originalname: req.file.originalname,
-            mimetype: req.file.mimetype,
-            size: req.file.size
-          }
-        : null
-    });
+    const hasFile =
+      Boolean(req.file);
+
+    const hasCode =
+      typeof req.body?.code === "string" &&
+      req.body.code.trim().length > 0;
+
+    if (
+      hasFile &&
+      hasCode
+    ) {
+      return next(
+        new BadRequestError(
+          "Provide either pasted source code or a source file, not both."
+        )
+      );
+    }
+
+    if (
+      !hasFile &&
+      !hasCode
+    ) {
+      return next(
+        new BadRequestError(
+          "Provide source code or upload a source file."
+        )
+      );
+    }
 
     const input = {
       ...req.body
     };
 
-    if (req.file) {
+    if (hasFile) {
       input.fileName =
         req.file.originalname;
-
-      input.code =
-        "__uploaded_source_file__";
     }
 
     const {
       error,
       value
-    } = schema.validate(input, {
-      abortEarly: false,
-      stripUnknown: true
-    });
+    } = schema.validate(
+      input,
+      {
+        abortEarly: false,
+        stripUnknown: true
+      }
+    );
 
     if (error) {
       return next(
@@ -76,14 +95,6 @@ export function validateReviewInput(schema) {
     }
 
     req.body = value;
-
-    if (
-      req.file &&
-      req.body.code ===
-        "__uploaded_source_file__"
-    ) {
-      delete req.body.code;
-    }
 
     next();
   };

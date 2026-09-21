@@ -1,36 +1,79 @@
-﻿
-import { Finding } from "../models/finding.model.js";
+﻿import {
+  Finding
+} from "../models/finding.model.js";
 
-export async function create(data) {
-  return Finding.create(data);
+
+export async function create(
+  data,
+  options = {}
+) {
+  if (
+    Object.keys(options).length ===
+    0
+  ) {
+    return Finding.create(data);
+  }
+
+
+  const [
+    finding
+  ] =
+    await Finding.create(
+      [data],
+      options
+    );
+
+
+  return finding;
 }
 
-export async function createMany(findings) {
-  if (!Array.isArray(findings) || findings.length === 0) {
+
+export async function createMany(
+  findings,
+  options = {}
+) {
+  if (
+    !Array.isArray(findings) ||
+    findings.length === 0
+  ) {
     return [];
   }
+
 
   return Finding.insertMany(
     findings,
     {
-      ordered: true
+      ordered:
+        true,
+
+      ...options
     }
   );
 }
 
-export async function findById(findingId) {
-  return Finding.findById(findingId).lean();
+
+export async function findById(
+  findingId
+) {
+  return Finding.findById(
+    findingId
+  ).lean();
 }
 
-export async function findByReviewId(reviewId) {
+
+export async function findByReviewId(
+  reviewId
+) {
   return Finding.find({
     reviewId
   })
     .sort({
-      createdAt: 1
+      createdAt:
+        1
     })
     .lean();
 }
+
 
 export async function findByFingerprint(
   reviewId,
@@ -42,25 +85,35 @@ export async function findByFingerprint(
   }).lean();
 }
 
+
 export async function updateById(
   findingId,
-  update
+  update,
+  options = {}
 ) {
   return Finding.findByIdAndUpdate(
     findingId,
     update,
     {
       new: true,
-      runValidators: true
+
+      runValidators:
+        true,
+
+      ...options
     }
   ).lean();
 }
 
-export async function deleteById(findingId) {
+
+export async function deleteById(
+  findingId
+) {
   return Finding.findByIdAndDelete(
     findingId
   ).lean();
 }
+
 
 export async function deleteByReviewId(
   reviewId
@@ -70,13 +123,22 @@ export async function deleteByReviewId(
   });
 }
 
-export const findingRepository = Object.freeze({
-  create,
-  createMany,
-  findById,
-  findByReviewId,
-  findByFingerprint,
-  updateById,
-  deleteById,
-  deleteByReviewId
-});
+
+export const findingRepository =
+  Object.freeze({
+    create,
+
+    createMany,
+
+    findById,
+
+    findByReviewId,
+
+    findByFingerprint,
+
+    updateById,
+
+    deleteById,
+
+    deleteByReviewId
+  });

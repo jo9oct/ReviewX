@@ -12,7 +12,7 @@ const DEFAULT_ACCESS = Object.freeze({
   }),
 
   features: Object.freeze({
-    ai: false,
+    ai: true,
     pdf: true
   })
 });
