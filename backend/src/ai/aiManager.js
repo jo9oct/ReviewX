@@ -18,106 +18,95 @@ import {
   normalizeAIResponse
 } from "./aiNormalizer.js";
 
+import {
+  normalizeAccess,
+  assertAiAccess,
+  getMaxAiFindings
+} from "../services/analysisAccess.service.js";
+
 export async function analyzeWithAI({
   context,
   findings,
   access
 }) {
-  console.log(
-    "=== AI ACCESS DEBUG ==="
-  );
-
-  console.log(
-    "access:",
-    JSON.stringify(
-      access,
-      null,
-      2
-    )
-  );
-
-  console.log(
-    "access.features.ai:",
-    access?.features?.ai
-  );
-
-  console.log(
-    "access.features.pdf:",
-    access?.features?.pdf
-  );
-
-  console.log(
-    "access.limits.maxAiFindings:",
-    access?.limits?.maxAiFindings
-  );
-
-  console.log(
-    "AI enabled:",
-    aiConfig.enabled
-  );
-
-  console.log(
-    "AI provider:",
-    aiConfig.provider
-  );
-
-  console.log(
-    "======================="
-  );
-
   if (
     !aiConfig.enabled
   ) {
     return {
       status: "disabled",
+
       provider: null,
+
       model: null,
+
       summary: null,
+
       findings: [],
+
       recommendations: []
     };
   }
 
+  const normalizedAccess =
+    normalizeAccess(
+      access
+    );
+
   if (
-    access?.features?.ai !== true
+    !normalizedAccess.features.ai
   ) {
     return {
       status: "not_available",
+
       provider: null,
+
       model: null,
+
       summary: null,
+
       findings: [],
+
       recommendations: []
     };
   }
 
   const maxFindings =
-    Number(
-      access?.limits
-        ?.maxAiFindings
-    ) || 0;
+    getMaxAiFindings(
+      normalizedAccess
+    );
 
   if (
     maxFindings <= 0
   ) {
     return {
       status: "limit_reached",
+
       provider: null,
+
       model: null,
+
       summary: null,
+
       findings: [],
+
       recommendations: []
     };
   }
 
   try {
+    assertAiAccess(
+      normalizedAccess
+    );
+
     const provider =
       createProvider();
 
     const aiContext =
       buildAIContext({
         context,
+
         findings,
+
         maxFindings
       });
 
@@ -174,11 +163,9 @@ export async function analyzeWithAI({
       provider:
         aiConfig.provider,
 
-      model:
-        null,
+      model: null,
 
-      summary:
-        null,
+      summary: null,
 
       findings: [],
 

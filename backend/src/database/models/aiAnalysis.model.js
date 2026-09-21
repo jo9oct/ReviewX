@@ -32,7 +32,8 @@ const aiAnalysisSchema = new Schema(
         "completed",
         "failed",
         "skipped",
-        "not_available"
+        "not_available",
+        "limit_reached"
       ],
       required: true
     },

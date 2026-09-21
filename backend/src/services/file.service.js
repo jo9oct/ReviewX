@@ -17,6 +17,8 @@ import {
 
 import { uploadConfig } from "../config/upload.js";
 
+import mockCompanyRules from "../company-rules/mock.js";
+
 const LANGUAGE_EXTENSIONS = Object.freeze({
   javascript: ".js",
   typescript: ".ts",
@@ -275,11 +277,14 @@ export async function processReviewInput({
     sourceSize:
       processed.sourceSize,
 
+    // companyRules:
+    //   Array.isArray(
+    //     input.companyRules
+    //   )
+    //     ? input.companyRules
+    //     : []
+
     companyRules:
-      Array.isArray(
-        input.companyRules
-      )
-        ? input.companyRules
-        : []
+      mockCompanyRules
   });
 }
