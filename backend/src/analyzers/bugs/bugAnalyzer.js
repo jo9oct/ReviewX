@@ -1,27 +1,38 @@
 ﻿import {
-  analyzeNullUndefined
-} from "./nullUndefined.analyzer.js";
+  analyzeLogic
+} from "./logic/logicAnalyzer.js";
 
 import {
-  analyzeLogicErrors
-} from "./logicErrors.analyzer.js";
+  analyzeNull
+} from "./null/nullAnalyzer.js";
 
-export function analyzeBugs(
-  context
-) {
-  const findings = [];
+import {
+  analyzeAsync
+} from "./async/asyncAnalyzer.js";
 
-  findings.push(
-    ...analyzeNullUndefined(
-      context
-    )
-  );
+import {
+  analyzeExceptions
+} from "./exceptions/exceptionAnalyzer.js";
 
-  findings.push(
-    ...analyzeLogicErrors(
-      context
-    )
-  );
+import {
+  analyzeResources
+} from "./resources/resourceAnalyzer.js";
 
-  return findings;
+import {
+  analyzeTypes
+} from "./type/typeAnalyzer.js";
+
+export function analyzeBugs(context) {
+  if (!context?.code) {
+    return [];
+  }
+
+  return [
+    ...analyzeLogic(context),
+    ...analyzeNull(context),
+    ...analyzeAsync(context),
+    ...analyzeExceptions(context),
+    ...analyzeResources(context),
+    ...analyzeTypes(context)
+  ];
 }
