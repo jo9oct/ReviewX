@@ -1,39 +1,42 @@
-﻿import {
-  Router
-} from "express";
+import { Router } from 'express';
 
 import {
-  create,
-  getById
-} from "../controllers/review.controller.js";
+  createReview,
+} from '../controllers/review.controller.js';
 
 import {
-  uploadSingleSource
-} from "../middleware/upload.middleware.js";
+  accessMiddleware,
+  enforceReviewLimits,
+} from '../middleware/access.middleware.js';
 
 import {
-  validateReviewInput
-} from "../middleware/validation.middleware.js";
+  validationMiddleware,
+} from '../middleware/validation.middleware.js';
 
 import {
-  reviewRequestSchema
-} from "../validators/review.validator.js";
+  reviewSchema,
+} from '../validators/review.validator.js';
 
-const router =
-  Router();
+import {
+  parseMultipartReview,
+  normalizeMultipartReview,
+  handleMultipartError,
+} from '../input/upload/multipart.js';
+
+const router = Router();
 
 router.post(
-  "/",
-  uploadSingleSource,
-  validateReviewInput(
-    reviewRequestSchema
+  '/',
+  parseMultipartReview,
+  handleMultipartError,
+  normalizeMultipartReview,
+  validationMiddleware(
+    reviewSchema,
+    'body',
   ),
-  create
-);
-
-router.get(
-  "/:reviewId",
-  getById
+  accessMiddleware(),
+  enforceReviewLimits,
+  createReview,
 );
 
 export default router;

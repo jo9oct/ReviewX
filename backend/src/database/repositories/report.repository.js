@@ -1,90 +1,109 @@
-﻿import { Report } from "../models/report.model.js";
+import Report from "../models/report.model.js";
 
-export async function create(
-  data
-) {
-  return Report.create(data);
-}
+const create = async (
+  data,
+) =>
+  Report.create(data);
 
-export async function findById(
-  reportId
-) {
-  return Report.findById(
-    reportId
-  ).lean();
-}
-
-export async function findByReviewId(
-  reviewId
-) {
-  return Report.find({
-    reviewId
-  })
-    .sort({
-      createdAt: -1
-    })
+const findById = async (
+  id,
+) =>
+  Report.findById(id)
     .lean();
-}
 
-export async function findByReviewIdAndType(
+const findByReviewId = async (
   reviewId,
-  type
-) {
-  return Report.findOne({
+) =>
+  Report.find({
     reviewId,
-    type
   })
     .sort({
-      createdAt: -1
+      createdAt: 1,
     })
     .lean();
-}
 
-export async function findLatestByReviewIdAndType(
-  reviewId,
-  type
-) {
-  return Report.findOne({
+const findByReviewAndFormat =
+  async (
     reviewId,
-    type
-  })
-    .sort({
-      createdAt: -1
+    format,
+  ) =>
+    Report.findOne({
+      reviewId,
+      format,
     })
-    .lean();
-}
+      .lean();
 
-export async function updateById(
-  reportId,
-  updates
-) {
-  return Report.findByIdAndUpdate(
-    reportId,
+const updateById = async (
+  id,
+  updates,
+) =>
+  Report.findByIdAndUpdate(
+    id,
     {
-      $set: updates
+      $set: updates,
     },
     {
       new: true,
-      runValidators: true
-    }
-  ).lean();
-}
+      runValidators: true,
+      lean: true,
+    },
+  );
 
-export async function deleteById(
-  reportId
-) {
-  return Report.findByIdAndDelete(
-    reportId
-  ).lean();
-}
-
-export const reportRepository =
-  Object.freeze({
-    create,
-    findById,
-    findByReviewId,
-    findByReviewIdAndType,
-    findLatestByReviewIdAndType,
-    updateById,
-    deleteById
+const markGenerating = async ({
+  id,
+}) =>
+  updateById(id, {
+    status: "generating",
+    errorCode: null,
   });
+
+const markCompleted = async ({
+  id,
+  storageProvider,
+  publicId,
+  secureUrl,
+  resourceType,
+}) =>
+  updateById(id, {
+    status: "completed",
+    storageProvider,
+    publicId,
+    secureUrl,
+    resourceType,
+    errorCode: null,
+  });
+
+const markFailed = async ({
+  id,
+  errorCode,
+}) =>
+  updateById(id, {
+    status: "failed",
+    errorCode:
+      String(
+        errorCode ||
+          "REPORT_GENERATION_FAILED",
+      ),
+  });
+
+export {
+  create,
+  findById,
+  findByReviewId,
+  findByReviewAndFormat,
+  updateById,
+  markGenerating,
+  markCompleted,
+  markFailed,
+};
+
+export default Object.freeze({
+  create,
+  findById,
+  findByReviewId,
+  findByReviewAndFormat,
+  updateById,
+  markGenerating,
+  markCompleted,
+  markFailed,
+});

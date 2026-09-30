@@ -1,59 +1,24 @@
-﻿import {
-  createReview,
-  getReview
-} from "../services/review.service.js";
+import { createReviewResponse } from '../services/review.service.js';
+import { createResponse } from '../utils/response.js';
 
-import {
-  sendSuccess
-} from "../utils/response.js";
-
-export async function create(
-  req,
-  res,
-  next
-) {
+const createReview = async (req, res, next) => {
   try {
-    const result =
-      await createReview({
-        input:
-          req.body,
-        file:
-          req.file || null,
-        accessContext:
-          req.analysisAccess  ||
-          null
-      });
+    const result = await createReviewResponse(req.body);
 
-    return sendSuccess(
-      res,
-      {
-        reviewId:
-          result.reviewId,
-        ...result.result
-      },
-      201
+    return res.status(202).json(
+      createResponse({
+        success: true,
+        data: result,
+        meta: {
+          requestId: req.requestId
+        }
+      })
     );
   } catch (error) {
-    next(error);
+    return next(error);
   }
-}
+};
 
-export async function getById(
-  req,
-  res,
-  next
-) {
-  try {
-    const review =
-      await getReview(
-        req.params.reviewId
-      );
-
-    return sendSuccess(
-      res,
-      review
-    );
-  } catch (error) {
-    next(error);
-  }
-}
+export {
+  createReview
+};

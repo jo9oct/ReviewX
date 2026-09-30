@@ -1,80 +1,59 @@
-﻿
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
-const { Schema } = mongoose;
-
-const evidenceSchema = new Schema(
+const evidenceSchema = new mongoose.Schema(
   {
     reviewId: {
-      type: Schema.Types.ObjectId,
-      ref: "Review",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Review',
       required: true,
       index: true
     },
 
     findingId: {
-      type: Schema.Types.ObjectId,
-      ref: "Finding",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Finding',
       required: true,
       index: true
     },
 
-    type: {
+    filePath: {
       type: String,
-      enum: [
-        "source",
-        "pattern",
-        "rule",
-        "context"
-      ],
       required: true
     },
 
-    file: {
-      type: String,
-      trim: true,
-      maxlength: 255,
-      default: null
-    },
-
-    line: {
+    lineStart: {
       type: Number,
-      min: 1,
-      default: null
+      required: true,
+      min: 1
     },
 
-    column: {
+    lineEnd: {
       type: Number,
-      min: 1,
-      default: null
+      required: true,
+      min: 1
     },
 
-    code: {
+    snippet: {
       type: String,
-      maxlength: 10000,
       required: true
     },
 
-    description: {
+    sourceHash: {
       type: String,
-      trim: true,
-      maxlength: 5000,
       default: null
     }
   },
   {
     timestamps: true,
-    strict: true,
     versionKey: false
   }
 );
 
 evidenceSchema.index({
-  findingId: 1,
-  createdAt: 1
+  reviewId: 1,
+  findingId: 1
 });
 
-export const Evidence = mongoose.model(
-  "Evidence",
-  evidenceSchema
-);
+const Evidence = mongoose.model('Evidence', evidenceSchema);
+
+export default Evidence;

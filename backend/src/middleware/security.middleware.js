@@ -1,57 +1,55 @@
-import {
-  securityConfig
-} from "../config/security.js";
+import crypto from 'node:crypto';
 
-import {
-  BadRequestError
-} from "../utils/errors.js";
+import environment from '../config/environment.js';
 
-const allowedMethods =
-  new Set(
-    securityConfig.allowedMethods
+const createRequestId = () => {
+  return crypto.randomUUID();
+};
+
+const securityMiddleware = (req, res, next) => {
+  const requestId = req.get('x-request-id') || createRequestId();
+
+  req.requestId = requestId;
+
+  res.setHeader('X-Request-ID', requestId);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=()'
+  );
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'none'; frame-ancestors 'none'"
   );
 
-export function security(
-  req,
-  res,
-  next
-) {
-  for (
-    const [
-      header,
-      value
-    ] of Object.entries(
-      securityConfig
-        .securityHeaders
-    )
-  ) {
-    res.setHeader(
-      header,
-      value
-    );
+  const configuredOrigin = environment.security.corsOrigin;
+
+  if (configuredOrigin !== '*') {
+    res.setHeader('Access-Control-Allow-Origin', configuredOrigin);
+    res.setHeader('Vary', 'Origin');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
 
   res.setHeader(
-    "X-Permitted-Cross-Domain-Policies",
-    "none"
+    'Access-Control-Allow-Methods',
+    'GET,POST,PUT,PATCH,DELETE,OPTIONS'
   );
 
   res.setHeader(
-    "Cache-Control",
-    "no-store"
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Request-ID'
   );
 
-  if (
-    !allowedMethods.has(
-      req.method
-    )
-  ) {
-    return next(
-      new BadRequestError(
-        `HTTP method ${req.method} is not allowed.`
-      )
-    );
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
   }
 
-  next();
-}
+  return next();
+};
+
+export {
+  securityMiddleware
+};

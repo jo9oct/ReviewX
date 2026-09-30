@@ -1,154 +1,270 @@
-﻿import app from "./app.js";
+import 'dotenv/config';
+import http from 'node:http';
+import express from 'express';
 
-import {
-  env
-} from "./config/env.js";
+import environment from './config/environment.js';
 
 import {
   connectDatabase,
-  disconnectDatabase
-} from "./database/connection.js";
+  disconnectDatabase,
+} from './database/connection.js';
+
+import reviewRoutes from './routes/review.routes.js';
+import reportRoutes from './routes/report.routes.js';
+import githubRoutes from './routes/github.routes.js';
 
 import {
-  logger
-} from "./utils/logger.js";
+  notFoundMiddleware,
+} from './middleware/notFound.middleware.js';
 
-let server;
+import {
+  errorMiddleware,
+} from './middleware/error.middleware.js';
 
-async function startServer() {
-  try {
-    await connectDatabase();
+import {
+  securityMiddleware,
+} from './middleware/security.middleware.js';
 
-    server = app.listen(
-      env.port,
-      () => {
-        logger.info(
-          "Analysis backend server started",
-          {
-            port:
-              env.port,
+import {
+  createResponse,
+} from './utils/response.js';
 
-            environment:
-              env.nodeEnv
-          }
-        );
-      }
+const app = express();
+
+const {
+  app: appConfig,
+  http: httpConfig,
+} = environment;
+
+app.disable(
+  'x-powered-by',
+);
+
+app.use(
+  securityMiddleware,
+);
+
+app.use(
+  express.json({
+    limit:
+      httpConfig.bodyLimit,
+  }),
+);
+
+app.use(
+  express.urlencoded({
+    extended: false,
+    limit:
+      httpConfig.bodyLimit,
+    parameterLimit:
+      httpConfig.parameterLimit,
+  }),
+);
+
+app.get(
+  '/health',
+  (req, res) => {
+    return res.status(200).json(
+      createResponse({
+        success: true,
+
+        data: {
+          status: 'ok',
+          service:
+            appConfig.name,
+          version:
+            appConfig.version,
+        },
+
+        meta: {
+          requestId:
+            req.requestId,
+        },
+      }),
     );
-  } catch (error) {
-    logger.error(
-      "Application startup failed",
-      {
-        error:
-          error.message,
+  },
+);
 
-        stack:
-          error.stack
-      }
-    );
+app.use(
+  '/api/v1/reviews',
+  reviewRoutes,
+);
 
-    process.exit(1);
+app.use(
+  '/api/v1',
+  reportRoutes,
+);
+
+app.use(
+  '/api/v1/github',
+  githubRoutes,
+);
+
+app.use(
+  notFoundMiddleware,
+);
+
+app.use(
+  errorMiddleware,
+);
+
+const server =
+  http.createServer(app);
+
+server.requestTimeout =
+  httpConfig.requestTimeout;
+
+server.keepAliveTimeout =
+  httpConfig.keepAliveTimeout;
+
+server.headersTimeout =
+  httpConfig.headersTimeout;
+
+let shuttingDown = false;
+
+const shutdown = async (
+  signal,
+) => {
+  if (shuttingDown) {
+    return;
   }
-}
 
-async function shutdown(
-  signal
-) {
-  logger.info(
-    "Shutdown signal received",
-    {
-      signal
-    }
+  shuttingDown = true;
+
+  process.stdout.write(
+    `Received ${signal}. Shutting down HTTP server...\n`,
   );
 
-  try {
-    if (server) {
-      await new Promise(
-        (
-          resolve,
-          reject
-        ) => {
-          server.close(
-            (error) => {
-              if (error) {
-                reject(error);
-                return;
-              }
+  server.close(
+    async (serverError) => {
+      if (serverError) {
+        process.stderr.write(
+          `HTTP server shutdown failed: ${serverError.message}\n`,
+        );
 
-              resolve();
-            }
-          );
-        }
-      );
+        process.exitCode = 1;
 
-      logger.info(
-        "HTTP server closed successfully"
-      );
-    }
-
-    await disconnectDatabase();
-
-    process.exit(0);
-  } catch (error) {
-    logger.error(
-      "Graceful shutdown failed",
-      {
-        error:
-          error.message,
-
-        stack:
-          error.stack
+        return;
       }
-    );
 
-    process.exit(1);
-  }
-}
+      try {
+        await disconnectDatabase();
 
-process.on(
-  "SIGTERM",
-  () =>
-    shutdown("SIGTERM")
+        process.stdout.write(
+          'MongoDB connection closed.\n',
+        );
+
+        process.stdout.write(
+          'HTTP server stopped.\n',
+        );
+
+        process.exitCode = 0;
+      } catch (error) {
+        process.stderr.write(
+          `Database shutdown failed: ${
+            error instanceof Error
+              ? error.message
+              : String(error)
+          }\n`,
+        );
+
+        process.exitCode = 1;
+      }
+    },
+  );
+};
+
+process.once(
+  'SIGINT',
+  () => shutdown('SIGINT'),
 );
 
-process.on(
-  "SIGINT",
-  () =>
-    shutdown("SIGINT")
+process.once(
+  'SIGTERM',
+  () => shutdown('SIGTERM'),
 );
 
-process.on(
-  "uncaughtException",
+process.once(
+  'uncaughtException',
   (error) => {
-    logger.error(
-      "Uncaught exception",
-      {
-        error:
-          error.message,
-
-        stack:
-          error.stack
-      }
+    process.stderr.write(
+      `Uncaught exception: ${
+        error.stack ||
+        error.message
+      }\n`,
     );
 
-    process.exit(1);
-  }
+    shutdown(
+      'uncaughtException',
+    );
+  },
 );
 
-process.on(
-  "unhandledRejection",
+process.once(
+  'unhandledRejection',
   (reason) => {
-    logger.error(
-      "Unhandled promise rejection",
-      {
-        reason:
-          reason instanceof Error
-            ? reason.message
-            : String(reason)
-      }
+    const message =
+      reason instanceof Error
+        ? reason.stack ||
+          reason.message
+        : String(reason);
+
+    process.stderr.write(
+      `Unhandled rejection: ${message}\n`,
     );
 
-    process.exit(1);
-  }
+    shutdown(
+      'unhandledRejection',
+    );
+  },
 );
+
+server.on(
+  'error',
+  (error) => {
+    process.stderr.write(
+      `HTTP server error: ${error.message}\n`,
+    );
+
+    process.exitCode = 1;
+  },
+);
+
+const startServer =
+  async () => {
+    try {
+      await connectDatabase();
+
+      process.stdout.write(
+        'MongoDB connected successfully.\n',
+      );
+
+      server.listen(
+        appConfig.port,
+        appConfig.host,
+        () => {
+          process.stdout.write(
+            `${appConfig.name} listening on ${appConfig.host}:http://localhost:${appConfig.port}\n`,
+          );
+        },
+      );
+    } catch (error) {
+      process.stderr.write(
+        `Database connection failed: ${
+          error instanceof Error
+            ? error.stack ||
+              error.message
+            : String(error)
+        }\n`,
+      );
+
+      process.exitCode = 1;
+    }
+  };
 
 startServer();
+
+export {
+  app,
+  server,
+};

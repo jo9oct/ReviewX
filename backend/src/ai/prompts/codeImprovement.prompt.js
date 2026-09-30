@@ -1,34 +1,33 @@
-﻿
-export function buildCodeImprovementPrompt(
-  context
-) {
+const codeImprovementPrompt = ({
+  findings,
+  files
+}) => {
   return `
-Review the supplied source code for practical improvements.
+Provide conservative code-improvement guidance based only on
+the supplied deterministic findings.
 
 Do not invent missing project requirements.
-
-Focus on:
-- readability
-- maintainability
-- correctness
-- security
-- performance
-- unnecessary complexity
-
-Do not execute the code.
+Do not claim that proposed changes were tested.
+Do not claim that a fix has been applied.
 
 Return JSON only:
 
 {
-  "recommendations": [
-    "..."
+  "improvements": [
+    {
+      "ruleId": "existing rule id",
+      "suggestion": "specific improvement",
+      "reason": "why it addresses the finding"
+    }
   ]
 }
 
-Language:
-${context.language || "unknown"}
+Findings:
+${JSON.stringify(findings, null, 2)}
 
 Source:
-${context.source}
-`;
-}
+${JSON.stringify(files, null, 2)}
+`.trim();
+};
+
+export default codeImprovementPrompt;

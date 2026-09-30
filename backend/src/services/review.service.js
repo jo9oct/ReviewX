@@ -1,737 +1,1355 @@
-﻿import {
-  processReviewInput
-} from "./file.service.js";
-
+import {
+  createProjectIdentity,
+} from '../input/projectNormalizer.js';
 
 import {
-  getAnalysisAccess
-} from "./analysisAccess.service.js";
-
-
-import {
-  detectLanguage
-} from "../engine/languageDetector.js";
-
+  normalizeSourceInput,
+} from '../input/sourceNormalizer.js';
 
 import {
-  parseSource
-} from "../parsers/parserManager.js";
-
-
-import {
-  createReviewContext
-} from "../engine/reviewContext.js";
-
+  validateNormalizedSource,
+} from '../input/sourceValidator.js';
 
 import {
-  runReview
-} from "../engine/reviewEngine.js";
-
-
-import {
-  withDatabaseTransaction
-} from "../database/connection.js";
-
+  reviewEngine,
+} from '../engine/reviewEngine.js';
 
 import {
-  reviewRepository
-} from "../database/repositories/review.repository.js";
-
-
-import {
-  findingRepository
-} from "../database/repositories/finding.repository.js";
-
+  enqueueReviewJob,
+} from '../jobs/review.job.js';
 
 import {
-  evidenceRepository
-} from "../database/repositories/evidence.repository.js";
-
-
-import {
-  scoreRepository
-} from "../database/repositories/score.repository.js";
-
+  reviewRepository,
+} from '../database/repositories/review.repository.js';
 
 import {
-  aiAnalysisRepository
-} from "../database/repositories/aiAnalysis.repository.js";
+  projectRepository,
+} from '../database/repositories/project.repository.js';
 
+import {
+  findingRepository,
+} from '../database/repositories/finding.repository.js';
 
+import {
+  evidenceRepository,
+} from '../database/repositories/evidence.repository.js';
 
-export async function createReview({
-  input,
-  file = null,
-  accessContext = null
-}) {
-  /*
-   * ----------------------------------------------------------
-   * Analysis access
-   * ----------------------------------------------------------
-   */
-  const access =
-    await getAnalysisAccess(
-      accessContext
-    );
+import {
+  scoreRepository,
+} from '../database/repositories/score.repository.js';
 
+import {
+  aiAnalysisRepository,
+} from '../database/repositories/aiAnalysis.repository.js';
 
-  /*
-   * ----------------------------------------------------------
-   * Input processing
-   * ----------------------------------------------------------
-   *
-   * Validation and source processing happen before the Review
-   * document is created.
-   */
-  const processed =
-    await processReviewInput({
-      input,
-      file,
+import {
+  assertFeatureAccess,
+  assertReviewLimits,
+  getAccessContext,
+} from '../access/access.service.js';
 
-      maxSourceSize:
-        access
-          .limits
-          .maxSourceSize
+import {
+  getRepository,
+} from './github.service.js';
+
+import aiConfig from '../config/ai.config.js';
+
+import {
+  AppError,
+} from '../utils/errors.js';
+
+const getReviewId = (
+  review,
+) =>
+  review?.id ||
+  review?._id?.toString?.() ||
+  review?._id ||
+  null;
+
+const normalizeReviewOptions = (
+  options = {},
+) => {
+  if (
+    !options ||
+    typeof options !== 'object' ||
+    Array.isArray(options)
+  ) {
+    throw new AppError({
+      code: 'INVALID_REVIEW_OPTIONS',
+      message:
+        'Review options are invalid.',
+      statusCode: 400,
     });
-
-
-  /*
-   * ----------------------------------------------------------
-   * Language detection
-   * ----------------------------------------------------------
-   */
-  const language =
-    detectLanguage({
-      language:
-        processed.language,
-
-      fileName:
-        processed.fileName,
-
-      code:
-        processed.code
-    });
-
-
-  /*
-   * ----------------------------------------------------------
-   * Create Review execution record
-   * ----------------------------------------------------------
-   *
-   * This record intentionally exists outside the result
-   * transaction.
-   *
-   * It represents the execution itself.
-   */
-  const review =
-    await reviewRepository.create({
-      source:
-        processed.sourceType,
-
-      fileName:
-        processed.fileName,
-
-      language,
-
-      fileExtension:
-        processed.fileExtension,
-
-      sourceSize:
-        processed.sourceSize,
-
-      status:
-        "running",
-
-      startedAt:
-        new Date()
-    });
-
-
-  try {
-    /*
-     * --------------------------------------------------------
-     * Parsing
-     * --------------------------------------------------------
-     */
-    const parsed =
-      parseSource({
-        code:
-          processed.code,
-
-        language,
-
-        fileName:
-          processed.fileName
-      });
-
-
-    /*
-     * --------------------------------------------------------
-     * Review context
-     * --------------------------------------------------------
-     */
-    const context =
-      createReviewContext({
-        code:
-          processed.code,
-
-        fileName:
-          processed.fileName,
-
-        fileExtension:
-          processed.fileExtension,
-
-        language,
-
-        sourceSize:
-          processed.sourceSize,
-
-        parsed,
-
-        companyRules:
-          processed.companyRules
-      });
-
-
-    /*
-     * --------------------------------------------------------
-     * Review engine
-     * --------------------------------------------------------
-     *
-     * Runs:
-     *
-     * - analyzers
-     * - company rules
-     * - normalization
-     * - merging
-     * - deduplication
-     * - evidence collection
-     * - AI analysis
-     * - scoring
-     */
-    const result =
-      await runReview(
-        context,
-        access
-      );
-
-
-    /*
-     * --------------------------------------------------------
-     * Atomic result persistence
-     * --------------------------------------------------------
-     *
-     * Every result write and the Review -> completed update
-     * happen inside ONE MongoDB transaction.
-     *
-     * If any operation throws:
-     *
-     *     findings
-     *     evidence
-     *     score
-     *     AI analysis
-     *     completed state
-     *
-     * are all rolled back.
-     */
-    await withDatabaseTransaction(
-      async (session) => {
-        await persistReviewResult({
-          reviewId:
-            review._id,
-
-          result,
-
-          session
-        });
-
-
-        /*
-         * ----------------------------------------------------
-         * Mark Review completed INSIDE the transaction.
-         * ----------------------------------------------------
-         *
-         * This guarantees that a Review cannot become
-         * "completed" unless all result data was successfully
-         * persisted.
-         */
-        await reviewRepository.updateById(
-          review._id,
-
-          {
-            status:
-              "completed",
-
-            summary:
-              result.summary,
-
-            findingCount:
-              Array.isArray(
-                result.findings
-              )
-                ? result.findings.length
-                : 0,
-
-            completedAt:
-              new Date(),
-
-            failedAt:
-              null,
-
-            errorMessage:
-              null
-          },
-
-          {
-            session
-          }
-        );
-      }
-    );
-
-
-    /*
-     * --------------------------------------------------------
-     * Success
-     * --------------------------------------------------------
-     */
-    return {
-      reviewId:
-        review._id,
-
-      result
-    };
-  } catch (error) {
-    /*
-     * --------------------------------------------------------
-     * Failure recovery
-     * --------------------------------------------------------
-     *
-     * If the transaction failed, MongoDB has already rolled
-     * back all transactional writes.
-     *
-     * The failure state is deliberately saved OUTSIDE the
-     * transaction so that the Review remains available as a
-     * failed execution record.
-     */
-    await markReviewFailed(
-      review._id,
-      error
-    );
-
-
-    /*
-     * Preserve the original error.
-     */
-    throw error;
   }
-}
-
-
-
-/*
- * ============================================================
- * Get Review
- * ============================================================
- */
-
-export async function getReview(
-  reviewId
-) {
-  const review =
-    await reviewRepository.findById(
-      reviewId
-    );
-
-
-  if (!review) {
-    const error =
-      new Error(
-        "Review not found."
-      );
-
-
-    error.statusCode =
-      404;
-
-
-    throw error;
-  }
-
-
-  const findings =
-    await findingRepository.findByReviewId(
-      reviewId
-    );
-
-
-  const score =
-    await scoreRepository.findByReviewId(
-      reviewId
-    );
-
-
-  const aiAnalysis =
-    await aiAnalysisRepository.findByReviewId(
-      reviewId
-    );
-
 
   return {
-    review,
+    aiAnalysis:
+      options.aiAnalysis === true,
 
-    findings,
+    aiRemediation:
+      options.aiRemediation === true,
 
-    score,
-
-    aiAnalysis
+    advancedAnalysis:
+      options.advancedAnalysis === true,
   };
-}
+};
 
+const assertSourceFeatureAccess = (
+  source,
+) => {
+  if (
+    !source ||
+    typeof source !== 'object'
+  ) {
+    throw new AppError({
+      code: 'INVALID_SOURCE',
+      message:
+        'The review source is invalid.',
+      statusCode: 400,
+    });
+  }
 
+  if (
+    source.type === 'archive'
+  ) {
+    assertFeatureAccess(
+      'archiveUpload',
+    );
+  }
+
+  if (
+    source.type === 'github'
+  ) {
+    assertFeatureAccess(
+      'githubIntegration',
+    );
+  }
+};
+
+const assertRequestedFeatures = (
+  options,
+) => {
+  if (options.aiAnalysis) {
+    assertFeatureAccess(
+      'aiAnalysis',
+    );
+  }
+
+  if (options.aiRemediation) {
+    assertFeatureAccess(
+      'aiRemediation',
+    );
+
+    if (!options.aiAnalysis) {
+      throw new AppError({
+        code:
+          'AI_REMEDIATION_REQUIRES_AI_ANALYSIS',
+
+        message:
+          'AI remediation requires AI analysis to be enabled.',
+
+        statusCode: 400,
+      });
+    }
+  }
+
+  if (options.advancedAnalysis) {
+    assertFeatureAccess(
+      'advancedAnalysis',
+    );
+  }
+};
+
+const calculateSourceStats = (
+  source,
+) => {
+  const files =
+    Array.isArray(source?.files)
+      ? source.files
+      : [];
+
+  const totalFiles =
+    files.length;
+
+  const totalLines =
+    files.reduce(
+      (
+        total,
+        file,
+      ) => {
+        const content =
+          typeof file?.content ===
+          'string'
+            ? file.content
+            : '';
+
+        if (!content) {
+          return total;
+        }
+
+        return (
+          total +
+          content.split(
+            /\r\n|\r|\n/,
+          ).length
+        );
+      },
+      0,
+    );
+
+  return {
+    totalFiles,
+    totalLines,
+  };
+};
 
 /*
- * ============================================================
- * Failure State
- * ============================================================
+ * Finding location normalization
+ *
+ * The finding pipeline may expose line information through
+ * slightly different normalized location representations.
+ *
+ * These helpers only read values that already exist on the
+ * finding. They never invent source locations.
  */
+const getFindingLineStart = (
+  finding,
+) => {
+  const location =
+    finding?.location || {};
 
-async function markReviewFailed(
-  reviewId,
-  error
-) {
-  const errorMessage =
-    getSafeFailureMessage(
-      error
-    );
+  const evidence =
+    finding?.evidence || {};
 
+  const evidenceLocation =
+    evidence?.location || {};
 
-  try {
-    await reviewRepository.updateById(
-      reviewId,
-
-      {
-        status:
-          "failed",
-
-        errorMessage,
-
-        failedAt:
-          new Date()
-      }
-    );
-  } catch (stateError) {
-    /*
-     * Do not replace the original error
-     * with a failure-state persistence error.
-     */
-    console.error(
-      "Failed to persist review failure state:",
-      stateError
-    );
-  }
-}
-
-
-
-/*
- * ============================================================
- * Safe Failure Message
- * ============================================================
- */
-
-function getSafeFailureMessage(
-  error
-) {
-  if (
-    !error ||
-    typeof error !==
-      "object"
-  ) {
-    return "Review failed.";
-  }
-
-
-  const statusCode =
-    Number(
-      error.statusCode
-    );
-
-
-  /*
-   * Client/application errors may expose their
-   * safe message.
-   */
-  if (
-    Number.isInteger(
-      statusCode
-    ) &&
-
-    statusCode >= 400 &&
-
-    statusCode < 500 &&
-
-    typeof error.message ===
-      "string" &&
-
-    error.message.trim()
-  ) {
-    return error.message.trim();
-  }
-
-
-  /*
-   * Internal implementation details must not be
-   * stored as the user-facing failure message.
-   */
   return (
-    "Review failed due to an internal processing error."
+    location.lineStart ??
+    location.startLine ??
+    location.line ??
+    location.start?.line ??
+    evidence.lineStart ??
+    evidence.startLine ??
+    evidence.line ??
+    evidence.start?.line ??
+    evidenceLocation.lineStart ??
+    evidenceLocation.startLine ??
+    evidenceLocation.line ??
+    evidenceLocation.start?.line ??
+    null
   );
-}
+};
 
+const getFindingLineEnd = (
+  finding,
+) => {
+  const location =
+    finding?.location || {};
 
+  const evidence =
+    finding?.evidence || {};
 
-/*
- * ============================================================
- * Transactional Result Persistence
- * ============================================================
- */
+  const evidenceLocation =
+    evidence?.location || {};
 
-async function persistReviewResult({
+  const lineStart =
+    getFindingLineStart(
+      finding,
+    );
+
+  return (
+    location.lineEnd ??
+    location.endLine ??
+    location.line ??
+    location.end?.line ??
+    evidence.lineEnd ??
+    evidence.endLine ??
+    evidence.line ??
+    evidence.end?.line ??
+    evidenceLocation.lineEnd ??
+    evidenceLocation.endLine ??
+    evidenceLocation.line ??
+    evidenceLocation.end?.line ??
+    lineStart ??
+    null
+  );
+};
+
+const getFindingSnippet = (
+  finding,
+) => {
+  const evidence =
+    finding?.evidence || {};
+
+  if (
+    typeof evidence?.snippet ===
+    'string' &&
+    evidence.snippet.length > 0
+  ) {
+    return evidence.snippet;
+  }
+
+  if (
+    typeof evidence?.code ===
+    'string' &&
+    evidence.code.length > 0
+  ) {
+    return evidence.code;
+  }
+
+  if (
+    typeof evidence?.text ===
+    'string' &&
+    evidence.text.length > 0
+  ) {
+    return evidence.text;
+  }
+
+  if (
+    typeof evidence?.content ===
+    'string' &&
+    evidence.content.length > 0
+  ) {
+    return evidence.content;
+  }
+
+  return null;
+};
+
+const getFindingSourceHash = (
+  finding,
+) => {
+  const evidence =
+    finding?.evidence || {};
+
+  return (
+    evidence?.sourceHash ??
+    evidence?.hash ??
+    null
+  );
+};
+
+const validateFindingEvidence = (
+  finding,
+) => {
+  const lineStart =
+    getFindingLineStart(
+      finding,
+    );
+
+  const lineEnd =
+    getFindingLineEnd(
+      finding,
+    );
+
+  const snippet =
+    getFindingSnippet(
+      finding,
+    );
+
+  if (
+    !Number.isInteger(
+      lineStart,
+    ) ||
+    lineStart < 1
+  ) {
+    throw new AppError({
+      code:
+        'INVALID_FINDING_EVIDENCE',
+
+      message:
+        'A finding contains an invalid source start line and cannot be persisted.',
+
+      statusCode: 500,
+    });
+  }
+
+  if (
+    !Number.isInteger(
+      lineEnd,
+    ) ||
+    lineEnd < lineStart
+  ) {
+    throw new AppError({
+      code:
+        'INVALID_FINDING_EVIDENCE',
+
+      message:
+        'A finding contains an invalid source end line and cannot be persisted.',
+
+      statusCode: 500,
+    });
+  }
+
+  if (
+    typeof snippet !== 'string' ||
+    snippet.length === 0
+  ) {
+    throw new AppError({
+      code:
+        'INVALID_FINDING_EVIDENCE',
+
+      message:
+        'A finding does not contain source evidence and cannot be persisted.',
+
+      statusCode: 500,
+    });
+  }
+
+  return {
+    lineStart,
+    lineEnd,
+    snippet,
+    sourceHash:
+      getFindingSourceHash(
+        finding,
+      ),
+  };
+};
+
+const buildFindingDocuments = ({
   reviewId,
+  projectId,
+  findings,
+}) =>
+  findings.map(
+    (finding) => {
+      const evidence =
+        validateFindingEvidence(
+          finding,
+        );
+
+      return {
+        reviewId,
+
+        projectId:
+          projectId || null,
+
+        category:
+          finding.category,
+
+        ruleId:
+          finding.ruleId,
+
+        title:
+          finding.title,
+
+        description:
+          finding.description,
+
+        severity:
+          finding.severity,
+
+        confidence:
+          finding.confidence,
+
+        status:
+          finding.status,
+
+        filePath:
+          finding.filePath,
+
+        lineStart:
+          evidence.lineStart,
+
+        lineEnd:
+          evidence.lineEnd,
+
+        remediation:
+          finding.remediation ||
+          null,
+
+        evidenceId:
+          null,
+      };
+    },
+  );
+
+const buildEvidenceDocuments = ({
+  reviewId,
+  findingDocuments,
+  findings,
+}) =>
+  findings.map(
+    (
+      finding,
+      index,
+    ) => {
+      const findingDocument =
+        findingDocuments[index];
+
+      if (
+        !findingDocument
+      ) {
+        throw new AppError({
+          code:
+            'FINDING_PERSISTENCE_MISMATCH',
+
+          message:
+            'Finding and evidence persistence records do not match.',
+
+          statusCode: 500,
+        });
+      }
+
+      const evidence =
+        validateFindingEvidence(
+          finding,
+        );
+
+      return {
+        reviewId,
+
+        findingId:
+          findingDocument._id,
+
+        filePath:
+          finding.filePath,
+
+        lineStart:
+          evidence.lineStart,
+
+        lineEnd:
+          evidence.lineEnd,
+
+        snippet:
+          evidence.snippet,
+
+        sourceHash:
+          evidence.sourceHash,
+      };
+    },
+  );
+
+const persistFindings = async ({
+  reviewId,
+  projectId,
+  findings,
+}) => {
+  if (
+    !Array.isArray(findings) ||
+    findings.length === 0
+  ) {
+    return [];
+  }
+
+  const findingDocuments =
+    buildFindingDocuments({
+      reviewId,
+      projectId,
+      findings,
+    });
+
+  const createdFindings =
+    await findingRepository.createMany(
+      findingDocuments,
+    );
+
+  if (
+    createdFindings.length !==
+    findings.length
+  ) {
+    throw new AppError({
+      code:
+        'FINDING_PERSISTENCE_MISMATCH',
+
+      message:
+        'The number of persisted findings does not match the analysis result.',
+
+      statusCode: 500,
+    });
+  }
+
+  const evidenceDocuments =
+    buildEvidenceDocuments({
+      reviewId,
+      findingDocuments:
+        createdFindings,
+      findings,
+    });
+
+  const createdEvidence =
+    await evidenceRepository.createMany(
+      evidenceDocuments,
+    );
+
+  if (
+    createdEvidence.length !==
+    createdFindings.length
+  ) {
+    throw new AppError({
+      code:
+        'EVIDENCE_PERSISTENCE_MISMATCH',
+
+      message:
+        'The number of persisted evidence records does not match the findings.',
+
+      statusCode: 500,
+    });
+  }
+
+  for (
+    let index = 0;
+    index < createdFindings.length;
+    index += 1
+  ) {
+    const finding =
+      createdFindings[index];
+
+    const evidence =
+      createdEvidence[index];
+
+    await findingRepository.updateById(
+      finding._id,
+      {
+        evidenceId:
+          evidence._id,
+      },
+    );
+  }
+
+  return createdFindings;
+};
+
+const persistScore = async ({
+  reviewId,
+  score,
+}) => {
+  if (
+    !score ||
+    typeof score !== 'object'
+  ) {
+    return null;
+  }
+
+  const categories =
+    score.categories || {};
+
+  return scoreRepository.upsertByReviewId(
+    reviewId,
+    {
+      overall:
+        score.overall,
+
+      security:
+        categories.security,
+
+      bugs:
+        categories.bug,
+
+      quality:
+        categories.quality,
+
+      performance:
+        categories.performance,
+    },
+  );
+};
+
+const normalizeAiProvider = (
+  provider,
+) => {
+  const normalized =
+    String(
+      provider || '',
+    )
+      .trim()
+      .toLowerCase();
+
+  if (
+    normalized === 'groq' ||
+    normalized === 'openai'
+  ) {
+    return normalized;
+  }
+
+  return null;
+};
+
+const getAiModel = (
+  provider,
+) => {
+  if (
+    provider === 'groq'
+  ) {
+    return (
+      aiConfig.groq.model ||
+      'unknown'
+    );
+  }
+
+  if (
+    provider === 'openai'
+  ) {
+    return (
+      aiConfig.openai.model ||
+      'unknown'
+    );
+  }
+
+  return 'unknown';
+};
+
+const persistAiAnalysis = async ({
+  reviewId,
+  aiAnalysis,
+}) => {
+  if (
+    !aiAnalysis ||
+    typeof aiAnalysis !== 'object'
+  ) {
+    return null;
+  }
+
+  const provider =
+    normalizeAiProvider(
+      aiAnalysis.provider,
+    );
+
+  if (!provider) {
+    return null;
+  }
+
+  const status =
+    [
+      'pending',
+      'running',
+      'completed',
+      'failed',
+      'skipped',
+    ].includes(
+      aiAnalysis.status,
+    )
+      ? aiAnalysis.status
+      : 'failed';
+
+  return aiAnalysisRepository.create({
+    reviewId,
+
+    provider,
+
+    model:
+      getAiModel(
+        provider,
+      ),
+
+    status,
+
+    analysisType:
+      'summary',
+
+    result:
+      aiAnalysis,
+
+    errorCode:
+      Array.isArray(
+        aiAnalysis.errors,
+      ) &&
+      aiAnalysis.errors.length > 0
+        ? String(
+            aiAnalysis.errors[0],
+          )
+        : null,
+  });
+};
+
+const buildFindingCounts = (
+  findings,
+) => {
+  const counts = {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    info: 0,
+  };
+
+  for (
+    const finding of findings
+  ) {
+    if (
+      Object.hasOwn(
+        counts,
+        finding.severity,
+      )
+    ) {
+      counts[finding.severity] +=
+        1;
+    }
+  }
+
+  return counts;
+};
+
+const buildReviewUpdate = ({
   result,
-  session
-}) {
+  source,
+  startedAt,
+}) => {
   const findings =
     Array.isArray(
-      result.findings
+      result?.findings,
     )
       ? result.findings
       : [];
 
+  const languages =
+    Array.isArray(
+      result?.files,
+    )
+      ? [
+          ...new Set(
+            result.files
+              .map(
+                (file) =>
+                  file?.language,
+              )
+              .filter(Boolean),
+          ),
+        ]
+      : [];
 
-  /*
-   * Maps analyzer fingerprints to the actual MongoDB
-   * Finding _id generated during persistence.
-   *
-   * This is required because AI analysis references
-   * findings through findingId.
-   */
-  const findingIdsByFingerprint =
-    new Map();
+  const completedAt =
+    new Date();
 
+  return {
+    status:
+      'completed',
 
-  /*
-   * ----------------------------------------------------------
-   * Findings + Evidence
-   * ----------------------------------------------------------
-   */
-  for (
-    const finding
-    of findings
-  ) {
-    const savedFinding =
-      await findingRepository.create(
-        {
-          ...finding,
+    languages,
 
-          reviewId
-        },
-
-        {
-          session
-        }
-      );
-
-
-    if (
-      finding.fingerprint
-    ) {
-      findingIdsByFingerprint.set(
-        String(
-          finding.fingerprint
-        ),
-
-        savedFinding._id
-      );
-    }
-
-
-    const evidence =
+    totalFiles:
       Array.isArray(
-        finding.evidence
+        source?.files,
       )
-        ? finding.evidence
-        : [];
+        ? source.files.length
+        : 0,
 
+    totalLines:
+      calculateSourceStats(
+        source,
+      ).totalLines,
 
-    /*
-     * Evidence is saved only after the Finding
-     * has received its MongoDB _id.
-     */
-    for (
-      const item
-      of evidence
-    ) {
-      await evidenceRepository.create(
-        {
-          ...item,
+    findingCounts:
+      buildFindingCounts(
+        findings,
+      ),
 
-          reviewId,
+    score:
+      typeof result?.score
+        ?.overall === 'number'
+        ? result.score.overall
+        : null,
 
-          findingId:
-            savedFinding._id
-        },
+    startedAt:
+      startedAt || null,
 
-        {
-          session
-        }
-      );
-    }
+    completedAt,
+
+    errorCode:
+      null,
+  };
+};
+
+const getReviewIdFromDocument = (
+  review,
+) => {
+  const id =
+    getReviewId(review);
+
+  if (!id) {
+    throw new AppError({
+      code:
+        'INVALID_REVIEW_IDENTIFIER',
+
+      message:
+        'Review does not contain a valid identifier.',
+
+      statusCode: 500,
+    });
   }
 
+  return id;
+};
 
-  /*
-   * ----------------------------------------------------------
-   * Score
-   * ----------------------------------------------------------
-   */
-  if (
-    result.score
-  ) {
-    await scoreRepository.upsertByReviewId(
-      reviewId,
-
-      result.score,
-
-      {
-        session
-      }
+const createProjectForReview = async ({
+  project,
+  source,
+}) => {
+  const existing =
+    await projectRepository.findByNormalizedName(
+      project.normalizedName,
+      source.type,
     );
+
+  if (existing) {
+    return existing;
   }
 
+  return projectRepository.create({
+    name:
+      project.name,
+
+    normalizedName:
+      project.normalizedName,
+
+    sourceType:
+      source.type,
+
+    repository:
+      source.type === 'github'
+        ? {
+            provider:
+              'github',
+
+            owner:
+              source.owner ||
+              source.repository
+                ?.owner ||
+              null,
+
+            name:
+              source.name ||
+              source.repository
+                ?.name ||
+              null,
+
+            defaultBranch:
+              source.defaultBranch ||
+              source.repository
+                ?.defaultBranch ||
+              null,
+          }
+        : undefined,
+  });
+};
+
+const createReviewRecord = async ({
+  projectId,
+  source,
+}) => {
+  return reviewRepository.create({
+    projectId,
+
+    sourceType:
+      source.type,
+
+    status:
+      'pending',
+
+    languages: [],
+
+    totalFiles:
+      Array.isArray(
+        source.files,
+      )
+        ? source.files.length
+        : 0,
+
+    totalLines:
+      calculateSourceStats(
+        source,
+      ).totalLines,
+
+    findingCounts: {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      info: 0,
+    },
+
+    score: null,
+
+    startedAt: null,
+
+    completedAt: null,
+
+    errorCode: null,
+  });
+};
+
+const resolveReviewSource = async (
+  source,
+) => {
+  if (
+    source?.type !== 'github'
+  ) {
+    return {
+      source,
+      context: {},
+    };
+  }
+
+  const connectionId =
+    typeof source.connectionId ===
+    'string'
+      ? source.connectionId.trim()
+      : '';
+
+  if (!connectionId) {
+    throw new AppError({
+      code:
+        'GITHUB_CONNECTION_REQUIRED',
+
+      message:
+        'A GitHub connection is required for repository reviews.',
+
+      statusCode: 400,
+    });
+  }
+
+  if (
+    !source.repository ||
+    typeof source.repository !==
+      'object' ||
+    Array.isArray(
+      source.repository,
+    )
+  ) {
+    throw new AppError({
+      code:
+        'GITHUB_REPOSITORY_REQUIRED',
+
+      message:
+        'A GitHub repository is required for repository reviews.',
+
+      statusCode: 400,
+    });
+  }
+
+  const githubRepository =
+    await getRepository({
+      connectionId,
+
+      owner:
+        source.repository.owner,
+
+      name:
+        source.repository.name,
+
+      ref:
+        source.repository.ref,
+    });
+
+  return {
+    source,
+
+    context: {
+      githubRepository,
+    },
+  };
+};
+
+const executeReview = async ({
+  reviewId,
+}) => {
+  if (
+    typeof reviewId !== 'string' ||
+    !reviewId.trim()
+  ) {
+    throw new AppError({
+      code:
+        'INVALID_REVIEW_IDENTIFIER',
+
+      message:
+        'Review ID is required.',
+
+      statusCode: 400,
+    });
+  }
 
   /*
-   * ----------------------------------------------------------
-   * AI Analysis
-   * ----------------------------------------------------------
+   * The current architecture intentionally
+   * does not persist submitted source code.
+   *
+   * Therefore a queued worker cannot
+   * reconstruct a review from reviewId alone.
+   *
+   * This method is reserved for a future
+   * worker-compatible source retrieval
+   * mechanism.
    */
-  if (
-    result.aiAnalysis
-  ) {
-    const aiFindings =
-      Array.isArray(
-        result
-          .aiAnalysis
-          .findings
-      )
-        ? result
-            .aiAnalysis
-            .findings
-        : [];
+  throw new AppError({
+    code:
+      'REVIEW_EXECUTION_SOURCE_UNAVAILABLE',
 
+    message:
+      'Queued review execution requires a source retrieval mechanism that is not configured.',
 
-    const persistedAiFindings =
-      [];
+    statusCode: 503,
+  });
+};
 
+const queueReviewExecution = async ({
+  reviewId,
+}) => {
+  const review =
+    await reviewRepository.findById(
+      reviewId,
+    );
 
-    /*
-     * Convert AI fingerprints into actual
-     * persisted Finding IDs.
-     */
-    for (
-      const aiFinding
-      of aiFindings
+  if (!review) {
+    throw new AppError({
+      code: 'REVIEW_NOT_FOUND',
+      message: 'Review not found.',
+      statusCode: 404,
+    });
+  }
+
+  const id =
+    getReviewIdFromDocument(
+      review,
+    );
+
+  const job =
+    await enqueueReviewJob({
+      reviewId:
+        id.toString(),
+    });
+
+  return {
+    reviewId:
+      id.toString(),
+
+    jobId:
+      job.id,
+
+    status:
+      'queued',
+  };
+};
+
+const createReviewResponse =
+  async (
+    payload,
+  ) => {
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      Array.isArray(payload)
     ) {
-      const findingId =
-        findingIdsByFingerprint.get(
-          String(
-            aiFinding
-              .findingFingerprint
-          )
-        );
+      throw new AppError({
+        code:
+          'INVALID_REVIEW_REQUEST',
 
+        message:
+          'The review request is invalid.',
 
-      /*
-       * AI must never create an orphan AI finding.
-       */
-      if (
-        !findingId
-      ) {
-        console.warn(
-          "AI finding fingerprint does not match a persisted finding:",
-          aiFinding.findingFingerprint
-        );
-
-        continue;
-      }
-
-
-      persistedAiFindings.push({
-        findingId,
-
-        explanation:
-          aiFinding.explanation,
-
-        impact:
-          aiFinding.impact,
-
-        fix:
-          aiFinding.fix,
-
-        improvedCode:
-          aiFinding.improvedCode,
-
-        securityExplanation:
-          aiFinding.securityExplanation
+        statusCode: 400,
       });
     }
 
+    const options =
+      normalizeReviewOptions(
+        payload.options,
+      );
 
-    await aiAnalysisRepository
-      .upsertByReviewId(
+    assertRequestedFeatures(
+      options,
+    );
+
+    assertSourceFeatureAccess(
+      payload.source,
+    );
+
+    const projectIdentity =
+      createProjectIdentity(
+        payload.projectName,
+      );
+
+    const {
+      source: reviewSource,
+      context: sourceContext,
+    } =
+      await resolveReviewSource(
+        payload.source,
+      );
+
+    const source =
+      await normalizeSourceInput(
+        reviewSource,
+        sourceContext,
+      );
+
+    validateNormalizedSource(
+      source,
+    );
+
+    const {
+      totalFiles,
+      totalLines,
+    } =
+      calculateSourceStats(
+        source,
+      );
+
+    assertReviewLimits({
+      totalLines,
+      totalFiles,
+    });
+
+    const access =
+      getAccessContext();
+
+    const project =
+      await createProjectForReview({
+        project:
+          projectIdentity,
+
+        source,
+      });
+
+    const projectId =
+      project?._id ||
+      project?.id ||
+      null;
+
+    if (!projectId) {
+      throw new AppError({
+        code:
+          'PROJECT_IDENTIFIER_MISSING',
+
+        message:
+          'The project could not be assigned a valid identifier.',
+
+        statusCode: 500,
+      });
+    }
+
+    const review =
+      await createReviewRecord({
+        projectId,
+
+        source,
+      });
+
+    const reviewId =
+      getReviewIdFromDocument(
+        review,
+      );
+
+    const startedAt =
+      new Date();
+
+    try {
+      await reviewRepository.updateById(
         reviewId,
-
         {
-          provider:
-            result
-              .aiAnalysis
-              .provider,
+          status: 'running',
+          startedAt,
+          errorCode: null,
+        },
+      );
 
-          model:
-            result
-              .aiAnalysis
-              .model,
+      const result =
+        await reviewEngine.run({
+          source,
 
-          status:
-            result
-              .aiAnalysis
-              .status,
+          reviewId,
 
-          summary:
-            result
-              .aiAnalysis
-              .summary,
+          projectId,
 
-          findings:
-            persistedAiFindings,
+          options,
 
-          errorMessage:
-            Array.isArray(
-              result
-                .aiAnalysis
-                .errors
-            )
-              ? result
-                  .aiAnalysis
-                  .errors
-                  .join("; ")
-              : null
+          access,
+        });
+
+      await persistFindings({
+        reviewId,
+        projectId,
+        findings:
+          result.findings || [],
+      });
+
+      await persistScore({
+        reviewId,
+        score:
+          result.score,
+      });
+
+      if (
+        options.aiAnalysis
+      ) {
+        await persistAiAnalysis({
+          reviewId,
+
+          aiAnalysis:
+            result.aiAnalysis,
+        });
+      }
+
+      const reviewUpdate =
+        buildReviewUpdate({
+          result,
+          source,
+          startedAt,
+        });
+
+      const updatedReview =
+        await reviewRepository.updateById(
+          reviewId,
+          reviewUpdate,
+        );
+
+      return {
+        project: {
+          id:
+            projectId.toString(),
+
+          name:
+            project.name,
+
+          normalizedName:
+            project.normalizedName,
+
+          sourceType:
+            project.sourceType,
         },
 
-        {
-          session
-        }
-      );
-  }
-}
+        review: {
+          id:
+            reviewId.toString(),
+
+          status:
+            updatedReview?.status ||
+            'completed',
+        },
+
+        analysis:
+          result,
+      };
+    } catch (error) {
+      try {
+        await reviewRepository.updateById(
+          reviewId,
+          {
+            status: 'failed',
+
+            startedAt,
+
+            completedAt:
+              new Date(),
+
+            errorCode:
+              error?.code ||
+              'REVIEW_EXECUTION_FAILED',
+          },
+        );
+      } catch {
+        /*
+         * Preserve the original review
+         * execution error.
+         */
+      }
+
+      throw error;
+    }
+  };
+
+export {
+  createReviewResponse,
+  executeReview,
+  queueReviewExecution,
+};

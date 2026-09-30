@@ -1,112 +1,86 @@
-﻿import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
-const { Schema } = mongoose;
-
-const reviewSummarySchema = new Schema(
+const reviewSchema = new mongoose.Schema(
   {
-    totalFindings: {
-      type: Number,
-      min: 0,
-      default: 0
+    projectId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Project',
+      default: null,
+      index: true
     },
 
-    critical: {
-      type: Number,
-      min: 0,
-      default: 0
-    },
-
-    high: {
-      type: Number,
-      min: 0,
-      default: 0
-    },
-
-    medium: {
-      type: Number,
-      min: 0,
-      default: 0
-    },
-
-    low: {
-      type: Number,
-      min: 0,
-      default: 0
-    },
-
-    info: {
-      type: Number,
-      min: 0,
-      default: 0
-    }
-  },
-  {
-    _id: false,
-    strict: true
-  }
-);
-
-const reviewSchema = new Schema(
-  {
-    source: {
+    sourceType: {
       type: String,
-      enum: [
-        "paste",
-        "upload"
-      ],
-      required: true
-    },
-
-    fileName: {
-      type: String,
-      trim: true,
-      maxlength: 255,
-      default: null
-    },
-
-    language: {
-      type: String,
-      trim: true,
-      maxlength: 50,
-      required: true
-    },
-
-    fileExtension: {
-      type: String,
-      trim: true,
-      lowercase: true,
-      maxlength: 20,
-      default: null
-    },
-
-    sourceSize: {
-      type: Number,
-      min: 0,
-      required: true
+      enum: ['paste', 'upload', 'archive', 'github'],
+      required: true,
+      index: true
     },
 
     status: {
       type: String,
       enum: [
-        "pending",
-        "running",
-        "completed",
-        "failed",
-        "cancelled"
+        'pending',
+        'queued',
+        'running',
+        'completed',
+        'failed',
+        'cancelled'
       ],
-      default: "pending",
-      required: true
+      default: 'pending',
+      required: true,
+      index: true
     },
 
-    summary: {
-      type: reviewSummarySchema,
-      default: null
+    languages: {
+      type: [String],
+      default: []
     },
 
-    findingCount: {
+    totalFiles: {
       type: Number,
+      default: 0,
+      min: 0
+    },
+
+    totalLines: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+
+    findingCounts: {
+      critical: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      high: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      medium: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      low: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      info: {
+        type: Number,
+        default: 0,
+        min: 0
+      }
+    },
+
+    score: {
+      type: Number,
+      default: null,
       min: 0,
-      default: 0
+      max: 100
     },
 
     startedAt: {
@@ -119,42 +93,22 @@ const reviewSchema = new Schema(
       default: null
     },
 
-    failedAt: {
-      type: Date,
-      default: null
-    },
-
     errorCode: {
       type: String,
-      trim: true,
-      maxlength: 100,
-      default: null
-    },
-
-    errorMessage: {
-      type: String,
-      trim: true,
-      maxlength: 1000,
       default: null
     }
   },
   {
     timestamps: true,
-    strict: true,
     versionKey: false
   }
 );
-
-reviewSchema.index({
-  createdAt: -1
-});
 
 reviewSchema.index({
   status: 1,
   createdAt: -1
 });
 
-export const Review = mongoose.model(
-  "Review",
-  reviewSchema
-);
+const Review = mongoose.model('Review', reviewSchema);
+
+export default Review;

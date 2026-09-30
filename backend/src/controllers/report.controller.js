@@ -1,77 +1,143 @@
-﻿
 import {
-  generateReport,
-  getReport,
-  listReports
-} from "../reports/reportService.js";
+  createReport as createReportService,
+} from '../services/report.service.js';
 
 import {
-  sendSuccess
-} from "../utils/response.js";
+  findById as findReportById,
+  findByReviewId,
+} from '../database/repositories/report.repository.js';
 
-export async function create(
+import {
+  createResponse,
+} from '../utils/response.js';
+
+const createReport = async (
   req,
   res,
-  next
-) {
+  next,
+) => {
   try {
-    const report =
-      await generateReport({
-        reviewId:
-          req.body.reviewId,
-        type:
-          req.body.type,
-        access:
-          req.analysisAccess  ||
-          null
+    const {
+      reviewId,
+    } = req.params;
+
+    const {
+      format = 'json',
+    } = req.body || {};
+
+    const result =
+      await createReportService({
+        reviewId,
+        format,
       });
 
-    return sendSuccess(
-      res,
-      report,
-      201
-    );
-  } catch (error) {
-    next(error);
-  }
-}
+    return res
+      .status(200)
+      .json(
+        createResponse({
+          success: true,
 
-export async function getById(
+          data: result,
+
+          meta: {
+            requestId:
+              req.requestId,
+          },
+        }),
+      );
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getReport = async (
   req,
   res,
-  next
-) {
+  next,
+) => {
   try {
+    const {
+      reportId,
+    } = req.params;
+
     const report =
-      await getReport(
-        req.params.reportId
+      await findReportById(
+        reportId,
       );
 
-    return sendSuccess(
-      res,
-      report
-    );
-  } catch (error) {
-    next(error);
-  }
-}
+    if (!report) {
+      const error =
+        new Error(
+          'Report not found.',
+        );
 
-export async function getByReviewId(
+      error.code =
+        'REPORT_NOT_FOUND';
+
+      error.statusCode =
+        404;
+
+      throw error;
+    }
+
+    return res
+      .status(200)
+      .json(
+        createResponse({
+          success: true,
+
+          data: report,
+
+          meta: {
+            requestId:
+              req.requestId,
+          },
+        }),
+      );
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const listReports = async (
   req,
   res,
-  next
-) {
+  next,
+) => {
   try {
+    const {
+      reviewId,
+    } = req.params;
+
     const reports =
-      await listReports(
-        req.params.reviewId
+      await findByReviewId(
+        reviewId,
       );
 
-    return sendSuccess(
-      res,
-      reports
-    );
+    return res
+      .status(200)
+      .json(
+        createResponse({
+          success: true,
+
+          data: reports,
+
+          meta: {
+            requestId:
+              req.requestId,
+
+            count:
+              reports.length,
+          },
+        }),
+      );
   } catch (error) {
-    next(error);
+    return next(error);
   }
-}
+};
+
+export {
+  createReport,
+  getReport,
+  listReports,
+};

@@ -1,160 +1,145 @@
-﻿
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
-const { Schema } = mongoose;
-
-const findingSchema = new Schema(
+const findingSchema = new mongoose.Schema(
   {
     reviewId: {
-      type: Schema.Types.ObjectId,
-      ref: "Review",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Review',
       required: true,
-      index: true
+      index: true,
+    },
+
+    projectId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Project',
+      default: null,
+      index: true,
     },
 
     category: {
       type: String,
       enum: [
-        "security",
-        "bug",
-        "quality",
-        "performance"
+        'security',
+        'bug',
+        'quality',
+        'performance',
       ],
-      required: true
-    },
-
-    type: {
-      type: String,
       required: true,
-      trim: true,
-      maxlength: 100
+      index: true,
     },
 
     ruleId: {
       type: String,
       required: true,
       trim: true,
-      maxlength: 150
+      index: true,
     },
 
     title: {
       type: String,
       required: true,
       trim: true,
-      maxlength: 500
+      maxlength: 500,
     },
 
     description: {
       type: String,
       required: true,
       trim: true,
-      maxlength: 10000
     },
 
     severity: {
       type: String,
       enum: [
-        "critical",
-        "high",
-        "medium",
-        "low",
-        "info"
+        'critical',
+        'high',
+        'medium',
+        'low',
+        'info',
       ],
-      required: true
+      required: true,
+      index: true,
     },
 
     confidence: {
       type: String,
       enum: [
-        "low",
-        "medium",
-        "high"
+        'low',
+        'medium',
+        'high',
       ],
-      required: true
+      required: true,
+      index: true,
     },
 
     status: {
       type: String,
       enum: [
-        "detected",
-        "verified",
-        "false_positive",
-        "accepted",
-        "resolved"
+        'detected',
+        'verified',
+        'false_positive',
+        'accepted',
+        'resolved',
       ],
-      default: "detected",
-      required: true
+      default: 'detected',
+      required: true,
+      index: true,
     },
 
-    file: {
-      type: String,
-      trim: true,
-      maxlength: 255,
-      default: null
-    },
-
-    line: {
-      type: Number,
-      min: 1,
-      default: null
-    },
-
-    column: {
-      type: Number,
-      min: 1,
-      default: null
-    },
-
-    code: {
-      type: String,
-      maxlength: 10000,
-      default: null
-    },
-
-    recommendation: {
-      type: String,
-      trim: true,
-      maxlength: 10000,
-      default: null
-    },
-
-    analyzer: {
+    filePath: {
       type: String,
       required: true,
       trim: true,
-      maxlength: 150
     },
 
-    fingerprint: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 255
-    }
+    lineStart: {
+      type: Number,
+      default: null,
+      min: 1,
+    },
+
+    lineEnd: {
+      type: Number,
+      default: null,
+      min: 1,
+    },
+
+    remediation: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+
+    evidenceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Evidence',
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,
-    strict: true,
-    versionKey: false
-  }
+    versionKey: false,
+  },
 );
 
 findingSchema.index({
   reviewId: 1,
-  createdAt: 1
+  severity: 1,
 });
 
 findingSchema.index({
   reviewId: 1,
-  fingerprint: 1
+  category: 1,
 });
 
 findingSchema.index({
   reviewId: 1,
-  severity: 1
+  status: 1,
 });
 
-export const Finding = mongoose.model(
-  "Finding",
-  findingSchema
+const Finding = mongoose.model(
+  'Finding',
+  findingSchema,
 );
+
+export default Finding;

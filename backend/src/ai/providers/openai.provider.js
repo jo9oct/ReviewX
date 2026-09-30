@@ -1,74 +1,140 @@
-﻿
-import OpenAI from "openai";
+import aiConfig from '../../config/ai.config.js';
 
-import {
-  aiConfig
-} from "../../config/ai.js";
+class OpenAIProvider {
+  constructor({
+    apiKey =
+      aiConfig.openai.apiKey,
 
-export class OpenAIProvider {
-  constructor() {
-    if (!aiConfig.openai.apiKey) {
-      throw new Error(
-        "OPENAI_API_KEY is not configured."
-      );
-    }
+    model =
+      aiConfig.openai.model,
 
-    this.client =
-      new OpenAI({
-        apiKey:
-          aiConfig.openai.apiKey,
-        baseURL:
-          aiConfig.openai.baseURL
-      });
-
-    this.name = "openai";
-    this.model =
-      aiConfig.openai.model;
+    timeoutMs =
+      aiConfig.timeoutMs
+  } = {}) {
+    this.apiKey = apiKey;
+    this.model = model;
+    this.timeoutMs = timeoutMs;
   }
 
-  async generate({
+  get name() {
+    return 'openai';
+  }
+
+  isConfigured() {
+    return Boolean(
+      this.apiKey
+    );
+  }
+
+  async complete({
     system,
-    user,
-    maxOutputTokens
+    user
   }) {
-    const response =
-      await this.client.chat.completions.create({
-        model: this.model,
-        temperature: 0.1,
-        max_tokens:
-          maxOutputTokens,
-        response_format: {
-          type: "json_object"
-        },
-        messages: [
-          {
-            role: "system",
-            content: system
-          },
-          {
-            role: "user",
-            content: user
-          }
-        ]
-      });
-
-    const content =
-      response?.choices?.[0]
-        ?.message?.content;
-
-    if (
-      typeof content !== "string" ||
-      content.trim() === ""
-    ) {
+    if (!this.isConfigured()) {
       throw new Error(
-        "OpenAI returned an empty response."
+        'OpenAI provider is not configured.'
       );
     }
 
-    return {
-      provider: this.name,
-      model: this.model,
-      content: content.trim()
-    };
+    const controller =
+      new AbortController();
+
+    const timeout =
+      setTimeout(
+        () =>
+          controller.abort(),
+        this.timeoutMs
+      );
+
+    try {
+      const response =
+        await fetch(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            method: 'POST',
+
+            headers: {
+              Authorization:
+                `Bearer ${this.apiKey}`,
+
+              'Content-Type':
+                'application/json'
+            },
+
+            body: JSON.stringify({
+              model:
+                this.model,
+
+              temperature:
+                aiConfig.temperature,
+
+              max_tokens:
+                aiConfig.maxOutputTokens,
+
+              response_format: {
+                type: 'json_object'
+              },
+
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    system
+                },
+                {
+                  role: 'user',
+                  content:
+                    user
+                }
+              ]
+            }),
+
+            signal:
+              controller.signal
+          }
+        );
+
+      if (!response.ok) {
+        const message =
+          await response
+            .text()
+            .catch(
+              () => ''
+            );
+
+        throw new Error(
+          `OpenAI request failed with status ${response.status}: ${message.slice(
+            0,
+            500
+          )}`
+        );
+      }
+
+      const data =
+        await response.json();
+
+      const content =
+        data?.choices?.[0]
+          ?.message?.content;
+
+      if (
+        typeof content !==
+        'string'
+      ) {
+        throw new Error(
+          'OpenAI returned an invalid response.'
+        );
+      }
+
+      return content;
+    } finally {
+      clearTimeout(
+        timeout
+      );
+    }
   }
 }
+
+export {
+  OpenAIProvider
+};

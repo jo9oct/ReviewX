@@ -1,96 +1,75 @@
-﻿import {
-  AppError
-} from "../utils/errors.js";
+import { createResponse } from '../utils/response.js';
 
-import {
-  errorResponse
-} from "../utils/response.js";
-
-import {
-  logger
-} from "../utils/logger.js";
-
-export function errorHandler(
+const errorMiddleware = (
   error,
   req,
   res,
-  _next
-) {
-  const isOperational =
-    error instanceof AppError &&
-    error.isOperational;
+  next,
+) => {
+  if (res.headersSent) {
+    return next(error);
+  }
 
   const statusCode =
-    error instanceof AppError
+    Number.isInteger(
+      error?.statusCode,
+    ) &&
+    error.statusCode >= 400 &&
+    error.statusCode <= 599
       ? error.statusCode
       : 500;
 
   const code =
-    error instanceof AppError
+    typeof error?.code === 'string'
       ? error.code
-      : "INTERNAL_SERVER_ERROR";
+      : 'INTERNAL_SERVER_ERROR';
 
   const message =
-    isOperational
-      ? error.message
-      : "An unexpected error occurred.";
+    statusCode >= 500
+      ? 'An internal server error occurred.'
+      : error.message ||
+        'The request could not be processed.';
 
-  if (!isOperational) {
-    logger.error(
-      "Unhandled application error",
-      {
-        requestId:
-          req.requestId,
+  if (statusCode >= 500) {
+    process.stderr.write(
+      `[${req.requestId || 'unknown-request'}] ${code}: ${
+        error?.stack ||
+        error?.message ||
+        String(error)
+      }\n`,
+    );
+  }
 
-        method:
-          req.method,
+  const errorResponse = {
+    code,
+    message,
+  };
 
-        path:
-          req.originalUrl,
+  if (
+    statusCode < 500 &&
+    Array.isArray(error?.details)
+  ) {
+    errorResponse.details =
+      error.details;
+  }
+
+  return res
+    .status(statusCode)
+    .json(
+      createResponse({
+        success: false,
 
         error:
-          error.message,
+          errorResponse,
 
-        stack:
-          error.stack
-      }
+        meta: {
+          requestId:
+            req.requestId,
+        },
+      }),
     );
-  } else {
-    logger.warn(
-      "Operational request error",
-      {
-        requestId:
-          req.requestId,
+};
 
-        method:
-          req.method,
-
-        path:
-          req.originalUrl,
-
-        code,
-
-        message
-      }
-    );
-  }
-
-  if (res.headersSent) {
-    return;
-  }
-
-  return res.status(
-    statusCode
-  ).json(
-    errorResponse({
-      message,
-      code,
-      requestId:
-        req.requestId,
-      details:
-        isOperational
-          ? error.details
-          : null
-    })
-  );
-}
+export {
+  errorMiddleware,
+};
