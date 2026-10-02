@@ -20,6 +20,7 @@ const TIER_POLICIES = Object.freeze({
 
     githubIntegration: false,
     companyRules: false,
+    scheduledReviews: false,
 
     htmlReport: false,
     pdfReport: false,
@@ -40,6 +41,7 @@ const TIER_POLICIES = Object.freeze({
 
     githubIntegration: true,
     companyRules: true,
+    scheduledReviews: false,
 
     htmlReport: true,
     pdfReport: false,
@@ -60,6 +62,7 @@ const TIER_POLICIES = Object.freeze({
 
     githubIntegration: true,
     companyRules: true,
+    scheduledReviews: true,
 
     htmlReport: true,
     pdfReport: true,

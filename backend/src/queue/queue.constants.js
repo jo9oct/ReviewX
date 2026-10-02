@@ -1,34 +1,47 @@
-import queueConfig from "../config/queue.config.js";
+import queueConfig from '../config/queue.config.js';
 
-export const QUEUE_NAMES = Object.freeze({
-  REVIEW: queueConfig.queues.review,
-  REPORT: queueConfig.queues.report,
-  CLEANUP: queueConfig.queues.cleanup,
-  NOTIFICATION:
-    queueConfig.queues.notification,
-});
+export const QUEUE_NAMES =
+  Object.freeze({
+    REVIEW:
+      queueConfig.queues.review,
 
-export const JOB_NAMES = Object.freeze({
-  REVIEW: "review.execute",
-  REPORT: "report.generate",
-  CLEANUP: "cleanup.execute",
-  NOTIFICATION: "notification.send",
-});
+    REPORT:
+      queueConfig.queues.report,
+
+    CLEANUP:
+      queueConfig.queues.cleanup,
+  });
+
+export const JOB_NAMES =
+  Object.freeze({
+    REVIEW:
+      'review.execute',
+
+    REPORT:
+      'report.generate',
+
+    CLEANUP:
+      'cleanup.execute',
+  });
 
 export const QUEUE_DEFAULT_OPTIONS =
   Object.freeze({
-    attempts: queueConfig.attempts,
+    attempts:
+      queueConfig.attempts,
 
     backoff: {
-      type: "exponential",
-      delay: queueConfig.backoffMs,
+      type: 'exponential',
+      delay:
+        queueConfig.backoffMs,
     },
 
     removeOnComplete: {
-      count: queueConfig.removeOnComplete,
+      count:
+        queueConfig.removeOnComplete,
     },
 
     removeOnFail: {
-      count: queueConfig.removeOnFail,
+      count:
+        queueConfig.removeOnFail,
     },
   });

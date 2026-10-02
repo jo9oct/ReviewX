@@ -1,18 +1,62 @@
-import { createReviewResponse } from '../services/review.service.js';
-import { createResponse } from '../utils/response.js';
+import {
+  createReviewResponse,
+  getReviewResponse,
+} from '../services/review.service.js';
 
-const createReview = async (req, res, next) => {
+import {
+  createResponse,
+} from '../utils/response.js';
+
+const createReview = async (
+  req,
+  res,
+  next,
+) => {
   try {
-    const result = await createReviewResponse(req.body);
+    const result =
+      await createReviewResponse(
+        req.body,
+      );
 
     return res.status(202).json(
       createResponse({
         success: true,
+
         data: result,
+
         meta: {
-          requestId: req.requestId
-        }
-      })
+          requestId:
+            req.requestId,
+        },
+      }),
+    );
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getReview = async (
+  req,
+  res,
+  next,
+) => {
+  try {
+    const result =
+      await getReviewResponse(
+        req.params.reviewId,
+      );
+
+    return res.status(200).json(
+      createResponse({
+        success: true,
+
+        data: result,
+
+        meta: {
+          requestId:
+            req.requestId,
+        },
+      }),
     );
   } catch (error) {
     return next(error);
@@ -20,5 +64,6 @@ const createReview = async (req, res, next) => {
 };
 
 export {
-  createReview
+  createReview,
+  getReview,
 };

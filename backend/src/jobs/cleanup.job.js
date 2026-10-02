@@ -55,7 +55,7 @@ export const enqueueCleanupJob =
       data,
       {
         jobId:
-          `cleanup:${data.resourceType}:` +
+          `cleanup-${data.resourceType}-` +
           `${data.resourceId}`,
       },
     );

@@ -65,7 +65,8 @@ const normalizeString = (
     return defaultValue;
   }
 
-  const normalized = String(value).trim();
+  const normalized =
+    String(value).trim();
 
   return normalized || defaultValue;
 };
@@ -546,11 +547,6 @@ const environment = Object.freeze({
       'cleanup',
     ),
 
-    notificationQueue: normalizeString(
-      process.env.NOTIFICATION_QUEUE_NAME,
-      'notification',
-    ),
-
     concurrency: parseInteger(
       process.env.QUEUE_CONCURRENCY,
       3,
@@ -564,6 +560,18 @@ const environment = Object.freeze({
     backoff: parseInteger(
       process.env.QUEUE_BACKOFF,
       5000,
+    ),
+  }),
+
+  sourceStore: Object.freeze({
+    prefix: normalizeString(
+      process.env.REVIEW_SOURCE_REDIS_PREFIX,
+      'review:source',
+    ),
+
+    ttlSeconds: parseInteger(
+      process.env.REVIEW_SOURCE_TTL_SECONDS,
+      3600,
     ),
   }),
 
@@ -620,6 +628,17 @@ const validateEnvironment = () => {
   ) {
     throw new Error(
       'MONGODB_SERVER_SELECTION_TIMEOUT must be at least 1000 milliseconds.',
+    );
+  }
+
+  if (
+    !Number.isInteger(
+      environment.sourceStore.ttlSeconds,
+    ) ||
+    environment.sourceStore.ttlSeconds < 60
+  ) {
+    throw new Error(
+      'REVIEW_SOURCE_TTL_SECONDS must be at least 60 seconds.',
     );
   }
 

@@ -1,114 +1,151 @@
 import mongoose from 'mongoose';
 
-const reviewSchema = new mongoose.Schema(
-  {
-    projectId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Project',
-      default: null,
-      index: true
-    },
-
-    sourceType: {
-      type: String,
-      enum: ['paste', 'upload', 'archive', 'github'],
-      required: true,
-      index: true
-    },
-
-    status: {
-      type: String,
-      enum: [
-        'pending',
-        'queued',
-        'running',
-        'completed',
-        'failed',
-        'cancelled'
-      ],
-      default: 'pending',
-      required: true,
-      index: true
-    },
-
-    languages: {
-      type: [String],
-      default: []
-    },
-
-    totalFiles: {
-      type: Number,
-      default: 0,
-      min: 0
-    },
-
-    totalLines: {
-      type: Number,
-      default: 0,
-      min: 0
-    },
-
-    findingCounts: {
-      critical: {
-        type: Number,
-        default: 0,
-        min: 0
+const reviewItemSchema =
+  new mongoose.Schema(
+    {
+      reviewId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: () =>
+          new mongoose.Types.ObjectId(),
+        required: true,
       },
-      high: {
-        type: Number,
-        default: 0,
-        min: 0
+
+      projectId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Project',
+        default: null,
       },
-      medium: {
-        type: Number,
-        default: 0,
-        min: 0
+
+      sourceType: {
+        type: String,
+        enum: [
+          'paste',
+          'upload',
+          'archive',
+          'github',
+        ],
+        required: true,
       },
-      low: {
-        type: Number,
-        default: 0,
-        min: 0
+
+      status: {
+        type: String,
+        enum: [
+          'pending',
+          'queued',
+          'running',
+          'completed',
+          'failed',
+          'cancelled',
+        ],
+        default: 'pending',
+        required: true,
       },
-      info: {
+
+      languages: {
+        type: [String],
+        default: [],
+      },
+
+      totalFiles: {
         type: Number,
         default: 0,
-        min: 0
-      }
-    },
+        min: 0,
+      },
 
-    score: {
-      type: Number,
-      default: null,
-      min: 0,
-      max: 100
-    },
+      totalLines: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
 
-    startedAt: {
-      type: Date,
-      default: null
-    },
+      findingCounts: {
+        critical: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
 
-    completedAt: {
-      type: Date,
-      default: null
-    },
+        high: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
 
-    errorCode: {
-      type: String,
-      default: null
-    }
-  },
-  {
-    timestamps: true,
-    versionKey: false
-  }
-);
+        medium: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
+
+        low: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
+
+        info: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
+      },
+
+      score: {
+        type: Number,
+        default: null,
+        min: 0,
+        max: 100,
+      },
+
+      startedAt: {
+        type: Date,
+        default: null,
+      },
+
+      completedAt: {
+        type: Date,
+        default: null,
+      },
+
+      errorCode: {
+        type: String,
+        default: null,
+      },
+    },
+    {
+      _id: false,
+      timestamps: true,
+    },
+  );
+
+const reviewSchema =
+  new mongoose.Schema(
+    {
+      ownerId: {
+        type: String,
+        required: true,
+        trim: true,
+      },
+
+      reviews: {
+        type: [reviewItemSchema],
+        default: [],
+      },
+    },
+    {
+      timestamps: true,
+      versionKey: false,
+    },
+  );
 
 reviewSchema.index({
-  status: 1,
-  createdAt: -1
+  ownerId: 1,
 });
 
-const Review = mongoose.model('Review', reviewSchema);
+const Review =
+  mongoose.model(
+    'Review',
+    reviewSchema,
+  );
 
 export default Review;

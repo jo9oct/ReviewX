@@ -5,6 +5,10 @@ import {
 } from './upload.js';
 
 import {
+  extractArchive,
+} from '../archive/archive.js';
+
+import {
   AppError,
 } from '../../utils/errors.js';
 
@@ -53,7 +57,7 @@ const parseMultipartReview =
   );
 
 const normalizeMultipartReview =
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       if (
         !req.is('multipart/form-data')
@@ -71,6 +75,125 @@ const normalizeMultipartReview =
             'At least one source file is required.',
           statusCode: 400,
         });
+      }
+
+      const archiveFile =
+        req.files.find(
+          (file) => {
+            const filename =
+              typeof file.originalname === 'string'
+                ? file.originalname
+                : '';
+
+            return /\.(zip)$/i.test(
+              filename,
+            );
+          },
+        );
+
+      if (archiveFile) {
+        if (
+          req.files.length !== 1
+        ) {
+          throw new AppError({
+            code: 'ARCHIVE_UPLOAD_MUST_BE_SINGLE_FILE',
+            message:
+              'An archive upload must contain exactly one ZIP file.',
+            statusCode: 400,
+          });
+        }
+
+        const archive =
+          await extractArchive({
+            filename:
+              archiveFile.originalname,
+
+            buffer:
+              archiveFile.buffer,
+          });
+
+        const firstFile =
+          archive.files[0];
+
+        const body =
+          req.body || {};
+
+        const bodyOptions =
+          body.options &&
+          typeof body.options === 'object' &&
+          !Array.isArray(body.options)
+            ? body.options
+            : {};
+
+        const aiAnalysis =
+          normalizeBoolean(
+            body['options[aiAnalysis]'] ??
+              body.aiAnalysis ??
+              bodyOptions.aiAnalysis,
+          );
+
+        const aiRemediation =
+          normalizeBoolean(
+            body['options[aiRemediation]'] ??
+              body.aiRemediation ??
+              bodyOptions.aiRemediation,
+          );
+
+        const advancedAnalysis =
+          normalizeBoolean(
+            body['options[advancedAnalysis]'] ??
+              body.advancedAnalysis ??
+              bodyOptions.advancedAnalysis,
+          );
+
+        const {
+          ['options[aiAnalysis]']:
+            ignoredAiAnalysis,
+
+          ['options[aiRemediation]']:
+            ignoredAiRemediation,
+
+          ['options[advancedAnalysis]']:
+            ignoredAdvancedAnalysis,
+
+          aiAnalysis:
+            ignoredPlainAiAnalysis,
+
+          aiRemediation:
+            ignoredPlainAiRemediation,
+
+          advancedAnalysis:
+            ignoredPlainAdvancedAnalysis,
+
+          options:
+            ignoredOptions,
+
+          ...cleanBody
+        } = body;
+
+        req.body = {
+          ...cleanBody,
+
+          source: {
+            type: 'archive',
+
+            filename:
+              archive.filename,
+
+            files:
+              archive.files,
+          },
+
+          options: {
+            aiAnalysis,
+
+            aiRemediation,
+
+            advancedAnalysis,
+          },
+        };
+
+        return next();
       }
 
       const files =

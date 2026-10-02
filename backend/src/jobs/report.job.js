@@ -41,7 +41,7 @@ export const enqueueReportJob =
       data,
       {
         jobId:
-          `report:${data.reportId}`,
+          `report-${data.reportId}`,
       },
     );
   };

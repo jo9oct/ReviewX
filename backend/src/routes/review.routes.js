@@ -1,7 +1,10 @@
-import { Router } from 'express';
+import {
+  Router,
+} from 'express';
 
 import {
   createReview,
+  getReview,
 } from '../controllers/review.controller.js';
 
 import {
@@ -23,7 +26,8 @@ import {
   handleMultipartError,
 } from '../input/upload/multipart.js';
 
-const router = Router();
+const router =
+  Router();
 
 router.post(
   '/',
@@ -37,6 +41,12 @@ router.post(
   accessMiddleware(),
   enforceReviewLimits,
   createReview,
+);
+
+router.get(
+  '/:reviewId',
+  accessMiddleware(),
+  getReview,
 );
 
 export default router;

@@ -193,8 +193,7 @@ const normalizeRepositoryFiles = (
 ) => {
   if (
     !repository ||
-    typeof repository !==
-      'object'
+    typeof repository !== 'object'
   ) {
     throw new AppError({
       code:
@@ -242,8 +241,7 @@ const normalizeSource = async (
 ) => {
   if (
     !source ||
-    typeof source !==
-      'object'
+    typeof source !== 'object'
   ) {
     throw new AppError({
       code:
@@ -339,8 +337,7 @@ const normalizeSource = async (
 
       if (
         !githubRepository ||
-        typeof githubRepository !==
-          'object'
+        typeof githubRepository !== 'object'
       ) {
         throw new AppError({
           code:

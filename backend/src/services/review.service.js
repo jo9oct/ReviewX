@@ -1,3 +1,5 @@
+import mongoose from 'mongoose';
+
 import {
   createProjectIdentity,
 } from '../input/projectNormalizer.js';
@@ -17,6 +19,12 @@ import {
 import {
   enqueueReviewJob,
 } from '../jobs/review.job.js';
+
+import {
+  storeReviewSource,
+  getReviewSource,
+  deleteReviewSource,
+} from '../queue/reviewSource.store.js';
 
 import {
   reviewRepository,
@@ -58,13 +66,59 @@ import {
   AppError,
 } from '../utils/errors.js';
 
+/*
+ * Temporary owner used until the real
+ * authentication/user system is connected.
+ */
+const DEFAULT_OWNER_ID =
+  'user-test-001';
+
 const getReviewId = (
   review,
 ) =>
+  review?.reviewId ||
   review?.id ||
   review?._id?.toString?.() ||
   review?._id ||
   null;
+
+const normalizeReviewId = (
+  reviewId,
+) => {
+  if (
+    reviewId === null ||
+    reviewId === undefined
+  ) {
+    throw new AppError({
+      code:
+        'INVALID_REVIEW_IDENTIFIER',
+
+      message:
+        'Review ID is required.',
+
+      statusCode: 500,
+    });
+  }
+
+  const normalized =
+    String(
+      reviewId,
+    ).trim();
+
+  if (!normalized) {
+    throw new AppError({
+      code:
+        'INVALID_REVIEW_IDENTIFIER',
+
+      message:
+        'Review ID is required.',
+
+      statusCode: 500,
+    });
+  }
+
+  return normalized;
+};
 
 const normalizeReviewOptions = (
   options = {},
@@ -75,9 +129,12 @@ const normalizeReviewOptions = (
     Array.isArray(options)
   ) {
     throw new AppError({
-      code: 'INVALID_REVIEW_OPTIONS',
+      code:
+        'INVALID_REVIEW_OPTIONS',
+
       message:
         'Review options are invalid.',
+
       statusCode: 400,
     });
   }
@@ -102,9 +159,12 @@ const assertSourceFeatureAccess = (
     typeof source !== 'object'
   ) {
     throw new AppError({
-      code: 'INVALID_SOURCE',
+      code:
+        'INVALID_SOURCE',
+
       message:
         'The review source is invalid.',
+
       statusCode: 400,
     });
   }
@@ -205,12 +265,6 @@ const calculateSourceStats = (
 
 /*
  * Finding location normalization
- *
- * The finding pipeline may expose line information through
- * slightly different normalized location representations.
- *
- * These helpers only read values that already exist on the
- * finding. They never invent source locations.
  */
 const getFindingLineStart = (
   finding,
@@ -284,7 +338,7 @@ const getFindingSnippet = (
 
   if (
     typeof evidence?.snippet ===
-    'string' &&
+      'string' &&
     evidence.snippet.length > 0
   ) {
     return evidence.snippet;
@@ -292,7 +346,7 @@ const getFindingSnippet = (
 
   if (
     typeof evidence?.code ===
-    'string' &&
+      'string' &&
     evidence.code.length > 0
   ) {
     return evidence.code;
@@ -300,7 +354,7 @@ const getFindingSnippet = (
 
   if (
     typeof evidence?.text ===
-    'string' &&
+      'string' &&
     evidence.text.length > 0
   ) {
     return evidence.text;
@@ -308,7 +362,7 @@ const getFindingSnippet = (
 
   if (
     typeof evidence?.content ===
-    'string' &&
+      'string' &&
     evidence.content.length > 0
   ) {
     return evidence.content;
@@ -858,7 +912,10 @@ const getReviewIdFromDocument = (
   const id =
     getReviewId(review);
 
-  if (!id) {
+  if (
+    id === null ||
+    id === undefined
+  ) {
     throw new AppError({
       code:
         'INVALID_REVIEW_IDENTIFIER',
@@ -870,7 +927,9 @@ const getReviewIdFromDocument = (
     });
   }
 
-  return id;
+  return normalizeReviewId(
+    id,
+  );
 };
 
 const createProjectForReview = async ({
@@ -926,10 +985,31 @@ const createProjectForReview = async ({
 };
 
 const createReviewRecord = async ({
+  ownerId,
   projectId,
   source,
 }) => {
+  /*
+   * Generate the review ID once.
+   *
+   * The same identifier is used by:
+   *
+   * MongoDB
+   * Redis
+   * BullMQ
+   * findings
+   * evidence
+   * score
+   * AI analysis
+   */
+  const reviewId =
+    new mongoose.Types.ObjectId();
+
   return reviewRepository.create({
+    ownerId,
+
+    reviewId,
+
     projectId,
 
     sourceType:
@@ -1042,58 +1122,413 @@ const resolveReviewSource = async (
   };
 };
 
+const createExecutionError = ({
+  code,
+  message,
+  statusCode,
+}) =>
+  new AppError({
+    code,
+    message,
+    statusCode,
+  });
+
 const executeReview = async ({
   reviewId,
+  attemptNumber = 1,
+  maxAttempts = 1,
 }) => {
-  if (
-    typeof reviewId !== 'string' ||
-    !reviewId.trim()
-  ) {
-    throw new AppError({
+  const normalizedReviewId =
+    normalizeReviewId(
+      reviewId,
+    );
+
+  const review =
+    await reviewRepository.findById(
+      normalizedReviewId,
+    );
+
+  if (!review) {
+    throw createExecutionError({
       code:
-        'INVALID_REVIEW_IDENTIFIER',
+        'REVIEW_NOT_FOUND',
 
       message:
-        'Review ID is required.',
+        'Review not found.',
 
-      statusCode: 400,
+      statusCode: 404,
     });
   }
 
+  const reviewDocumentId =
+    getReviewIdFromDocument(
+      review,
+    );
+
   /*
-   * The current architecture intentionally
-   * does not persist submitted source code.
-   *
-   * Therefore a queued worker cannot
-   * reconstruct a review from reviewId alone.
-   *
-   * This method is reserved for a future
-   * worker-compatible source retrieval
-   * mechanism.
+   * Completed and cancelled reviews must
+   * never be executed again.
    */
-  throw new AppError({
-    code:
-      'REVIEW_EXECUTION_SOURCE_UNAVAILABLE',
+  if (
+    review.status ===
+      'completed' ||
+    review.status ===
+      'cancelled'
+  ) {
+    return {
+      reviewId:
+        reviewDocumentId,
 
-    message:
-      'Queued review execution requires a source retrieval mechanism that is not configured.',
+      status:
+        review.status,
 
-    statusCode: 503,
-  });
+      skipped:
+        true,
+    };
+  }
+
+  /*
+   * BullMQ attempts are total attempts,
+   * not retry count.
+   *
+   * Example:
+   * attempts = 3
+   *
+   * attempt 1 -> retryable
+   * attempt 2 -> retryable
+   * attempt 3 -> final
+   */
+  const isFinalAttempt =
+    Number(attemptNumber) >=
+    Number(maxAttempts);
+
+  /*
+   * Only queued reviews may transition
+   * into running.
+   *
+   * This database condition makes the
+   * transition atomic and prevents two
+   * workers from executing the same review
+   * concurrently.
+   */
+  const startedAt =
+    new Date();
+
+  const runningReview =
+    await reviewRepository.updateByIdAndStatus(
+      reviewDocumentId,
+      'queued',
+      {
+        status:
+          'running',
+
+        startedAt,
+
+        completedAt:
+          null,
+
+        errorCode:
+          null,
+      },
+    );
+
+  if (!runningReview) {
+    const currentReview =
+      await reviewRepository.findById(
+        normalizedReviewId,
+      );
+
+    if (
+      currentReview?.status ===
+        'completed' ||
+      currentReview?.status ===
+        'cancelled'
+    ) {
+      return {
+        reviewId:
+          reviewDocumentId,
+
+        status:
+          currentReview.status,
+
+        skipped:
+          true,
+      };
+    }
+
+    /*
+     * Another worker already owns
+     * the running transition.
+     */
+    if (
+      currentReview?.status ===
+      'running'
+    ) {
+      return {
+        reviewId:
+          reviewDocumentId,
+
+        status:
+          'running',
+
+        skipped:
+          true,
+      };
+    }
+
+    throw createExecutionError({
+      code:
+        'INVALID_REVIEW_STATE_TRANSITION',
+
+      message:
+        'The review could not transition from its current state to running.',
+
+      statusCode: 409,
+    });
+  }
+
+  let executionData;
+
+  /*
+   * Tracks actual successful completion.
+   *
+   * Merely retrieving executionData does
+   * not mean that the review succeeded.
+   */
+  let completedSuccessfully =
+    false;
+
+  try {
+    executionData =
+      await getReviewSource(
+        normalizedReviewId,
+      );
+
+    if (!executionData) {
+      throw createExecutionError({
+        code:
+          'REVIEW_EXECUTION_SOURCE_EXPIRED',
+
+        message:
+          'The temporary review source is no longer available.',
+
+        statusCode: 410,
+      });
+    }
+
+    const {
+      source,
+      options,
+    } =
+      executionData;
+
+    validateNormalizedSource(
+      source,
+    );
+
+    const {
+      totalFiles,
+      totalLines,
+    } =
+      calculateSourceStats(
+        source,
+      );
+
+    assertReviewLimits({
+      totalLines,
+      totalFiles,
+    });
+
+    const access =
+      getAccessContext();
+
+    const result =
+      await reviewEngine.run({
+        source,
+
+        reviewId:
+          reviewDocumentId,
+
+        projectId:
+          review.projectId,
+
+        options,
+
+        access,
+      });
+
+    await persistFindings({
+      reviewId:
+        reviewDocumentId,
+
+      projectId:
+        review.projectId,
+
+      findings:
+        result.findings || [],
+    });
+
+    await persistScore({
+      reviewId:
+        reviewDocumentId,
+
+      score:
+        result.score,
+    });
+
+    if (
+      options.aiAnalysis
+    ) {
+      await persistAiAnalysis({
+        reviewId:
+          reviewDocumentId,
+
+        aiAnalysis:
+          result.aiAnalysis,
+      });
+    }
+
+    const reviewUpdate =
+      buildReviewUpdate({
+        result,
+
+        source,
+
+        startedAt,
+      });
+
+    const updatedReview =
+      await reviewRepository.updateByIdAndStatus(
+        reviewDocumentId,
+        'running',
+        reviewUpdate,
+      );
+
+    if (!updatedReview) {
+      throw createExecutionError({
+        code:
+          'REVIEW_COMPLETION_STATE_CONFLICT',
+
+        message:
+          'The review could not be marked as completed because its state changed during execution.',
+
+        statusCode: 409,
+      });
+    }
+
+    completedSuccessfully =
+      true;
+
+    return {
+      reviewId:
+        reviewDocumentId,
+
+      status:
+        updatedReview.status,
+
+      analysis:
+        result,
+    };
+  } catch (error) {
+    /*
+     * Retry lifecycle:
+     *
+     * Non-final attempt:
+     *   running -> queued
+     *
+     * Final attempt:
+     *   running -> failed
+     *
+     * The non-final transition is required
+     * because the next BullMQ attempt must
+     * atomically transition queued -> running.
+     */
+    try {
+      await reviewRepository.updateByIdAndStatus(
+        reviewDocumentId,
+        'running',
+        {
+          status:
+            isFinalAttempt
+              ? 'failed'
+              : 'queued',
+
+          startedAt,
+
+          completedAt:
+            isFinalAttempt
+              ? new Date()
+              : null,
+
+          errorCode:
+            error?.code ||
+            'REVIEW_EXECUTION_FAILED',
+        },
+      );
+    } catch {
+      /*
+       * Preserve the original execution
+       * error.
+       */
+    }
+
+    /*
+     * Rethrow the original error so BullMQ
+     * knows that the current attempt failed
+     * and can schedule the next attempt.
+     */
+    throw error;
+  } finally {
+    /*
+     * Redis source lifecycle:
+     *
+     * - Keep the source when the current
+     *   attempt fails and BullMQ can retry.
+     * - Delete after successful completion.
+     * - Delete after the final failed attempt.
+     *
+     * The source is intentionally NOT
+     * deleted merely because it was read.
+     */
+    if (
+      isFinalAttempt ||
+      completedSuccessfully
+    ) {
+      try {
+        await deleteReviewSource(
+          normalizedReviewId,
+        );
+      } catch {
+        /*
+         * Redis TTL remains the fallback
+         * cleanup mechanism.
+         */
+      }
+    }
+  }
 };
 
 const queueReviewExecution = async ({
   reviewId,
 }) => {
+  const normalizedReviewId =
+    normalizeReviewId(
+      reviewId,
+    );
+
   const review =
     await reviewRepository.findById(
-      reviewId,
+      normalizedReviewId,
     );
 
   if (!review) {
     throw new AppError({
-      code: 'REVIEW_NOT_FOUND',
-      message: 'Review not found.',
+      code:
+        'REVIEW_NOT_FOUND',
+
+      message:
+        'Review not found.',
+
       statusCode: 404,
     });
   }
@@ -1103,21 +1538,234 @@ const queueReviewExecution = async ({
       review,
     );
 
-  const job =
-    await enqueueReviewJob({
-      reviewId:
-        id.toString(),
+  if (
+    review.status ===
+      'completed' ||
+    review.status ===
+      'cancelled'
+  ) {
+    throw new AppError({
+      code:
+        'REVIEW_ALREADY_FINALIZED',
+
+      message:
+        'The review has already reached a final state.',
+
+      statusCode: 409,
     });
+  }
+
+  if (
+    review.status !==
+      'pending'
+  ) {
+    throw new AppError({
+      code:
+        'REVIEW_ALREADY_QUEUED',
+
+      message:
+        'The review has already been queued or is being processed.',
+
+      statusCode: 409,
+    });
+  }
+
+  const queuedReview =
+    await reviewRepository.updateByIdAndStatus(
+      id,
+      'pending',
+      {
+        status:
+          'queued',
+
+        errorCode:
+          null,
+      },
+    );
+
+  if (!queuedReview) {
+    throw new AppError({
+      code:
+        'REVIEW_QUEUE_STATE_CONFLICT',
+
+      message:
+        'The review could not be moved to the queued state.',
+
+      statusCode: 409,
+    });
+  }
+
+  let job;
+
+  try {
+    job =
+      await enqueueReviewJob({
+        reviewId:
+          id,
+      });
+  } catch (error) {
+    try {
+      await reviewRepository.updateByIdAndStatus(
+        id,
+        'queued',
+        {
+          status:
+            'failed',
+
+          completedAt:
+            new Date(),
+
+          errorCode:
+            error?.code ||
+            'REVIEW_QUEUE_FAILED',
+        },
+      );
+    } catch {
+      /*
+       * Preserve the original queue
+       * failure.
+       */
+    }
+
+    throw error;
+  }
 
   return {
     reviewId:
-      id.toString(),
+      id,
 
     jobId:
       job.id,
 
     status:
       'queued',
+  };
+};
+
+/*
+ * Retrieve the current review status and
+ * persisted analysis results.
+ *
+ * This function is intentionally read-only.
+ */
+const getReviewResponse = async (
+  reviewId,
+) => {
+  const normalizedReviewId =
+    normalizeReviewId(
+      reviewId,
+    );
+
+  const review =
+    await reviewRepository.findById(
+      normalizedReviewId,
+    );
+
+  if (!review) {
+    throw new AppError({
+      code:
+        'REVIEW_NOT_FOUND',
+
+      message:
+        'Review not found.',
+
+      statusCode: 404,
+    });
+  }
+
+  const reviewDocumentId =
+    getReviewIdFromDocument(
+      review,
+    );
+
+  const [
+    findings,
+    score,
+    aiAnalysis,
+  ] =
+    await Promise.all([
+      findingRepository.findByReviewId(
+        reviewDocumentId,
+      ),
+
+      scoreRepository.findByReviewId(
+        reviewDocumentId,
+      ),
+
+      aiAnalysisRepository.findByReviewId(
+        reviewDocumentId,
+      ),
+    ]);
+
+  return {
+    review: {
+      id:
+        reviewDocumentId,
+
+      ownerId:
+        review.ownerId ||
+        DEFAULT_OWNER_ID,
+
+      projectId:
+        review.projectId
+          ? review.projectId.toString()
+          : null,
+
+      sourceType:
+        review.sourceType,
+
+      status:
+        review.status,
+
+      languages:
+        review.languages || [],
+
+      totalFiles:
+        review.totalFiles || 0,
+
+      totalLines:
+        review.totalLines || 0,
+
+      findingCounts:
+        review.findingCounts || {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+
+      score:
+        review.score ?? null,
+
+      startedAt:
+        review.startedAt || null,
+
+      completedAt:
+        review.completedAt || null,
+
+      errorCode:
+        review.errorCode || null,
+
+      createdAt:
+        review.createdAt || null,
+
+      updatedAt:
+        review.updatedAt || null,
+    },
+
+    findings:
+      Array.isArray(findings)
+        ? findings
+        : [],
+
+    score:
+      score || null,
+
+    aiAnalysis:
+      Array.isArray(aiAnalysis)
+        ? aiAnalysis
+        : [],
   };
 };
 
@@ -1190,9 +1838,6 @@ const createReviewResponse =
       totalFiles,
     });
 
-    const access =
-      getAccessContext();
-
     const project =
       await createProjectForReview({
         project:
@@ -1218,8 +1863,19 @@ const createReviewResponse =
       });
     }
 
+    /*
+     * Temporary owner ID.
+     *
+     * This will later come from the
+     * authenticated user/session.
+     */
+    const ownerId =
+      DEFAULT_OWNER_ID;
+
     const review =
       await createReviewRecord({
+        ownerId,
+
         projectId,
 
         source,
@@ -1230,70 +1886,23 @@ const createReviewResponse =
         review,
       );
 
-    const startedAt =
-      new Date();
-
     try {
-      await reviewRepository.updateById(
+      await storeReviewSource({
         reviewId,
-        {
-          status: 'running',
-          startedAt,
-          errorCode: null,
-        },
-      );
 
-      const result =
-        await reviewEngine.run({
-          source,
+        source,
 
-          reviewId,
-
-          projectId,
-
-          options,
-
-          access,
-        });
-
-      await persistFindings({
-        reviewId,
-        projectId,
-        findings:
-          result.findings || [],
+        options,
       });
 
-      await persistScore({
-        reviewId,
-        score:
-          result.score,
-      });
-
-      if (
-        options.aiAnalysis
-      ) {
-        await persistAiAnalysis({
+      const queuedReview =
+        await queueReviewExecution({
           reviewId,
-
-          aiAnalysis:
-            result.aiAnalysis,
         });
-      }
-
-      const reviewUpdate =
-        buildReviewUpdate({
-          result,
-          source,
-          startedAt,
-        });
-
-      const updatedReview =
-        await reviewRepository.updateById(
-          reviewId,
-          reviewUpdate,
-        );
 
       return {
+        ownerId,
+
         project: {
           id:
             projectId.toString(),
@@ -1310,37 +1919,49 @@ const createReviewResponse =
 
         review: {
           id:
-            reviewId.toString(),
+            reviewId,
 
           status:
-            updatedReview?.status ||
-            'completed',
+            queuedReview.status,
+
+          jobId:
+            queuedReview.jobId,
         },
 
-        analysis:
-          result,
+        status:
+          'queued',
       };
     } catch (error) {
+      try {
+        await deleteReviewSource(
+          reviewId,
+        );
+      } catch {
+        /*
+         * Redis TTL remains the fallback
+         * cleanup mechanism.
+         */
+      }
+
       try {
         await reviewRepository.updateById(
           reviewId,
           {
-            status: 'failed',
-
-            startedAt,
+            status:
+              'failed',
 
             completedAt:
               new Date(),
 
             errorCode:
               error?.code ||
-              'REVIEW_EXECUTION_FAILED',
+              'REVIEW_QUEUE_FAILED',
           },
         );
       } catch {
         /*
-         * Preserve the original review
-         * execution error.
+         * Preserve the original queue
+         * failure.
          */
       }
 
@@ -1352,4 +1973,5 @@ export {
   createReviewResponse,
   executeReview,
   queueReviewExecution,
+  getReviewResponse,
 };

@@ -58,9 +58,7 @@ const sourceFileSchema =
     .unknown(false)
     .custom((file, helpers) => {
       if (!file.path && !file.filename) {
-        return helpers.error(
-          'any.custom',
-        );
+        return helpers.error('any.custom');
       }
 
       return file;
@@ -92,9 +90,7 @@ const sourceSchema =
 
     content:
       Joi.string()
-        .max(
-          10 * 1024 * 1024,
-        )
+        .max(10 * 1024 * 1024)
         .when('type', {
           is: 'paste',
 

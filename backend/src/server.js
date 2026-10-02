@@ -12,6 +12,7 @@ import {
 import reviewRoutes from './routes/review.routes.js';
 import reportRoutes from './routes/report.routes.js';
 import githubRoutes from './routes/github.routes.js';
+import scheduledReviewRoutes from './routes/scheduledReview.routes.js';
 
 import {
   notFoundMiddleware,
@@ -98,6 +99,11 @@ app.use(
 app.use(
   '/api/v1/github',
   githubRoutes,
+);
+
+app.use(
+  '/api/v1/scheduled-reviews',
+  scheduledReviewRoutes,
 );
 
 app.use(

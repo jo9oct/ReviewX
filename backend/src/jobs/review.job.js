@@ -39,7 +39,8 @@ export const enqueueReviewJob =
       JOB_NAMES.REVIEW,
       data,
       {
-        jobId: `review:${data.reviewId}`,
+        jobId:
+          `review-${data.reviewId}`,
       },
     );
   };

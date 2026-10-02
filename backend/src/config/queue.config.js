@@ -1,9 +1,7 @@
-import environment from "./environment.js";
-
 const queueConfig = {
   redisUrl:
     process.env.REDIS_URL ||
-    "redis://127.0.0.1:6379",
+    'redis://127.0.0.1:6379',
 
   concurrency: Number(
     process.env.QUEUE_CONCURRENCY || 3,
@@ -28,19 +26,15 @@ const queueConfig = {
   queues: {
     review:
       process.env.REVIEW_QUEUE_NAME ||
-      "review",
+      'review',
 
     report:
       process.env.REPORT_QUEUE_NAME ||
-      "report",
+      'report',
 
     cleanup:
       process.env.CLEANUP_QUEUE_NAME ||
-      "cleanup",
-
-    notification:
-      process.env.NOTIFICATION_QUEUE_NAME ||
-      "notification",
+      'cleanup',
   },
 };
 

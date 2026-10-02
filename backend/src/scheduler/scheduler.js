@@ -1,125 +1,272 @@
-const schedules = new Map();
+import {
+  createScheduledReviewService,
+} from './scheduledReview.service.js';
 
-const normalizeInterval = (
-  intervalMs,
-) => {
-  const value = Number(
-    intervalMs,
-  );
+import scheduledReviewRepository from '../database/repositories/scheduledReview.repository.js';
 
-  if (
-    !Number.isFinite(value) ||
-    value < 60_000
-  ) {
-    throw new Error(
-      "Scheduled review interval must be at least 60000 milliseconds.",
-    );
-  }
+import reviewRepository from '../database/repositories/review.repository.js';
 
-  return value;
+import environment from '../config/environment.js';
+
+const getSchedulerConfig = () => {
+  const config =
+    environment.scheduler || {};
+
+  return {
+    enabled:
+      config.enabled !== false,
+
+    intervalMs:
+      Math.max(
+        Number(
+          config.minIntervalSeconds ||
+            60,
+        ),
+        60,
+      ) * 1000,
+  };
 };
 
-export const createScheduler = ({
-  scheduledReviewService,
+const createScheduler = ({
   logger = console,
-}) => {
-  if (
-    !scheduledReviewService ||
-    typeof scheduledReviewService.queueScheduledReview !==
-      "function"
-  ) {
-    throw new TypeError(
-      "Scheduled review service is required.",
-    );
-  }
+} = {}) => {
+  const config =
+    getSchedulerConfig();
 
-  const schedule = ({
-    scheduleId,
-    reviewId,
-    ownerId,
-    intervalMs,
-  }) => {
-    if (
-      typeof scheduleId !== "string" ||
-      !scheduleId.trim()
-    ) {
-      throw new TypeError(
-        "Schedule ID is required.",
-      );
-    }
+  const scheduledReviewService =
+    createScheduledReviewService({
+      reviewRepository,
 
-    const id =
-      scheduleId.trim();
+      scheduledReviewRepository,
+    });
 
-    if (schedules.has(id)) {
-      throw new Error(
-        `Schedule already exists: ${id}`,
-      );
-    }
+  let timer = null;
 
-    const interval =
-      normalizeInterval(
-        intervalMs,
-      );
+  let running = false;
 
-    const timer = setInterval(
-      async () => {
-        try {
-          await scheduledReviewService.queueScheduledReview(
-            {
-              reviewId,
-              ownerId,
-            },
-          );
-        } catch (error) {
-          logger.error(
-            `[scheduler] failed to queue schedule ${id}`,
-            error,
-          );
+  const processDueSchedules =
+    async () => {
+      if (running) {
+        return {
+          skipped: true,
+
+          reason:
+            'Scheduler cycle already running.',
+        };
+      }
+
+      running = true;
+
+      try {
+        const now =
+          new Date();
+
+        const schedules =
+          await scheduledReviewRepository.findDue({
+            now,
+
+            limit: 100,
+          });
+
+        if (
+          schedules.length ===
+          0
+        ) {
+          return {
+            processed: 0,
+
+            claimed: 0,
+
+            queued: 0,
+
+            failed: 0,
+          };
         }
-      },
-      interval,
-    );
 
-    schedules.set(id, timer);
+        let claimed = 0;
+
+        let queued = 0;
+
+        let failed = 0;
+
+        for (
+          const schedule of schedules
+        ) {
+          try {
+            /*
+             * Atomically claim the schedule.
+             *
+             * If another scheduler instance
+             * already claimed it, null is
+             * returned.
+             */
+            const claimedSchedule =
+              await scheduledReviewRepository.claimDueSchedule(
+                {
+                  scheduleId:
+                    schedule.scheduleId.toString(),
+
+                  now,
+                },
+              );
+
+            if (
+              !claimedSchedule
+            ) {
+              continue;
+            }
+
+            claimed += 1;
+
+            /*
+             * The schedule has already been
+             * advanced atomically.
+             *
+             * Now enqueue the actual review.
+             */
+            await scheduledReviewService.queueScheduledReview(
+              {
+                schedule:
+                  claimedSchedule,
+              },
+            );
+
+            queued += 1;
+          } catch (
+            error
+          ) {
+            failed += 1;
+
+            logger.error(
+              '[scheduler] failed to process scheduled review',
+              {
+                scheduleId:
+                  schedule.scheduleId?.toString?.(),
+
+                reviewId:
+                  schedule.reviewId?.toString?.(),
+
+                error,
+              },
+            );
+          }
+        }
+
+        return {
+          processed:
+            schedules.length,
+
+          claimed,
+
+          queued,
+
+          failed,
+        };
+      } finally {
+        running = false;
+      }
+    };
+
+  const start = async () => {
+    if (!config.enabled) {
+      logger.info(
+        '[scheduler] disabled',
+      );
+
+      return {
+        started: false,
+
+        reason:
+          'Scheduler is disabled.',
+      };
+    }
+
+    if (timer) {
+      return {
+        started: false,
+
+        reason:
+          'Scheduler is already running.',
+      };
+    }
+
+    /*
+     * Process due schedules immediately
+     * on startup.
+     */
+    try {
+      await processDueSchedules();
+    } catch (
+      error
+    ) {
+      logger.error(
+        '[scheduler] initial cycle failed',
+        error,
+      );
+    }
+
+    timer =
+      setInterval(
+        async () => {
+          try {
+            await processDueSchedules();
+          } catch (
+            error
+          ) {
+            logger.error(
+              '[scheduler] cycle failed',
+              error,
+            );
+          }
+        },
+        config.intervalMs,
+      );
+
+    logger.info(
+      `[scheduler] started with ${config.intervalMs}ms polling interval`,
+    );
 
     return {
-      scheduleId: id,
-      reviewId,
-      intervalMs: interval,
+      started: true,
+
+      intervalMs:
+        config.intervalMs,
     };
   };
 
-  const cancel = (
-    scheduleId,
-  ) => {
-    const id =
-      String(scheduleId || "").trim();
-
-    const timer =
-      schedules.get(id);
-
+  const stop = () => {
     if (!timer) {
       return false;
     }
 
-    clearInterval(timer);
-    schedules.delete(id);
+    clearInterval(
+      timer,
+    );
+
+    timer = null;
+
+    logger.info(
+      '[scheduler] stopped',
+    );
 
     return true;
   };
 
   const shutdown = () => {
-    for (const timer of schedules.values()) {
-      clearInterval(timer);
-    }
-
-    schedules.clear();
+    stop();
   };
 
   return {
-    schedule,
-    cancel,
+    start,
+
+    stop,
+
     shutdown,
+
+    processDueSchedules,
   };
+};
+
+export {
+  createScheduler,
 };

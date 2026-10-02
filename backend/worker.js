@@ -15,8 +15,9 @@ import {
 } from './src/queue/redis.client.js';
 
 import {
-  createReviewProcessor,
-} from './src/jobs/review.job.js';
+  connectDatabase,
+  disconnectDatabase,
+} from './src/database/connection.js';
 
 import {
   createReportProcessor,
@@ -27,10 +28,18 @@ import {
 } from './src/jobs/cleanup.job.js';
 
 import {
-  createNotificationProcessor,
-} from './src/jobs/notification.job.js';
+  createScheduler,
+} from './src/scheduler/scheduler.js';
+
+import * as reviewService from './src/services/review.service.js';
+
+import * as reportService from './src/services/report.service.js';
+
+import cleanupService from './src/services/cleanup.service.js';
 
 const workers = [];
+
+let scheduler = null;
 
 const createWorker = ({
   queueName,
@@ -90,66 +99,70 @@ const createWorker = ({
 
 const createWorkerServices =
   () => {
-    /*
-     * Resolve application services
-     * from the worker composition root.
-     *
-     * Queue processors receive services
-     * and must not contain business logic.
-     */
+    return {
+      reviewService,
 
-    const services = {
-      reviewService:
-        null,
+      reportService,
 
-      reportService:
-        null,
-
-      cleanupService:
-        null,
-
-      notificationService:
-        null,
+      cleanupService,
     };
+  };
 
+const createReviewWorkerProcessor =
+  ({
+    reviewService,
+  }) => {
     if (
-      !services.reviewService
+      !reviewService ||
+      typeof reviewService.executeReview !==
+        'function'
     ) {
-      throw new Error(
-        'Worker reviewService is not configured.',
+      throw new TypeError(
+        'A review service with executeReview is required.',
       );
     }
 
-    if (
-      !services.reportService
-    ) {
-      throw new Error(
-        'Worker reportService is not configured.',
-      );
-    }
+    return async (
+      job,
+    ) => {
+      const reviewId =
+        job?.data?.reviewId;
 
-    if (
-      !services.cleanupService
-    ) {
-      throw new Error(
-        'Worker cleanupService is not configured.',
-      );
-    }
+      if (
+        typeof reviewId !== 'string' ||
+        !reviewId.trim()
+      ) {
+        throw new TypeError(
+          'Review ID is required.',
+        );
+      }
 
-    if (
-      !services.notificationService
-    ) {
-      throw new Error(
-        'Worker notificationService is not configured.',
-      );
-    }
+      return reviewService.executeReview({
+        reviewId:
+          reviewId.trim(),
 
-    return services;
+        attemptNumber:
+          job.attemptsMade + 1,
+
+        maxAttempts:
+          job.opts.attempts || 1,
+      });
+    };
   };
 
 const bootstrap =
   async () => {
+    await connectDatabase();
+
+    console.info(
+      '[worker] MongoDB connected',
+    );
+
     await connectRedis();
+
+    console.info(
+      '[worker] Redis connected',
+    );
 
     const services =
       createWorkerServices();
@@ -159,7 +172,7 @@ const bootstrap =
         QUEUE_NAMES.REVIEW,
 
       processor:
-        createReviewProcessor({
+        createReviewWorkerProcessor({
           reviewService:
             services.reviewService,
         }),
@@ -187,19 +200,27 @@ const bootstrap =
         }),
     });
 
-    createWorker({
-      queueName:
-        QUEUE_NAMES.NOTIFICATION,
+    scheduler =
+      createScheduler({
+        logger: console,
+      });
 
-      processor:
-        createNotificationProcessor({
-          notificationService:
-            services.notificationService,
-        }),
-    });
+    await scheduler.start();
 
     console.info(
-      '[worker] queue workers started',
+      '[worker] review worker started',
+    );
+
+    console.info(
+      '[worker] report worker started',
+    );
+
+    console.info(
+      '[worker] cleanup worker started',
+    );
+
+    console.info(
+      '[worker] scheduler started',
     );
   };
 
@@ -224,6 +245,10 @@ const shutdown =
     );
 
     try {
+      if (scheduler) {
+        scheduler.shutdown();
+      }
+
       await Promise.all(
         workers.map(
           (worker) =>
@@ -232,6 +257,20 @@ const shutdown =
       );
 
       await disconnectRedis();
+
+      await disconnectDatabase();
+
+      console.info(
+        '[worker] scheduler stopped',
+      );
+
+      console.info(
+        '[worker] Redis connection closed',
+      );
+
+      console.info(
+        '[worker] MongoDB connection closed',
+      );
 
       console.info(
         '[worker] shutdown completed',

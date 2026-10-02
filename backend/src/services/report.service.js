@@ -36,8 +36,62 @@ import {
 } from "../access/access.service.js";
 
 import {
+  enqueueReportJob,
+} from "../jobs/report.job.js";
+
+import {
   AppError,
 } from "../utils/errors.js";
+
+const DEFAULT_OWNER_ID =
+  "user-test-001";
+
+const getReportId = (
+  report,
+) =>
+  report?.reportId ||
+  report?.id ||
+  report?._id?.toString?.() ||
+  report?._id ||
+  null;
+
+const normalizeReportId = (
+  reportId,
+) => {
+  if (
+    reportId === null ||
+    reportId === undefined
+  ) {
+    throw new AppError({
+      code:
+        "INVALID_REPORT_ID",
+
+      message:
+        "Report ID is required.",
+
+      statusCode: 400,
+    });
+  }
+
+  const normalized =
+    String(
+      reportId,
+    ).trim();
+
+  if (!normalized) {
+    throw new AppError({
+      code:
+        "INVALID_REPORT_ID",
+
+      message:
+        "Report ID is required.",
+
+      statusCode: 400,
+    });
+  }
+
+  return normalized;
+};
 
 const getReportFeature = (
   format,
@@ -109,7 +163,8 @@ const normalizeAiAnalysis =
         completed[0]?.provider ||
         null,
 
-      status: "completed",
+      status:
+        "completed",
 
       summary:
         completed.find(
@@ -165,7 +220,11 @@ const getProjectData = (
 const normalizeReportContent =
   (content, format) => {
     if (format === "pdf") {
-      if (!Buffer.isBuffer(content)) {
+      if (
+        !Buffer.isBuffer(
+          content,
+        )
+      ) {
         throw new AppError({
           code:
             "INVALID_PDF_REPORT_CONTENT",
@@ -203,7 +262,8 @@ const createReport = async ({
   format = "json",
 }) => {
   if (
-    typeof reviewId !== "string" ||
+    typeof reviewId !==
+      "string" ||
     !reviewId.trim()
   ) {
     throw new AppError({
@@ -283,6 +343,10 @@ const createReport = async ({
   if (!report) {
     report =
       await createReportRecord({
+        ownerId:
+          review.ownerId ||
+          DEFAULT_OWNER_ID,
+
         reviewId:
           normalizedReviewId,
 
@@ -309,14 +373,30 @@ const createReport = async ({
       });
   }
 
+  if (!report) {
+    throw new AppError({
+      code:
+        "REPORT_CREATION_FAILED",
+
+      message:
+        "The report could not be created.",
+
+      statusCode: 500,
+    });
+  }
+
+  const reportId =
+    normalizeReportId(
+      getReportId(report),
+    );
+
   if (
-    report?.status ===
+    report.status ===
       "completed" &&
-    report?.secureUrl
+    report.secureUrl
   ) {
     return {
-      reportId:
-        report._id.toString(),
+      reportId,
 
       reviewId:
         normalizedReviewId,
@@ -341,35 +421,113 @@ const createReport = async ({
     };
   }
 
-  return generateReport({
+  if (
+    report.status ===
+    "generating"
+  ) {
+    return {
+      reportId,
+
+      reviewId:
+        normalizedReviewId,
+
+      format:
+        normalizedFormat,
+
+      status:
+        report.status,
+    };
+  }
+
+  if (
+    report.status ===
+    "failed"
+  ) {
+    report =
+      await createReportRecord({
+        ownerId:
+          review.ownerId ||
+          DEFAULT_OWNER_ID,
+
+        reviewId:
+          normalizedReviewId,
+
+        format:
+          normalizedFormat,
+
+        status:
+          "pending",
+
+        storageProvider:
+          null,
+
+        publicId:
+          null,
+
+        secureUrl:
+          null,
+
+        resourceType:
+          null,
+
+        errorCode:
+          null,
+      });
+
+    if (!report) {
+      throw new AppError({
+        code:
+          "REPORT_CREATION_FAILED",
+
+        message:
+          "A new report could not be created after the previous report failed.",
+
+        statusCode: 500,
+      });
+    }
+  }
+
+  const finalReportId =
+    normalizeReportId(
+      getReportId(report),
+    );
+
+  const job =
+    await enqueueReportJob({
+      reportId:
+        finalReportId,
+    });
+
+  return {
     reportId:
-      report._id.toString(),
-  });
+      finalReportId,
+
+    reviewId:
+      normalizedReviewId,
+
+    format:
+      normalizedFormat,
+
+    status:
+      "pending",
+
+    jobId:
+      job.id,
+  };
 };
 
 const generateReport =
   async ({
     reportId,
   }) => {
-    if (
-      typeof reportId !==
-        "string" ||
-      !reportId.trim()
-    ) {
-      throw new AppError({
-        code:
-          "INVALID_REPORT_ID",
-
-        message:
-          "Report ID is required.",
-
-        statusCode: 400,
-      });
-    }
+    const normalizedReportId =
+      normalizeReportId(
+        reportId,
+      );
 
     const report =
       await findReportById(
-        reportId.trim(),
+        normalizedReportId,
       );
 
     if (!report) {
@@ -383,6 +541,11 @@ const generateReport =
         statusCode: 404,
       });
     }
+
+    const reportIdentifier =
+      normalizeReportId(
+        getReportId(report),
+      );
 
     const format =
       normalizeReportFormat(
@@ -400,7 +563,7 @@ const generateReport =
 
     const review =
       await reviewRepository.findById(
-        report.reviewId,
+        report.reviewId.toString(),
       );
 
     if (!review) {
@@ -432,23 +595,23 @@ const generateReport =
 
     await markGenerating({
       id:
-        report._id.toString(),
+        reportIdentifier,
     });
 
     try {
       const findings =
         await findFindingsByReviewId(
-          report.reviewId,
+          report.reviewId.toString(),
         );
 
       const score =
         await findScoreByReviewId(
-          report.reviewId,
+          report.reviewId.toString(),
         );
 
       const aiAnalyses =
         await findAiAnalysesByReviewId(
-          report.reviewId,
+          report.reviewId.toString(),
         );
 
       const aiAnalysis =
@@ -495,7 +658,7 @@ const generateReport =
       const completed =
         await markCompleted({
           id:
-            report._id.toString(),
+            reportIdentifier,
 
           storageProvider:
             "cloudinary",
@@ -512,7 +675,7 @@ const generateReport =
 
       return {
         reportId:
-          report._id.toString(),
+          reportIdentifier,
 
         reviewId:
           report.reviewId.toString(),
@@ -542,7 +705,7 @@ const generateReport =
     } catch (error) {
       await markFailed({
         id:
-          report._id.toString(),
+          reportIdentifier,
 
         errorCode:
           error?.code ||

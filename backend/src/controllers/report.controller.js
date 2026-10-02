@@ -32,7 +32,12 @@ const createReport = async (
       });
 
     return res
-      .status(200)
+      .status(
+        result.status ===
+          'completed'
+          ? 200
+          : 202,
+      )
       .json(
         createResponse({
           success: true,
