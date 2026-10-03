@@ -281,7 +281,7 @@ const SectionLabel = forwardRef<HTMLParagraphElement, { children: React.ReactNod
     return (
       <p
         ref={ref}
-        className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-purple-400"
+        className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-purple-600 dark:text-purple-400"
       >
         {children}
       </p>
@@ -326,22 +326,22 @@ function HeroCodePanel() {
 
   return (
     <div
-      className="relative rounded-2xl overflow-hidden border border-white/[0.12] bg-[#120f1c]/90 shadow-[0_24px_80px_rgba(0,0,0,0.6),0_0_40px_rgba(139,92,246,0.15)] backdrop-blur-xl"
+      className="relative rounded-2xl overflow-hidden border border-border bg-card/90 shadow-[0_20px_60px_rgba(18,15,28,0.12),0_0_35px_rgba(139,92,246,0.08)] backdrop-blur-xl dark:border-white/[0.12] dark:bg-[#120f1c]/90 dark:shadow-[0_24px_80px_rgba(0,0,0,0.6),0_0_40px_rgba(139,92,246,0.15)]"
       aria-hidden="true"
     >
-      <div className="flex items-center justify-between border-b border-white/[0.08] bg-[#161224]/80 px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-2.5 dark:border-white/[0.08] dark:bg-[#161224]/80">
         <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
           <span className="inline-block size-2 rounded-full bg-success shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
           api/users.ts
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+        <span className="rounded-full border border-border bg-background/60 px-2.5 py-0.5 font-mono text-[9px] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]">
           TypeScript
         </span>
       </div>
 
       <div className="grid lg:grid-cols-[1.1fr_0.9fr]">
         {/* Code pane — bg-editor is always dark; use fixed light text colors */}
-        <div className="border-b border-white/[0.06] bg-[#0c0915] px-1 py-3 font-mono text-[11px] leading-[1.7] lg:border-b-0 lg:border-r">
+        <div className="border-b border-border bg-[#0c0915] px-1 py-3 font-mono text-[11px] leading-[1.7] lg:border-b-0 lg:border-r dark:border-white/[0.06]">
           {lines.map((line, i) => (
             <div
               key={i}
@@ -356,7 +356,7 @@ function HeroCodePanel() {
         </div>
 
         {/* Score pane — uses theme tokens with dark purple styling */}
-        <div className="bg-[#120f1c]/80 p-4">
+        <div className="bg-surface/80 p-4 dark:bg-[#120f1c]/80">
           <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Overall score</p>
           <div className="mt-3 flex items-end gap-2">
             <span className="font-mono text-4xl font-semibold leading-none text-foreground">78</span>
@@ -374,13 +374,13 @@ function HeroCodePanel() {
                   <span className="text-muted-foreground">{m.label}</span>
                   <span className="font-semibold text-foreground">{m.value}</span>
                 </div>
-                <div className="h-1 overflow-hidden rounded-full bg-white/[0.08]">
+                <div className="h-1 overflow-hidden rounded-full bg-secondary">
                   <div className={cn("h-full rounded-full", m.color)} style={{ width: `${m.value}%` }} />
                 </div>
               </div>
             ))}
           </div>
-          <div className="mt-4 rounded-xl border border-white/[0.08] bg-[#0c0915]/60 p-3">
+          <div className="mt-4 rounded-xl border border-border bg-background/70 p-3 dark:border-white/[0.08] dark:bg-[#0c0915]/60">
             <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Findings</p>
             <div className="space-y-1.5">
               {[
@@ -441,7 +441,7 @@ function FeatureCard({ feature, index = 0 }: { feature: Feature; index?: number 
       {...(!shouldReduceMotion && {
         whileHover: { y: -3, transition: { duration: 0.18, ease: "easeInOut" as const } },
       })}
-      className="group relative flex flex-col p-6 rounded-2xl border border-white/[0.08] bg-[#120f1c]/70 backdrop-blur-xl transition-all duration-300 hover:border-purple-500/40 hover:shadow-[0_0_35px_rgba(139,92,246,0.16),inset_0_0_20px_rgba(168,85,247,0.03)]"
+      className="group relative flex flex-col p-6 rounded-2xl border border-border bg-card/85 backdrop-blur-xl shadow-sm transition-all duration-300 hover:border-primary/50 hover:shadow-[0_12px_40px_rgba(168,85,247,0.15)] dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:hover:border-purple-500/40 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.16)]"
     >
       {/* Icon area — scales 1→1.08 on card hover, synced via group CSS */}
       {feature.visual ? (
@@ -449,7 +449,7 @@ function FeatureCard({ feature, index = 0 }: { feature: Feature; index?: number 
           {feature.visual}
         </div>
       ) : (
-        <div className="mb-4 grid size-10 place-items-center rounded-xl border border-purple-500/25 bg-gradient-to-br from-purple-500/15 to-pink-500/10 text-purple-300 transition-all duration-200 group-hover:scale-[1.08] group-hover:border-purple-500/50 group-hover:shadow-[0_0_18px_rgba(168,85,247,0.25)]">
+        <div className="mb-4 grid size-10 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary transition-all duration-200 group-hover:scale-[1.08] group-hover:border-primary/50 group-hover:shadow-[0_0_18px_rgba(168,85,247,0.25)] dark:border-purple-500/25 dark:bg-gradient-to-br dark:from-purple-500/15 dark:to-pink-500/10 dark:text-purple-300">
           <Icon className="size-5" aria-hidden="true" />
         </div>
       )}
@@ -518,8 +518,8 @@ function PlanCard({ plan, index = 0 }: { plan: Plan; index?: number }) {
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-2xl p-6 backdrop-blur-xl transition-all duration-300",
         plan.featured
-          ? "border border-purple-500/50 bg-[#161126]/90 shadow-[0_0_40px_rgba(168,85,247,0.18)] hover:border-purple-400 hover:shadow-[0_0_50px_rgba(217,70,239,0.28)]"
-          : "border border-white/[0.08] bg-[#120f1c]/70 hover:border-purple-500/40 hover:shadow-[0_0_35px_rgba(139,92,246,0.16)]",
+          ? "border-2 border-primary/60 bg-gradient-to-b from-primary/[0.06] to-card shadow-[0_12px_40px_rgba(147,51,234,0.14)] dark:border-purple-500/50 dark:bg-[#161126]/90 dark:shadow-[0_0_40px_rgba(168,85,247,0.18)] dark:hover:border-purple-400"
+          : "border border-border bg-card/85 shadow-sm hover:border-primary/40 hover:shadow-[0_12px_40px_rgba(168,85,247,0.15)] dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:hover:border-purple-500/40 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.16)]",
       )}
     >
       {/* Decorative shimmer on featured card */}
@@ -579,7 +579,7 @@ function PlanCard({ plan, index = 0 }: { plan: Plan; index?: number }) {
               "w-full gap-2 rounded-full font-medium transition-all [&_svg]:translate-x-0 [&_svg]:transition-transform [&_svg]:duration-200 group-hover:[&_svg]:translate-x-1",
               plan.featured
                 ? "border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-[0_0_24px_rgba(217,70,239,0.35)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_32px_rgba(236,72,153,0.5)]"
-                : "border border-white/10 bg-white/[0.04] text-foreground hover:bg-white/[0.08] hover:border-purple-500/30",
+                : "border border-border bg-card/60 text-foreground hover:bg-accent hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] dark:hover:border-purple-500/30",
             )}
           >
             <Link to="/register">
@@ -707,7 +707,7 @@ export function LandingPage() {
         {/* ══════════════════════════════════════════════════ NAV ═══ */}
         {/* Floating pill/capsule navbar matching Dimension visual design */}
         <header className="sticky top-4 z-40 mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="flex h-14 items-center justify-between gap-4 rounded-full border border-white/10 bg-[#0d0a16]/80 px-5 sm:px-6 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <div className="flex h-14 items-center justify-between gap-4 rounded-full border border-border bg-card/85 px-5 sm:px-6 backdrop-blur-xl shadow-[0_8px_30px_rgba(18,15,28,0.06)] dark:border-white/10 dark:bg-[#0d0a16]/80 dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
             <Link to="/" aria-label="ReviewX home"><Brand /></Link>
 
             <nav aria-label="Primary navigation" className="hidden items-center gap-7 md:flex">
@@ -723,7 +723,7 @@ export function LandingPage() {
             </nav>
 
             <div className="flex items-center gap-2">
-              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex rounded-full text-muted-foreground hover:text-foreground hover:bg-white/[0.06]">
+              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex rounded-full text-muted-foreground hover:text-foreground hover:bg-accent">
                 <Link to="/auth">Sign in</Link>
               </Button>
 
@@ -732,7 +732,7 @@ export function LandingPage() {
                 type="button"
                 aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
                 onClick={toggle}
-                className="relative grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="relative grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <Sun
                   className={cn(
@@ -764,7 +764,7 @@ export function LandingPage() {
                 aria-expanded={mobileMenuOpen}
                 aria-controls="mobile-menu"
                 onClick={() => setMobileMenuOpen((v) => !v)}
-                className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-white/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:hidden"
+                className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:hidden"
               >
                 {mobileMenuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
               </button>
@@ -775,7 +775,7 @@ export function LandingPage() {
             <nav
               id="mobile-menu"
               aria-label="Mobile navigation"
-              className="mt-2 rounded-2xl border border-white/10 bg-[#0d0a16]/95 px-5 pb-4 pt-3 backdrop-blur-2xl shadow-2xl md:hidden"
+              className="mt-2 rounded-2xl border border-border bg-card/95 px-5 pb-4 pt-3 backdrop-blur-2xl shadow-2xl dark:border-white/10 dark:bg-[#0d0a16]/95 md:hidden"
             >
               <ul className="space-y-1">
                 {NAV_LINKS.map((link) => (
@@ -783,14 +783,14 @@ export function LandingPage() {
                     <a
                       href={link.href}
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground"
+                      className="block rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
                       {link.label}
                     </a>
                   </li>
                 ))}
                 <li className="pt-2">
-                  <Button asChild variant="outline" size="sm" className="w-full rounded-full border-white/10 bg-white/[0.04] text-foreground">
+                  <Button asChild variant="outline" size="sm" className="w-full rounded-full border-border bg-card/60 text-foreground hover:bg-accent dark:border-white/10 dark:bg-white/[0.04]">
                     <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>Sign in</Link>
                   </Button>
                 </li>
@@ -799,7 +799,7 @@ export function LandingPage() {
                     type="button"
                     aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
                     onClick={() => { toggle(); setMobileMenuOpen(false); }}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     {theme === "dark"
                       ? <><Moon className="size-4" aria-hidden="true" /> Dark theme</>
@@ -852,7 +852,7 @@ export function LandingPage() {
                   <radialGradient id="hero-ambient-glow" cx="50%" cy="50%" r="50%">
                     <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.35" />
                     <stop offset="50%" stopColor="#d946ef" stopOpacity="0.2" />
-                    <stop offset="100%" stopColor="#0a0812" stopOpacity="0" />
+                    <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
                   </radialGradient>
                   <filter id="arc-glow" x="-20%" y="-40%" width="140%" height="180%">
                     <feGaussianBlur stdDeviation="24" result="blur" />
@@ -915,7 +915,7 @@ export function LandingPage() {
                       <ArrowRight className="size-4" aria-hidden="true" />
                     </Link>
                   </Button>
-                  <Button asChild variant="outline" size="lg" className="rounded-full border border-white/10 bg-white/[0.04] text-foreground hover:bg-white/[0.08] hover:border-purple-500/30">
+                  <Button asChild variant="outline" size="lg" className="rounded-full border border-border bg-card/60 text-foreground hover:bg-accent hover:border-primary/40 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] dark:hover:border-purple-500/30">
                     <Link to="/auth">Sign in to demo</Link>
                   </Button>
                 </div>
@@ -948,7 +948,7 @@ export function LandingPage() {
                   { stat: "5",       desc: "Languages supported"       },
                   { stat: "89%",     desc: "Fix acceptance rate"       },
                 ].map(({ stat, desc }) => (
-                  <div key={desc} className="rounded-2xl border border-white/[0.08] bg-[#120f1c]/70 p-4 backdrop-blur-md transition-all hover:border-purple-500/30 hover:shadow-[0_0_24px_rgba(139,92,246,0.12)]">
+                  <div key={desc} className="rounded-2xl border border-border bg-card/75 p-4 backdrop-blur-md shadow-sm transition-all hover:border-primary/40 hover:shadow-[0_8px_30px_rgba(168,85,247,0.12)] dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:hover:border-purple-500/30 dark:hover:shadow-[0_0_24px_rgba(139,92,246,0.12)]">
                     <dd className="font-mono text-2xl font-semibold text-foreground">{stat}</dd>
                     <dt className="mt-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{desc}</dt>
                   </div>
@@ -963,7 +963,7 @@ export function LandingPage() {
                 {SUPPORTED_LANGUAGES.map((lang) => (
                   <span
                     key={lang.label}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#120f1c]/70 px-3 py-1 font-mono text-[11px] font-semibold transition-colors hover:border-purple-500/30"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 px-3 py-1 font-mono text-[11px] font-semibold transition-colors hover:border-primary/40 shadow-sm dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:hover:border-purple-500/30"
                   >
                     <span className={lang.color}>{lang.mono}</span>
                     <span className="text-muted-foreground">{lang.label}</span>
@@ -1003,9 +1003,9 @@ export function LandingPage() {
               {/* Reports as its own feature card — not buried in a pricing bullet */}
               <article
                 ref={reportRef}
-                className="mt-4 flex flex-col gap-4 rounded-2xl border border-white/[0.08] bg-[#120f1c]/70 p-6 backdrop-blur-xl transition-all duration-300 hover:border-purple-500/40 hover:shadow-[0_0_35px_rgba(139,92,246,0.16)] sm:flex-row sm:items-start"
+                className="mt-4 flex flex-col gap-4 rounded-2xl border border-border bg-card/85 p-6 backdrop-blur-xl shadow-sm transition-all duration-300 hover:border-primary/50 hover:shadow-[0_12px_40px_rgba(168,85,247,0.15)] dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:hover:border-purple-500/40 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.16)] sm:flex-row sm:items-start"
               >
-                <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-purple-500/25 bg-gradient-to-br from-purple-500/15 to-pink-500/10 text-purple-300">
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary dark:border-purple-500/25 dark:bg-gradient-to-br dark:from-purple-500/15 dark:to-pink-500/10 dark:text-purple-300">
                   <Download className="size-5" aria-hidden="true" />
                 </div>
                 <div>
@@ -1015,7 +1015,7 @@ export function LandingPage() {
               </article>
 
               {/* Stats strip — distinct from hero strip */}
-              <dl ref={statsRef} className="mt-16 grid divide-y divide-white/[0.08] sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+              <dl ref={statsRef} className="mt-16 grid divide-y divide-border sm:grid-cols-4 sm:divide-x sm:divide-y-0">
                 {[
                   { stat: "6+",      desc: "Finding categories checked" },
                   { stat: "5",       desc: "Languages supported"         },
@@ -1070,10 +1070,10 @@ export function LandingPage() {
                   </div>
                 </div>
 
-                <div ref={wfPanelRef} className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#120f1c]/80 backdrop-blur-xl shadow-[0_16px_48px_rgba(0,0,0,0.4)]" aria-hidden="true">
-                  <div className="flex items-center justify-between border-b border-white/[0.08] bg-[#161224]/70 px-4 py-3">
+                <div ref={wfPanelRef} className="overflow-hidden rounded-2xl border border-border bg-card/85 backdrop-blur-xl shadow-xl dark:border-white/[0.08] dark:bg-[#120f1c]/80" aria-hidden="true">
+                  <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 dark:border-white/[0.08] dark:bg-[#161224]/70">
                     <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                      <WandSparkles className="size-3.5 text-purple-400" aria-hidden="true" />
+                      <WandSparkles className="size-3.5 text-primary" aria-hidden="true" />
                       Analysis status
                     </div>
                     <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[10px] font-medium text-success">live</span>
@@ -1087,24 +1087,24 @@ export function LandingPage() {
                         "Generating AI explanations",
                         "Calculating score",
                       ].map((item, i) => (
-                        <li key={item} className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-[#0c0915]/60 px-3 py-2">
+                        <li key={item} className="flex items-center gap-3 rounded-xl border border-border bg-background/70 px-3 py-2 dark:border-white/[0.06] dark:bg-[#0c0915]/60">
                           <div className={cn(
                             "grid size-5 place-items-center rounded-full border font-mono text-[10px] font-semibold",
-                            i < 4 ? "border-success/40 bg-success/15 text-success" : "border-purple-400/50 bg-purple-500/20 text-purple-300 shadow-[0_0_10px_rgba(168,85,247,0.3)]",
+                            i < 4 ? "border-success/40 bg-success/15 text-success" : "border-primary/50 bg-primary/15 text-primary shadow-[0_0_10px_rgba(168,85,247,0.25)]",
                           )}>
                             {i < 4 ? <Check className="size-3" /> : i + 1}
                           </div>
                           <span className="text-xs text-foreground">{item}</span>
-                          {i === 4 && <span className="ml-auto size-1.5 animate-pulse rounded-full bg-pink-400" />}
+                          {i === 4 && <span className="ml-auto size-1.5 animate-pulse rounded-full bg-primary" />}
                         </li>
                       ))}
                     </ol>
-                    <div className="rounded-xl border border-white/[0.06] bg-[#161224]/60 p-4">
+                    <div className="rounded-xl border border-border bg-surface p-4 dark:border-white/[0.06] dark:bg-[#161224]/60">
                       <div className="flex justify-between text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                         <span>Progress</span>
                         <span className="font-mono font-semibold text-foreground">96%</span>
                       </div>
-                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
                         <div className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500 shadow-[0_0_12px_rgba(217,70,239,0.4)]" style={{ width: "96%" }} />
                       </div>
                       <div className="mt-5 space-y-3 text-xs">
@@ -1127,10 +1127,10 @@ export function LandingPage() {
           <section
             ref={voiceRef}
             aria-labelledby="voice-heading"
-            className="bg-[#0d0a16]/40 px-5 py-20 sm:px-6 lg:px-8"
+            className="bg-surface/50 px-5 py-20 sm:px-6 lg:px-8 dark:bg-[#0d0a16]/40"
           >
             <div className="mx-auto max-w-7xl">
-              <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#120f1c]/80 backdrop-blur-xl shadow-[0_16px_48px_rgba(0,0,0,0.4)]">
+              <div className="overflow-hidden rounded-2xl border border-border bg-card/85 backdrop-blur-xl shadow-xl dark:border-white/[0.08] dark:bg-[#120f1c]/80">
                 <div className="grid gap-0 lg:grid-cols-2">
                   {/* left: copy */}
                   <div className="p-8 sm:p-10">
@@ -1169,7 +1169,7 @@ export function LandingPage() {
 
                   {/* right: visual mock — bg-editor is always dark; all child colors hardcoded for dark surface */}
                   <div
-                    className="flex flex-col items-center justify-center gap-6 border-t border-white/[0.06] bg-[#0c0915] p-10 lg:border-l lg:border-t-0"
+                    className="flex flex-col items-center justify-center gap-6 border-t border-border bg-editor p-10 lg:border-l lg:border-t-0 dark:border-white/[0.06]"
                     aria-hidden="true"
                   >
                     {/* mic button mock */}
@@ -1215,7 +1215,7 @@ export function LandingPage() {
           >
             <div className="mx-auto max-w-7xl">
               <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-                <div ref={secCardRef} className="rounded-2xl border border-white/[0.08] bg-[#120f1c]/75 backdrop-blur-xl p-7 sm:p-10 shadow-[0_16px_48px_rgba(0,0,0,0.4)] transition-all hover:border-purple-500/30 hover:shadow-[0_0_35px_rgba(139,92,246,0.12)]">
+                <div ref={secCardRef} className="rounded-2xl border border-border bg-card/85 backdrop-blur-xl p-7 sm:p-10 shadow-lg transition-all hover:border-primary/40 hover:shadow-[0_12px_40px_rgba(168,85,247,0.12)] dark:border-white/[0.08] dark:bg-[#120f1c]/75 dark:hover:border-purple-500/30 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.12)]">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <SectionLabel>Security posture</SectionLabel>
@@ -1242,7 +1242,7 @@ export function LandingPage() {
                       { value: "2", label: "High",     cls: "text-high"     },
                       { value: "3", label: "Other",    cls: "text-medium"   },
                     ].map((m) => (
-                      <div key={m.label} className="rounded-xl border border-white/[0.08] bg-[#0c0915]/60 p-5">
+                      <div key={m.label} className="rounded-xl border border-border bg-surface/70 p-5 dark:border-white/[0.08] dark:bg-[#0c0915]/60">
                         <dd className={cn("font-mono text-4xl font-semibold", m.cls)}>{m.value}</dd>
                         <dt className="mt-2 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{m.label}</dt>
                       </div>
@@ -1250,7 +1250,7 @@ export function LandingPage() {
                   </dl>
                 </div>
 
-                <div ref={secWhyRef} className="rounded-2xl border border-white/[0.08] bg-[#120f1c]/75 backdrop-blur-xl p-7 shadow-[0_16px_48px_rgba(0,0,0,0.4)] transition-all hover:border-purple-500/30 hover:shadow-[0_0_35px_rgba(139,92,246,0.12)]">
+                <div ref={secWhyRef} className="rounded-2xl border border-border bg-card/85 backdrop-blur-xl p-7 shadow-lg transition-all hover:border-primary/40 hover:shadow-[0_12px_40px_rgba(168,85,247,0.12)] dark:border-white/[0.08] dark:bg-[#120f1c]/75 dark:hover:border-purple-500/30 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.12)]">
                   <SectionLabel>Why teams switch</SectionLabel>
                   <ul className="mt-5 space-y-5" aria-label="Reasons to switch to ReviewX">
                     {[
@@ -1320,7 +1320,7 @@ export function LandingPage() {
             <div className="mx-auto max-w-7xl">
               <div
                 ref={ctaInnerRef}
-                className="relative overflow-hidden rounded-3xl border border-white/[0.12] bg-gradient-to-br from-[#1b142e] via-[#120f1c] to-[#0a0812] px-8 py-14 sm:px-12 shadow-[0_24px_80px_rgba(0,0,0,0.6),0_0_50px_rgba(139,92,246,0.15)] backdrop-blur-xl"
+                className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-purple-100/70 via-card to-pink-50/50 px-8 py-14 sm:px-12 shadow-xl backdrop-blur-xl dark:border-white/[0.12] dark:bg-gradient-to-br dark:from-[#1b142e] dark:via-[#120f1c] dark:to-[#0a0812] dark:shadow-[0_24px_80px_rgba(0,0,0,0.6),0_0_50px_rgba(139,92,246,0.15)]"
               >
                 <div
                   aria-hidden="true"
@@ -1347,7 +1347,7 @@ export function LandingPage() {
                         <ArrowRight className="size-4" aria-hidden="true" />
                       </Link>
                     </Button>
-                    <Button asChild variant="outline" size="lg" className="rounded-full border border-white/10 bg-white/[0.04] text-foreground hover:bg-white/[0.08] hover:border-purple-500/30">
+                    <Button asChild variant="outline" size="lg" className="rounded-full border border-border bg-card/60 text-foreground hover:bg-accent hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] dark:hover:border-purple-500/30">
                       <Link to="/auth">Sign in</Link>
                     </Button>
                   </div>
@@ -1379,7 +1379,7 @@ export function LandingPage() {
                     </a>
                   </p>
                 </div>
-                <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#120f1c]/70 backdrop-blur-xl divide-y divide-white/[0.06] px-6 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
+                <div className="overflow-hidden rounded-2xl border border-border bg-card/85 backdrop-blur-xl divide-y divide-border px-6 shadow-sm dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:divide-white/[0.06] dark:shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
                   {FAQ.map((item, i) => (
                     <FaqRow key={item.q} item={item} delay={i * 60} />
                   ))}
@@ -1392,7 +1392,7 @@ export function LandingPage() {
         {/* ════════════════════════════════════════════ FOOTER ═══ */}
         <footer
           aria-label="Site footer"
-          className="border-t border-white/[0.08] bg-[#0a0812] px-5 py-16 sm:px-6 lg:px-8"
+          className="border-t border-border bg-surface/50 px-5 py-16 sm:px-6 lg:px-8 dark:border-white/[0.08] dark:bg-[#0a0812]"
         >
           <div className="mx-auto max-w-7xl">
             <div ref={footerBrandRef} className="grid gap-12 md:grid-cols-[1.5fr_repeat(3,1fr)]">
@@ -1410,7 +1410,7 @@ export function LandingPage() {
                       aria-label={label}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="grid size-8 place-items-center rounded-full border border-white/[0.08] bg-white/[0.02] text-muted-foreground transition-all hover:border-purple-500/40 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      className="grid size-8 place-items-center rounded-full border border-border bg-card/50 text-muted-foreground transition-all hover:border-primary/50 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:text-white dark:hover:border-purple-500/40 dark:hover:bg-white/[0.06]"
                     >
                       <Icon className="size-4" aria-hidden="true" />
                     </a>

@@ -90,7 +90,13 @@ const THEME_INIT_SCRIPT = `(function(){
     var stored = localStorage.getItem('reviewx-theme');
     var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     var isLight = stored === 'light' || (!stored && !prefersDark);
-    if (isLight) document.documentElement.classList.add('light');
+    if (isLight) {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    }
   } catch(e) {}
 })();`;
 
