@@ -1508,7 +1508,8 @@ function RecentReviewsCard({
 
 function Dashboard() {
   const { setView, setSelectedFinding, setActiveReview, userName } = useReviewStore();
-  const { data: metricsData, isLoading } = useDashboardMetricsQuery();
+  const user = useAuthStore((s) => s.user);
+  const { data: metricsData, isLoading } = useDashboardMetricsQuery(user?.id);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -1873,7 +1874,8 @@ function Stat({
 
 function ReviewTable() {
   const { setView, setActiveReview } = useReviewStore();
-  const { data: reviews = [], isLoading } = useReviewsQuery(50);
+  const user = useAuthStore((s) => s.user);
+  const { data: reviews = [], isLoading } = useReviewsQuery(50, user?.id);
 
   const handleSelect = async (reviewId: string) => {
     try {

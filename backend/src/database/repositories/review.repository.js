@@ -12,12 +12,17 @@ export async function findById(reviewId) {
   return Review.findById(reviewId).lean();
 }
 
-export async function findRecent(limit = 20) {
-  return Review.find().sort({ createdAt: -1 }).limit(limit).lean();
+export async function findRecent(limit = 20, filter = {}) {
+  return Review.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
 }
 
-export async function countAll() {
-  return Review.countDocuments();
+export async function countAll(filter = {}) {
+  return Review.countDocuments(filter);
+}
+
+export async function findIds(filter = {}) {
+  const docs = await Review.find(filter, { _id: 1 }).lean();
+  return docs.map((d) => d._id);
 }
 
 export async function updateById(reviewId, update, options = {}) {
@@ -36,8 +41,8 @@ export async function deleteById(reviewId) {
   return Review.findByIdAndDelete(reviewId).lean();
 }
 
-export async function countByStatus(status) {
-  return Review.countDocuments({ status });
+export async function countByStatus(status, filter = {}) {
+  return Review.countDocuments({ ...filter, status });
 }
 
 export const reviewRepository = Object.freeze({
@@ -45,6 +50,7 @@ export const reviewRepository = Object.freeze({
   findById,
   findRecent,
   countAll,
+  findIds,
   updateById,
   deleteById,
   countByStatus

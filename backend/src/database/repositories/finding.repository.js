@@ -26,16 +26,24 @@ export async function findByReviewId(reviewId) {
   return Finding.find({ reviewId }).sort({ createdAt: 1 }).lean();
 }
 
-export async function findOpenFindings(limit = 20) {
-  return Finding.find({ status: { $ne: "resolved" } })
+export async function findOpenFindings(limit = 20, reviewIds = null) {
+  const query = { status: { $ne: "resolved" } };
+  if (Array.isArray(reviewIds)) {
+    query.reviewId = { $in: reviewIds };
+  }
+  return Finding.find(query)
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
 }
 
-export async function countFindings() {
-  const total = await Finding.countDocuments();
-  const resolved = await Finding.countDocuments({ status: "resolved" });
+export async function countFindings(reviewIds = null) {
+  const baseQuery = {};
+  if (Array.isArray(reviewIds)) {
+    baseQuery.reviewId = { $in: reviewIds };
+  }
+  const total = await Finding.countDocuments(baseQuery);
+  const resolved = await Finding.countDocuments({ ...baseQuery, status: "resolved" });
   return { total, resolved };
 }
 

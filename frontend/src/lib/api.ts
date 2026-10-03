@@ -411,17 +411,17 @@ export async function listReviews(limit = 20): Promise<DashboardReview[]> {
   return request<DashboardReview[]>(`/api/reviews?limit=${limit}`);
 }
 
-export function useDashboardMetricsQuery() {
+export function useDashboardMetricsQuery(userId?: string) {
   return useQuery({
-    queryKey: ["dashboard-metrics"],
+    queryKey: ["dashboard-metrics", userId ?? "anonymous"],
     queryFn: getDashboardMetrics,
     refetchInterval: 5000,
   });
 }
 
-export function useReviewsQuery(limit = 20) {
+export function useReviewsQuery(limit = 20, userId?: string) {
   return useQuery({
-    queryKey: ["reviews-list", limit],
+    queryKey: ["reviews-list", userId ?? "anonymous", limit],
     queryFn: () => listReviews(limit),
     refetchInterval: 5000,
   });

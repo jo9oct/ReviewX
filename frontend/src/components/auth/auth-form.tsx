@@ -131,7 +131,7 @@ export function AuthForm({
         <span className="h-px flex-1 bg-border" />
       </div>
 
-      <form className="space-y-4" onSubmit={submit}>
+      <form className="space-y-4" onSubmit={submit} autoComplete="off">
         {formError && (
           <div className="flex items-start gap-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-400">
             <AlertCircle className="size-4 shrink-0 mt-0.5" />
@@ -157,7 +157,7 @@ export function AuthForm({
           <Input
             required
             type="email"
-            autoComplete="email"
+            autoComplete="off"
             value={email}
             onChange={(e) => {
               setFormError(null);
@@ -181,7 +181,7 @@ export function AuthForm({
               required
               minLength={8}
               type={showPassword ? "text" : "password"}
-              autoComplete={isRegister ? "new-password" : "current-password"}
+              autoComplete="new-password"
               value={password}
               onChange={(e) => {
                 setFormError(null);

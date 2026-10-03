@@ -48,6 +48,19 @@ const reviewSummarySchema = new Schema(
 
 const reviewSchema = new Schema(
   {
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true
+    },
+
+    company: {
+      type: Schema.Types.ObjectId,
+      ref: "Company",
+      default: null,
+      index: true
+    },
     source: {
       type: String,
       enum: [
@@ -156,6 +169,16 @@ const reviewSchema = new Schema(
     versionKey: false
   }
 );
+
+reviewSchema.index({
+  user: 1,
+  createdAt: -1
+});
+
+reviewSchema.index({
+  company: 1,
+  createdAt: -1
+});
 
 reviewSchema.index({
   createdAt: -1

@@ -5,47 +5,29 @@ import {
   listReviews,
   getDashboardMetrics
 } from "../services/review.service.js";
+import { sendSuccess } from "../utils/response.js";
+import { logger } from "../utils/logger.js";
 
-import {
-  sendSuccess
-} from "../utils/response.js";
-
-import {
-  logger
-} from "../utils/logger.js";
-
-export async function create(
-  req,
-  res,
-  next
-) {
+export async function create(req, res, next) {
   try {
-    const initial =
-      await createReview({
-        input:
-          req.body,
-        file:
-          req.file || null,
-        accessContext:
-          req.analysisAccess ||
-          null
-      });
+    const initial = await createReview({
+      input: req.body,
+      file: req.file || null,
+      accessContext: req.analysisAccess || null,
+      user: req.user?._id || req.user?.id || null,
+      company: req.user?.company || null
+    });
 
-    // Return 202 Accepted immediately with reviewId and status: "pending"
     sendSuccess(
       res,
       {
-        reviewId:
-          initial.reviewId,
-        status:
-          "pending",
-        message:
-          "Review analysis queued."
+        reviewId: initial.reviewId,
+        status: "pending",
+        message: "Review analysis queued."
       },
       202
     );
 
-    // Kick off pipeline in the background using setImmediate
     setImmediate(() => {
       executeReviewPipeline(initial.reviewId, {
         processed: initial.processed,
@@ -67,48 +49,36 @@ export async function create(
   }
 }
 
-export async function list(
-  req,
-  res,
-  next
-) {
+export async function list(req, res, next) {
   try {
     const limit = parseInt(req.query.limit, 10) || 20;
-    const reviews = await listReviews({ limit });
+    const reviews = await listReviews({
+      limit,
+      user: req.user || null
+    });
     return sendSuccess(res, reviews);
   } catch (error) {
     next(error);
   }
 }
 
-export async function getMetrics(
-  _req,
-  res,
-  next
-) {
+export async function getMetrics(req, res, next) {
   try {
-    const metrics = await getDashboardMetrics();
+    const metrics = await getDashboardMetrics({
+      user: req.user || null
+    });
     return sendSuccess(res, metrics);
   } catch (error) {
     next(error);
   }
 }
 
-export async function getById(
-  req,
-  res,
-  next
-) {
+export async function getById(req, res, next) {
   try {
-    const review =
-      await getReview(
-        req.params.reviewId
-      );
-
-    return sendSuccess(
-      res,
-      review
-    );
+    const review = await getReview(req.params.reviewId, {
+      user: req.user || null
+    });
+    return sendSuccess(res, review);
   } catch (error) {
     next(error);
   }

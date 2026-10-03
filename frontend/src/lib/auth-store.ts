@@ -28,12 +28,11 @@ export function normalizeRole(role?: string): "member" | "company" | "platform" 
 
 function syncReviewStore(user: User | null) {
   const reviewStore = useReviewStore.getState();
+  reviewStore.resetSession();
   if (user) {
     reviewStore.setUserName(user.name);
     reviewStore.setUserEmail(user.email);
     reviewStore.setRole(normalizeRole(user.role));
-  } else {
-    reviewStore.resetSession();
   }
 }
 
@@ -73,6 +72,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
     syncReviewStore(null);
     if (typeof window !== "undefined") {
+      sessionStorage.clear();
       window.location.href = "/auth";
     }
   },

@@ -162,6 +162,15 @@
   button {
     cursor: pointer;
   }
+  /* Prevent browser autofill yellow/ochre highlight */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-text-fill-color: var(--foreground) !important;
+    transition: background-color 5000s ease-in-out 0s, color 5000s ease-in-out 0s;
+    box-shadow: 0 0 0px 1000px var(--background) inset !important;
+  }
   ::selection {
     background: rgba(168, 85, 247, 0.35);
   }

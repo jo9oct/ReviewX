@@ -57,4 +57,42 @@ export async function authenticate(req, res, next) {
   next();
 }
 
+export async function optionalAuthenticate(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader?.startsWith('Bearer ')) {
+    req.user = null;
+    return next();
+  }
+
+  const token = authHeader.slice(7).trim();
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const payload = jwt.verify(token, config.jwtSecret);
+    const userId = payload.userId || payload.sub;
+    const user = await findById(userId);
+
+    if (user && user.isActive) {
+      req.user = {
+        _id: user._id.toString(),
+        id: user._id.toString(),
+        userId: user._id.toString(),
+        role: user.role,
+        company: user.company ? user.company.toString() : null,
+      };
+    } else {
+      req.user = null;
+    }
+  } catch (_err) {
+    req.user = null;
+  }
+
+  next();
+}
+
 export const protect = authenticate;
+

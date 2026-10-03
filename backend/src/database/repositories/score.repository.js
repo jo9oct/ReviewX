@@ -16,8 +16,12 @@ export async function findByReviewIds(reviewIds) {
   return Score.find({ reviewId: { $in: reviewIds } }).lean();
 }
 
-export async function findRecent(limit = 20) {
-  return Score.find().sort({ createdAt: -1 }).limit(limit).lean();
+export async function findRecent(limit = 20, reviewIds = null) {
+  const query = {};
+  if (Array.isArray(reviewIds)) {
+    query.reviewId = { $in: reviewIds };
+  }
+  return Score.find(query).sort({ createdAt: -1 }).limit(limit).lean();
 }
 
 export async function upsertByReviewId(reviewId, data, options = {}) {

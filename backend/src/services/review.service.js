@@ -63,7 +63,9 @@ import {
 export async function createReview({
   input,
   file = null,
-  accessContext = null
+  accessContext = null,
+  user = null,
+  company = null
 }) {
   const access = await getAnalysisAccess(accessContext);
 
@@ -80,6 +82,8 @@ export async function createReview({
   });
 
   const review = await reviewRepository.create({
+    user: user || null,
+    company: company || null,
     source: processed.sourceType,
     fileName: processed.fileName,
     language,
@@ -185,7 +189,8 @@ async function updateReviewProgress(reviewId, status, progress) {
 }
 
 export async function getReview(
-  reviewId
+  reviewId,
+  { user = null } = {}
 ) {
   const review =
     await reviewRepository.findById(
@@ -205,6 +210,24 @@ export async function getReview(
 
 
     throw error;
+  }
+
+  // Cross-tenant access isolation
+  if (user && user.role !== "platform_admin") {
+    if (user.role === "company_admin" && user.company) {
+      if (review.company && review.company.toString() !== user.company.toString()) {
+        const error = new Error("Review not found.");
+        error.statusCode = 404;
+        throw error;
+      }
+    } else {
+      const uid = (user._id || user.id || user.userId).toString();
+      if (review.user && review.user.toString() !== uid) {
+        const error = new Error("Review not found.");
+        error.statusCode = 404;
+        throw error;
+      }
+    }
   }
 
 
@@ -632,8 +655,19 @@ function formatDate(d) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export async function listReviews({ limit = 20 } = {}) {
-  const reviews = await reviewRepository.findRecent(limit);
+function buildReviewFilter(user) {
+  if (!user) return {};
+  if (user.role === "platform_admin") return {};
+  if (user.role === "company_admin" && user.company) {
+    return { company: user.company };
+  }
+  const uid = user._id || user.id || user.userId;
+  return { user: uid };
+}
+
+export async function listReviews({ limit = 20, user = null } = {}) {
+  const filter = buildReviewFilter(user);
+  const reviews = await reviewRepository.findRecent(limit, filter);
   if (!reviews || reviews.length === 0) return [];
 
   const reviewIds = reviews.map((r) => r._id);
@@ -668,10 +702,37 @@ export async function listReviews({ limit = 20 } = {}) {
   });
 }
 
-export async function getDashboardMetrics() {
-  const recentReviewsList = await listReviews({ limit: 10 });
-  const openFindingsList = await findingRepository.findOpenFindings(20);
-  const { total: totalFindingsCount, resolved: resolvedFindingsCount } = await findingRepository.countFindings();
+export async function getDashboardMetrics({ user = null } = {}) {
+  const filter = buildReviewFilter(user);
+  const totalReviewsCount = await reviewRepository.countAll(filter);
+
+  // If a scoped user has 0 reviews, return an isolated empty dashboard
+  if (user && totalReviewsCount === 0) {
+    return {
+      totalReviews: 0,
+      totalFindings: 0,
+      criticalCount: 0,
+      highCount: 0,
+      mediumCount: 0,
+      lowCount: 0,
+      resolvedPercentage: 100,
+      averageScore: 0,
+      categoryHealth: {
+        security: 100,
+        bugs: 100,
+        quality: 100,
+        performance: 100
+      },
+      scoreTrend: [],
+      recentReviews: [],
+      openFindings: []
+    };
+  }
+
+  const userReviewIds = user ? await reviewRepository.findIds(filter) : null;
+  const recentReviewsList = await listReviews({ limit: 10, user });
+  const openFindingsList = await findingRepository.findOpenFindings(20, userReviewIds);
+  const { total: totalFindingsCount, resolved: resolvedFindingsCount } = await findingRepository.countFindings(userReviewIds);
 
   let criticalCount = 0;
   let highCount = 0;
@@ -686,9 +747,14 @@ export async function getDashboardMetrics() {
     else if (sev === "low") lowCount++;
   }
 
-  const recentScores = await scoreRepository.findRecent(20);
+  const recentScores = await scoreRepository.findRecent(20, userReviewIds);
   let avgScore = 0;
-  let catHealth = null;
+  let catHealth = {
+    security: 100,
+    bugs: 100,
+    quality: 100,
+    performance: 100
+  };
 
   if (recentScores.length > 0) {
     const totalScore = recentScores.reduce((acc, s) => acc + (s.overall || 0), 0);
@@ -711,18 +777,16 @@ export async function getDashboardMetrics() {
   const totalOpen = criticalCount + highCount + mediumCount + lowCount;
   const resolvedPct = totalFindingsCount > 0 
     ? Math.round((resolvedFindingsCount / totalFindingsCount) * 100)
-    : null;
+    : 100;
 
   const formattedOpenFindings = openFindingsList.map((f) => ({
     id: f._id.toString(),
     title: f.title,
     severity: (f.severity || "info").toUpperCase(),
-    file: f.location?.filePath || "src/code",
+    file: f.location?.filePath || f.file || "src/code",
     category: f.category ? f.category.charAt(0).toUpperCase() + f.category.slice(1) : "General",
     reviewId: f.reviewId ? f.reviewId.toString() : null
   }));
-
-  const totalReviewsCount = await reviewRepository.countAll();
 
   return {
     totalReviews: totalReviewsCount,
