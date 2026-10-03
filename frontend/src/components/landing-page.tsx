@@ -341,7 +341,7 @@ function HeroCodePanel() {
 
       <div className="grid lg:grid-cols-[1.1fr_0.9fr]">
         {/* Code pane — bg-editor is always dark; use fixed light text colors */}
-        <div className="border-r border-white/[0.06] bg-[#0c0915] px-1 py-3 font-mono text-[11px] leading-[1.7]">
+        <div className="border-b border-white/[0.06] bg-[#0c0915] px-1 py-3 font-mono text-[11px] leading-[1.7] lg:border-b-0 lg:border-r">
           {lines.map((line, i) => (
             <div
               key={i}
@@ -823,17 +823,17 @@ export function LandingPage() {
             {/* Atmospheric pulsing glow */}
             <div
               aria-hidden="true"
-              className="animate-glow-pulse pointer-events-none absolute inset-x-0 top-0 -z-10 h-[48rem] bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(139,92,246,0.22),transparent)]"
+              className="animate-glow-pulse pointer-events-none absolute inset-x-0 top-0 -z-10 h-[52rem] bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(139,92,246,0.24),transparent)]"
             />
             <div
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 -z-20 bg-[linear-gradient(rgba(148,163,184,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.04)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_80%_70%_at_50%_0%,black,transparent)]"
             />
 
-            {/* Glowing horizon arc / light-sweep graphic inspired by Dimension */}
+            {/* Glowing horizon arc / light-sweep graphic centered behind headline */}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute left-1/2 top-4 sm:top-2 -translate-x-1/2 -z-10 w-[1200px] max-w-[100vw] overflow-visible"
+              className="pointer-events-none absolute left-1/2 top-2 sm:top-0 -translate-x-1/2 -z-10 w-[1280px] max-w-[100vw] overflow-visible"
             >
               <svg
                 viewBox="0 0 1200 600"
@@ -850,8 +850,8 @@ export function LandingPage() {
                     <stop offset="100%" stopColor="#f43f5e" stopOpacity="0" />
                   </linearGradient>
                   <radialGradient id="hero-ambient-glow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.32" />
-                    <stop offset="50%" stopColor="#d946ef" stopOpacity="0.18" />
+                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.35" />
+                    <stop offset="50%" stopColor="#d946ef" stopOpacity="0.2" />
                     <stop offset="100%" stopColor="#0a0812" stopOpacity="0" />
                   </radialGradient>
                   <filter id="arc-glow" x="-20%" y="-40%" width="140%" height="180%">
@@ -862,16 +862,16 @@ export function LandingPage() {
                     <feGaussianBlur stdDeviation="60" />
                   </filter>
                 </defs>
-                <ellipse cx="600" cy="360" rx="480" ry="180" fill="url(#hero-ambient-glow)" filter="url(#arc-soft-blur)" />
+                <ellipse cx="600" cy="350" rx="480" ry="180" fill="url(#hero-ambient-glow)" filter="url(#arc-soft-blur)" />
                 <path
-                  d="M 80 480 Q 600 220 1120 480"
+                  d="M 80 470 Q 600 200 1120 470"
                   stroke="url(#hero-arc-gradient)"
                   strokeWidth="3"
                   fill="none"
                   filter="url(#arc-glow)"
                 />
                 <path
-                  d="M 180 500 Q 600 270 1020 500"
+                  d="M 180 490 Q 600 250 1020 490"
                   stroke="url(#hero-arc-gradient)"
                   strokeWidth="1.5"
                   strokeOpacity="0.4"
@@ -882,61 +882,65 @@ export function LandingPage() {
             </div>
 
             <div className="mx-auto max-w-7xl">
-              <div className="grid items-center gap-14 lg:grid-cols-2">
-                <div>
-                  <div className="animate-hero-1 pill-badge">
-                    <Sparkles className="size-3 text-pink-400" aria-hidden="true" />
-                    Static analysis · zero execution
-                  </div>
-
-                  <h1
-                    id="hero-heading"
-                    className="animate-hero-2 mt-7 max-w-xl text-4xl font-semibold tracking-[-0.05em] text-foreground sm:text-5xl lg:text-6xl"
-                  >
-                    Ship safer code
-                    <br />
-                    <span className="gradient-text">with instant clarity.</span>
-                  </h1>
-
-                  <p className="animate-hero-3 mt-6 max-w-lg text-base leading-7 text-muted-foreground sm:text-lg">
-                    Paste or upload a source file. ReviewX scans it for security flaws, bugs,
-                    quality issues, and performance problems in under two minutes — then
-                    explains every finding and suggests a fix.
-                  </p>
-
-                  <div className="animate-hero-4 mt-8 flex flex-wrap items-center gap-3">
-                    <Button asChild size="lg" className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_28px_rgba(217,70,239,0.4)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_36px_rgba(236,72,153,0.6)]">
-                      <Link to="/register">
-                        Start free
-                        <ArrowRight className="size-4" aria-hidden="true" />
-                      </Link>
-                    </Button>
-                    <Button asChild variant="outline" size="lg" className="rounded-full border border-white/10 bg-white/[0.04] text-foreground hover:bg-white/[0.08] hover:border-purple-500/30">
-                      <Link to="/auth">Sign in to demo</Link>
-                    </Button>
-                  </div>
-
-                  {/* Trust checkmarks — "code never executed" is the key trust signal */}
-                  <div className="animate-hero-5 mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] text-muted-foreground">
-                    {[
-                      "Your code is never executed",
-                      "No credit card required",
-                      "Cancel anytime",
-                    ].map((t) => (
-                      <span key={t} className="flex items-center gap-1.5">
-                        <Check className="size-3.5 text-success" aria-hidden="true" />
-                        {t}
-                      </span>
-                    ))}
-                  </div>
+              {/* Centered, stacked hero header */}
+              <div className="mx-auto flex flex-col items-center text-center">
+                {/* 1. Pill badge */}
+                <div className="animate-hero-1 pill-badge">
+                  <Sparkles className="size-3 text-pink-400" aria-hidden="true" />
+                  Static analysis · zero execution
                 </div>
 
-                <div className="animate-hero-panel">
-                  <HeroCodePanel />
+                {/* 2. Headline */}
+                <h1
+                  id="hero-heading"
+                  className="animate-hero-2 mt-7 max-w-3xl text-center text-4xl font-semibold tracking-[-0.05em] text-foreground sm:text-5xl lg:text-6xl"
+                >
+                  Ship safer code
+                  <br />
+                  <span className="gradient-text">with instant clarity.</span>
+                </h1>
+
+                {/* 3. Subheading paragraph */}
+                <p className="animate-hero-3 mt-7 max-w-[640px] text-center text-base leading-7 text-muted-foreground sm:text-lg">
+                  Paste or upload a source file. ReviewX scans it for security flaws, bugs,
+                  quality issues, and performance problems in under two minutes — then
+                  explains every finding and suggests a fix.
+                </p>
+
+                {/* 4. CTA buttons */}
+                <div className="animate-hero-4 mt-8 flex flex-wrap items-center justify-center gap-3">
+                  <Button asChild size="lg" className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_28px_rgba(217,70,239,0.4)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_36px_rgba(236,72,153,0.6)]">
+                    <Link to="/register">
+                      Start free
+                      <ArrowRight className="size-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" size="lg" className="rounded-full border border-white/10 bg-white/[0.04] text-foreground hover:bg-white/[0.08] hover:border-purple-500/30">
+                    <Link to="/auth">Sign in to demo</Link>
+                  </Button>
+                </div>
+
+                {/* 5. Trust checkmarks row */}
+                <div className="animate-hero-5 mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] text-muted-foreground">
+                  {[
+                    "Your code is never executed",
+                    "No credit card required",
+                    "Cancel anytime",
+                  ].map((t) => (
+                    <span key={t} className="flex items-center gap-1.5">
+                      <Check className="size-3.5 text-success" aria-hidden="true" />
+                      {t}
+                    </span>
+                  ))}
                 </div>
               </div>
 
-              {/* ── Inline stat strip pulled up near fold ── */}
+              {/* 6. Showcase element: Centered code panel + score sidebar */}
+              <div className="animate-hero-panel mx-auto mt-14 max-w-5xl sm:mt-16">
+                <HeroCodePanel />
+              </div>
+
+              {/* 7. Stats row below showcase — full-width */}
               <dl className="mt-16 grid grid-cols-2 gap-4 sm:grid-cols-4">
                 {[
                   { stat: "94%",     desc: "Security findings caught" },
@@ -951,8 +955,8 @@ export function LandingPage() {
                 ))}
               </dl>
 
-              {/* ── Supported language badges ── */}
-              <div className="mt-10 flex flex-wrap items-center gap-3">
+              {/* Supported language badges */}
+              <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
                 <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                   Works with
                 </span>
