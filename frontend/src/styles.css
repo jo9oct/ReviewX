@@ -49,38 +49,40 @@
 }
 
 :root {
-  --radius: 0.375rem;
-  --background: oklch(0.145 0.008 260);
-  --foreground: oklch(0.94 0.006 255);
-  --card: oklch(0.18 0.008 260);
-  --card-foreground: oklch(0.94 0.006 255);
-  --popover: oklch(0.205 0.009 260);
-  --popover-foreground: oklch(0.94 0.006 255);
-  --primary: oklch(0.69 0.16 250);
-  --primary-foreground: oklch(0.985 0.003 250);
-  --secondary: oklch(0.23 0.01 260);
-  --secondary-foreground: oklch(0.92 0.006 255);
-  --muted: oklch(0.225 0.008 260);
-  --muted-foreground: oklch(0.64 0.018 255);
-  --accent: oklch(0.235 0.012 255);
-  --accent-foreground: oklch(0.96 0.004 255);
+  --radius: 0.5rem;
+  /* Dimension visual design system: deep near-black space-purple */
+  --background: #0a0812;
+  --foreground: #f3f0f8;
+  --card: #120f1c;
+  --card-foreground: #f3f0f8;
+  --popover: #161224;
+  --popover-foreground: #f3f0f8;
+  --primary: #a855f7;
+  --primary-foreground: #ffffff;
+  --secondary: #181326;
+  --secondary-foreground: #e4dfed;
+  --muted: #1a1528;
+  --muted-foreground: #9a91b0;
+  --accent: #221a36;
+  --accent-foreground: #f3f0f8;
   --destructive: oklch(0.61 0.22 26);
   --destructive-foreground: oklch(0.98 0.01 25);
-  --border: oklch(0.29 0.01 260);
-  --input: oklch(0.31 0.012 260);
-  --ring: oklch(0.69 0.16 250);
-  --sidebar: oklch(0.16 0.008 260);
-  --sidebar-foreground: oklch(0.88 0.009 255);
-  --surface: oklch(0.17 0.008 260);
-  --surface-raised: oklch(0.205 0.009 260);
-  --editor: oklch(0.12 0.008 260);
-  --overlay: oklch(0.05 0 0 / 0.72);
-  --code-muted: oklch(0.48 0.015 255);
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: rgba(168, 85, 247, 0.5);
+  --sidebar: #0e0b17;
+  --sidebar-foreground: #d4cee0;
+  --surface: #120f1e;
+  --surface-raised: #181328;
+  --editor: #0c0915;
+  --overlay: rgba(10, 8, 18, 0.78);
+  --code-muted: #6b6380;
   --score: oklch(0.72 0.16 150);
   --success: oklch(0.7 0.17 150);
   --success-foreground: oklch(0.14 0.03 150);
   --warning: oklch(0.79 0.16 82);
-  --ai: oklch(0.72 0.14 295);
+  --ai: #c084fc;
+  /* Severity tokens preserved */
   --critical: oklch(0.66 0.22 26);
   --high: oklch(0.75 0.17 53);
   --medium: oklch(0.82 0.16 87);
@@ -89,54 +91,43 @@
 }
 
 .light {
-  /*
-   * Light theme — all values verified for WCAG AA:
-   * - Body text on background: oklch(0.2) on oklch(0.98) ≈ 14:1 ✓
-   * - Muted text on background: oklch(0.42) on oklch(0.98) ≈ 5.5:1 ✓
-   * - Primary blue on white: oklch(0.48) ≈ 4.6:1 ✓
-   * - Critical red on white: oklch(0.48) ≈ 4.8:1 ✓
-   * - High orange on white: oklch(0.52) ≈ 4.5:1 ✓
-   * - Medium amber on white: oklch(0.50) ≈ 4.6:1 ✓
-   * --editor stays dark (oklch ~0.14) so code panels remain readable.
-   */
-  --background:            oklch(0.98  0.004 255);
-  --foreground:            oklch(0.14  0.014 260);   /* near-black, 14:1 on bg */
-  --card:                  oklch(1     0     0);
-  --card-foreground:       oklch(0.14  0.014 260);
-  --popover:               oklch(1     0     0);
-  --popover-foreground:    oklch(0.14  0.014 260);
-  --primary:               oklch(0.48  0.20  251);   /* deeper blue, 4.6:1 on white */
-  --primary-foreground:    oklch(0.99  0.002 250);
-  --secondary:             oklch(0.86  0.010 255);   /* metric bar track — visible on white cards */
-  --secondary-foreground:  oklch(0.20  0.012 260);
-  --muted:                 oklch(0.91  0.007 255);   /* section alt bg — distinct from white */
-  --muted-foreground:      oklch(0.42  0.022 255);   /* 5.5:1 on bg ✓ */
-  --accent:                oklch(0.88  0.014 250);   /* hover state — perceptible on white */
-  --accent-foreground:     oklch(0.20  0.012 260);
-  --destructive:           oklch(0.50  0.23  26);
-  --destructive-foreground: oklch(0.99 0.002 25);
-  --border:                oklch(0.82  0.012 255);   /* visible but not heavy */
-  --input:                 oklch(0.80  0.013 255);
-  --ring:                  oklch(0.48  0.20  251);
-  --sidebar:               oklch(0.95  0.007 255);
-  --sidebar-foreground:    oklch(0.20  0.012 260);
-  --surface:               oklch(0.91  0.006 255);   /* score pane / stat boxes — distinct from white card */
-  --surface-raised:        oklch(0.97  0.003 255);
-  /* editor intentionally stays dark so code panels read well in light mode */
-  --editor:                oklch(0.14  0.008 260);
-  --overlay:               oklch(0.08  0     0   / 0.50);
-  --code-muted:            oklch(0.58  0.018 255);
-  --score:                 oklch(0.50  0.17  150);   /* green on white, 4.5:1 ✓ */
-  --success:               oklch(0.48  0.18  150);
-  --success-foreground:    oklch(0.98  0.01  150);
-  --warning:               oklch(0.56  0.17  78);
-  --ai:                    oklch(0.44  0.18  295);   /* deeper purple — bg-ai/10 visible, text-ai readable */
-  /* severity — deepened so each reads AA on white */
-  --critical:              oklch(0.48  0.24  26);    /* deep red,    4.8:1 ✓ */
-  --high:                  oklch(0.52  0.20  50);    /* deep orange, 4.5:1 ✓ */
-  --medium:                oklch(0.50  0.18  80);    /* deep amber,  4.6:1 ✓ */
-  --low:                   oklch(0.48  0.20  250);   /* deep blue,   4.6:1 ✓ */
-  --info:                  oklch(0.44  0.024 255);   /* dark gray,   5.2:1 ✓ */
+  --radius: 0.5rem;
+  --background: #faf8fd;
+  --foreground: #120f1c;
+  --card: #ffffff;
+  --card-foreground: #120f1c;
+  --popover: #ffffff;
+  --popover-foreground: #120f1c;
+  --primary: #9333ea;
+  --primary-foreground: #ffffff;
+  --secondary: #f3eff9;
+  --secondary-foreground: #2d263d;
+  --muted: #f0ebf7;
+  --muted-foreground: #6c637e;
+  --accent: #eee6f8;
+  --accent-foreground: #120f1c;
+  --destructive: oklch(0.48 0.24 26);
+  --destructive-foreground: oklch(0.98 0.01 26);
+  --border: #e6e0f0;
+  --input: #ded6eb;
+  --ring: rgba(147, 51, 234, 0.4);
+  --sidebar: #f5f1fa;
+  --sidebar-foreground: #2d263d;
+  --surface: #f7f3fb;
+  --surface-raised: #ffffff;
+  --editor: #0c0915;
+  --overlay: rgba(18, 15, 28, 0.4);
+  --code-muted: #6b6380;
+  --score: oklch(0.50 0.17 150);
+  --success: oklch(0.48 0.18 150);
+  --success-foreground: oklch(0.98 0.01 150);
+  --warning: oklch(0.56 0.17 78);
+  --ai: oklch(0.44 0.18 295);
+  --critical: oklch(0.48 0.24 26);
+  --high: oklch(0.52 0.20 50);
+  --medium: oklch(0.50 0.18 80);
+  --low: oklch(0.48 0.20 250);
+  --info: oklch(0.44 0.024 255);
 }
 
 @layer base {
@@ -150,7 +141,6 @@
   html.light {
     color-scheme: light;
   }
-  /* Smooth theme transitions — only on color/background, not layout props */
   html.theme-ready *,
   html.theme-ready *::before,
   html.theme-ready *::after {
@@ -173,7 +163,7 @@
     cursor: pointer;
   }
   ::selection {
-    background: color-mix(in oklab, var(--primary) 32%, transparent);
+    background: rgba(168, 85, 247, 0.35);
   }
 }
 
@@ -319,9 +309,9 @@
   }
 }
 
-/* Landing page gradient text */
+/* Landing page gradient text (purple-to-pink gradient inspired by Dimension) */
 @utility gradient-text {
-  background: linear-gradient(135deg, var(--foreground) 0%, color-mix(in oklab, var(--primary) 80%, var(--foreground)) 100%);
+  background: linear-gradient(135deg, #a78bfa 0%, #d946ef 50%, #ec4899 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -332,26 +322,40 @@
   align-items: center;
   gap: 0.375rem;
   border-radius: 9999px;
-  border: 1px solid color-mix(in oklab, var(--primary) 30%, transparent);
-  background: color-mix(in oklab, var(--primary) 8%, transparent);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  background: rgba(168, 85, 247, 0.08);
   padding: 0.375rem 0.875rem;
   font-size: 0.6875rem;
   font-weight: 500;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--primary);
+  color: #c084fc;
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.1);
 }
-/* Glass card used in the feature grid */
+/* Glass card used in the feature grid & panels */
 @utility glass-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: color-mix(in oklab, var(--card) 80%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(18, 15, 28, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  &:hover {
+    border-color: rgba(168, 85, 247, 0.38);
+    box-shadow: 0 0 35px rgba(139, 92, 246, 0.15), inset 0 0 20px rgba(168, 85, 247, 0.04);
+    transform: translateY(-2px);
+  }
+}
+.light .glass-card {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.85);
+  &:hover {
+    border-color: rgba(147, 51, 234, 0.3);
+    box-shadow: 0 8px 30px rgba(147, 51, 234, 0.1);
+  }
 }
 
 /* ── Hero entrance animation classes ── */
-/* Each hero child gets one of these classes for a staggered mount animation. */
 @utility animate-hero-1 {
   animation: hero-rise 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: 0ms;
@@ -372,16 +376,13 @@
   animation: hero-rise 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: 440ms;
 }
-/* Hero panel slides in from the right */
 @utility animate-hero-panel {
   animation: hero-slide-right 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: 150ms;
 }
-/* Ambient glow pulse on the hero background orb */
 @utility animate-glow-pulse {
   animation: glow-pulse 6s ease-in-out infinite;
 }
-/* Slow float for the decorative orb */
 @utility animate-orb-float {
   animation: orb-float 8s ease-in-out infinite;
 }
