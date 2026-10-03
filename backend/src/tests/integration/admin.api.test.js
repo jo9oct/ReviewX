@@ -86,6 +86,20 @@ test("Admin API Integration Tests", async (t) => {
     assert.ok(typeof body.data.kpis.totalUsers === "number");
     assert.ok(typeof body.data.kpis.totalReviews === "number");
     assert.ok(Array.isArray(body.data.systemEvents));
+    assert.ok(Array.isArray(body.data.activityTrend));
+    assert.equal(body.data.activityTrend.length, 6);
+    assert.ok(Array.isArray(body.data.topTenants));
+  });
+
+  await t.test("GET /api/admin/companies - returns platform tenant companies", async () => {
+    const res = await fetch(`${baseUrl}/companies`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(Array.isArray(body.data.companies));
   });
 
   await t.test("GET /api/admin/users - returns real users list", async () => {

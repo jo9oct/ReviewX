@@ -10,6 +10,7 @@ router.use(authenticate);
 router.use(authorize("platform_admin"));
 
 router.get("/stats", adminCtrl.getStats);
+router.get("/companies", adminCtrl.listCompanies);
 router.get("/users", adminCtrl.listUsers);
 router.patch("/users/:id/role", adminCtrl.updateUserRole);
 router.patch("/users/:id/status", adminCtrl.toggleUserStatus);

@@ -63,3 +63,12 @@ export async function toggleUserStatus(req, res, next) {
     handleError(err, res, next);
   }
 }
+
+export async function listCompanies(req, res, next) {
+  try {
+    const data = await adminService.listCompanies();
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    handleError(err, res, next);
+  }
+}

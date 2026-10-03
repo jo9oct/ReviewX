@@ -1,6 +1,7 @@
 import { User } from "../database/models/user.model.js";
 import { Review } from "../database/models/review.model.js";
 import { Finding } from "../database/models/finding.model.js";
+import { CompanyRule } from "../database/models/companyRule.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { config } from "../config/env.js";
 
@@ -69,6 +70,84 @@ export async function getPlatformStats() {
 
   events.sort((a, b) => new Date(b.time) - new Date(a.time));
 
+  // 6-month review activity trend
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const now = new Date();
+  const sixMonths = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    sixMonths.push({
+      year: d.getFullYear(),
+      monthIndex: d.getMonth(),
+      month: monthNames[d.getMonth()],
+      count: 0,
+      completed: 0,
+    });
+  }
+
+  const startPeriod = new Date(sixMonths[0].year, sixMonths[0].monthIndex, 1);
+
+  const monthlyReviewStats = await Review.aggregate([
+    { $match: { createdAt: { $gte: startPeriod } } },
+    {
+      $group: {
+        _id: {
+          year: { $year: "$createdAt" },
+          month: { $month: "$createdAt" },
+        },
+        count: { $sum: 1 },
+        completed: {
+          $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] },
+        },
+      },
+    },
+  ]);
+
+  for (const stat of monthlyReviewStats) {
+    const target = sixMonths.find(
+      (m) => m.year === stat._id.year && m.monthIndex === stat._id.month - 1
+    );
+    if (target) {
+      target.count = stat.count;
+      target.completed = stat.completed;
+    }
+  }
+
+  const activityTrend = sixMonths.map(({ month, count, completed }) => ({
+    month,
+    count,
+    completed,
+  }));
+
+  // Real enterprise tenants aggregation from users
+  const tenantGroups = await User.aggregate([
+    { $match: { company: { $ne: null } } },
+    {
+      $group: {
+        _id: "$company",
+        members: { $sum: 1 },
+        companyAdmins: {
+          $sum: { $cond: [{ $eq: ["$role", "company_admin"] }, 1, 0] },
+        },
+      },
+    },
+  ]);
+
+  const topTenants = [];
+  for (const tg of tenantGroups) {
+    const companyId = tg._id;
+    const rulesCount = await CompanyRule.countDocuments({ company: companyId });
+    topTenants.push({
+      id: companyId.toString(),
+      name: `Workspace ${companyId.toString().slice(-6).toUpperCase()}`,
+      plan: tg.companyAdmins > 0 ? "Enterprise" : "Team",
+      members: tg.members,
+      rules: rulesCount,
+      reviews: 0,
+      health: 100,
+    });
+  }
+
   return {
     kpis: {
       totalUsers,
@@ -83,8 +162,41 @@ export async function getPlatformStats() {
       activeEnvironment: config.nodeEnv,
       uptimeSeconds: Math.floor(process.uptime()),
     },
+    activityTrend,
+    topTenants,
     systemEvents: events.slice(0, 10),
   };
+}
+
+export async function listCompanies() {
+  const tenantGroups = await User.aggregate([
+    { $match: { company: { $ne: null } } },
+    {
+      $group: {
+        _id: "$company",
+        members: { $sum: 1 },
+        companyAdmins: {
+          $sum: { $cond: [{ $eq: ["$role", "company_admin"] }, 1, 0] },
+        },
+      },
+    },
+  ]);
+
+  const companies = [];
+  for (const tg of tenantGroups) {
+    const companyId = tg._id;
+    const rulesCount = await CompanyRule.countDocuments({ company: companyId });
+    companies.push({
+      id: companyId.toString(),
+      name: `Workspace ${companyId.toString().slice(-6).toUpperCase()}`,
+      plan: tg.companyAdmins > 0 ? "Enterprise" : "Team",
+      members: tg.members,
+      rulesCount,
+      reviewsCount: 0,
+    });
+  }
+
+  return { companies, total: companies.length };
 }
 
 export async function listUsers(query = {}) {

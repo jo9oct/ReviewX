@@ -22,6 +22,8 @@ import {
   useToggleAdminUserStatusMutation,
   type AdminUserItem,
   type AdminSystemEvent,
+  useAdminCompaniesQuery,
+  type AdminCompanyItem,
 } from "@/lib/api";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
@@ -161,17 +163,17 @@ const personas: Record<
 > = {
   member: {
     name: "Alex Morgan",
-    email: "alex@acme.dev",
+    email: "alex@reviewx.dev",
     initials: "AM",
     badge: "Member",
-    context: "Acme Engineering / personal",
+    context: "Team workspace / personal",
   },
   company: {
     name: "Dana Kim",
-    email: "dana@acme.dev",
+    email: "dana@reviewx.dev",
     initials: "DK",
     badge: "Company admin",
-    context: "Acme Engineering / admin",
+    context: "Team workspace / admin",
   },
   platform: {
     name: "Priya Shah",
@@ -1939,8 +1941,8 @@ function ReviewTable() {
 /* ─────────────── company admin dashboard data ─────────────────────── */
 
 const members = [
-  { name: "Alex Morgan",  email: "alex@acme.dev",  role: "Member",        reviews: 23, avg: 82, open: 7,  trend: "up"   },
-  { name: "Dana Kim",     email: "dana@acme.dev",  role: "Company admin", reviews: 11, avg: 88, open: 2,  trend: "up"   },
+  { name: "Alex Morgan",  email: "alex@reviewx.dev",  role: "Member",        reviews: 23, avg: 82, open: 7,  trend: "up"   },
+  { name: "Dana Kim",     email: "dana@reviewx.dev",  role: "Company admin", reviews: 11, avg: 88, open: 2,  trend: "up"   },
   { name: "Sam Osei",     email: "sam@acme.dev",   role: "Member",        reviews: 31, avg: 76, open: 12, trend: "down" },
   { name: "Lena Park",    email: "lena@acme.dev",  role: "Member",        reviews: 18, avg: 91, open: 3,  trend: "up"   },
   { name: "Omar Faruk",   email: "omar@acme.dev",  role: "Member",        reviews: 9,  avg: 69, open: 10, trend: "down" },
@@ -2371,160 +2373,97 @@ function UsersView() {
   );
 }
 
-const platformCompanies = [
-  { name: "Acme Engineering", plan: "Company", members: 5, reviews: 92, mrr: "$79" },
-  { name: "Orbit Labs", plan: "Pro", members: 2, reviews: 41, mrr: "$24" },
-  { name: "Pixelhaus", plan: "Pro", members: 3, reviews: 27, mrr: "$24" },
-  { name: "Northwind Traders", plan: "Company", members: 14, reviews: 210, mrr: "$79" },
-];
-
 function CompaniesView() {
+  const { data, isLoading, isError, refetch } = useAdminCompaniesQuery();
+  const companies = data?.companies || [];
+
   return (
     <>
       <PageHeading
-        title="Companies"
-        subtitle="Workspaces, seats, and subscription value."
-        action={
-          <Button>
-            <Plus />
-            Add company
-          </Button>
-        }
+        title="Company Workspaces"
+        subtitle="Multi-tenant team workspaces, custom rule enforcement, and member seats."
       />
       <div className="panel overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Company</th>
-                <th>Plan</th>
-                <th>Members</th>
-                <th>Reviews</th>
-                <th>MRR</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {platformCompanies.map((c) => (
-                <tr key={c.name}>
-                  <td>
-                    <span className="flex items-center gap-2 text-xs font-medium">
-                      <Building2 className="size-3.5 text-muted-foreground" />
-                      {c.name}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="code-chip">{c.plan}</span>
-                  </td>
-                  <td className="font-mono">{c.members}</td>
-                  <td className="font-mono">{c.reviews}</td>
-                  <td className="font-mono font-semibold">{c.mrr}</td>
-                  <td>
-                    <Button variant="ghost" size="icon">
-                      <MoreHorizontal />
-                    </Button>
-                  </td>
+        {isLoading ? (
+          <div className="flex items-center justify-center p-12 text-sm text-muted-foreground">
+            <LoaderCircle className="mr-2 size-4 animate-spin text-primary" />
+            Loading company workspaces…
+          </div>
+        ) : isError ? (
+          <div className="p-8 text-center">
+            <p className="text-xs text-destructive">Failed to load company workspaces.</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-2 text-xs">
+              Retry
+            </Button>
+          </div>
+        ) : companies.length === 0 ? (
+          <div className="p-12 text-center">
+            <Building2 className="mx-auto size-10 text-muted-foreground/40 mb-3" />
+            <h3 className="text-sm font-semibold text-foreground">No enterprise company workspaces yet</h3>
+            <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
+              All registered accounts currently operate as independent developers. When a company account is provisioned, their shared rules, team members, and review metrics will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Workspace</th>
+                  <th>Tier</th>
+                  <th>Members</th>
+                  <th>Custom Rules</th>
+                  <th>Reviews</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {companies.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <span className="flex items-center gap-2 text-xs font-medium">
+                        <Building2 className="size-3.5 text-muted-foreground" />
+                        {c.name}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="code-chip">{c.plan}</span>
+                    </td>
+                    <td className="font-mono">{c.members}</td>
+                    <td className="font-mono">{c.rulesCount}</td>
+                    <td className="font-mono">{c.reviewsCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </>
   );
 }
 
-const platformPayments = [
-  {
-    id: "INV-2091",
-    company: "Acme Engineering",
-    amount: "$79.00",
-    method: "Chapa",
-    status: "Success",
-    date: "Sep 18",
-  },
-  {
-    id: "INV-2090",
-    company: "Orbit Labs",
-    amount: "$24.00",
-    method: "Chapa",
-    status: "Success",
-    date: "Sep 17",
-  },
-  {
-    id: "INV-2089",
-    company: "Pixelhaus",
-    amount: "$24.00",
-    method: "Chapa",
-    status: "Pending",
-    date: "Sep 17",
-  },
-  {
-    id: "INV-2088",
-    company: "Northwind Traders",
-    amount: "$79.00",
-    method: "Chapa",
-    status: "Success",
-    date: "Sep 15",
-  },
-  {
-    id: "INV-2087",
-    company: "Pixelhaus",
-    amount: "$24.00",
-    method: "Chapa",
-    status: "Failed",
-    date: "Sep 12",
-  },
-];
-
 function PaymentsView() {
+  const { data: statsData } = useAdminStatsQuery();
+  const totalUsers = statsData?.kpis?.totalUsers ?? 0;
+
   return (
     <>
       <PageHeading
-        title="Payments"
-        subtitle="Chapa transactions across every subscription."
-        action={
-          <Button variant="outline">
-            <Download />
-            Export
-          </Button>
-        }
+        title="Billing & Subscriptions"
+        subtitle="Gateway status, subscription tiers, and developer licensing."
       />
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="MRR" value="$206" delta="+$24 this week" icon={CircleDollarSign} />
-        <Stat label="Successful" value="41" delta="last 30 days" icon={CheckCircle2} />
-        <Stat label="Pending" value="2" delta="awaiting webhook" icon={Clock3} />
-        <Stat label="Failed" value="3" delta="1 retry scheduled" icon={AlertTriangle} />
+        <Stat label="Active accounts" value={totalUsers.toString()} delta="all tenants" icon={Users} />
+        <Stat label="Payment gateway" value="Chapa" delta="Test mode" icon={CreditCard} />
+        <Stat label="Billing frequency" value="Monthly" delta="ETB / USD" icon={CircleDollarSign} />
+        <Stat label="Gateway status" value="Active" delta="Webhooks enabled" icon={CheckCircle2} />
       </div>
-      <div className="panel overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Invoice</th>
-                <th>Company</th>
-                <th>Amount</th>
-                <th>Method</th>
-                <th>Status</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {platformPayments.map((p) => (
-                <tr key={p.id}>
-                  <td className="font-mono text-xs">{p.id}</td>
-                  <td>{p.company}</td>
-                  <td className="font-mono font-semibold">{p.amount}</td>
-                  <td>{p.method}</td>
-                  <td>
-                    <span className="status-dot">{p.status}</span>
-                  </td>
-                  <td>{p.date}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="panel p-12 text-center">
+        <CreditCard className="mx-auto size-10 text-muted-foreground/40 mb-3" />
+        <h3 className="text-sm font-semibold text-foreground">No billing transactions recorded yet</h3>
+        <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
+          The Chapa payment gateway integration is configured in development mode. As users upgrade from the Free tier to Pro or Enterprise plans, verified checkout sessions and invoices will be listed here.
+        </p>
       </div>
     </>
   );
@@ -3260,27 +3199,20 @@ function Admin() {
     data: statsData,
     isLoading: isStatsLoading,
     isError: isStatsError,
-    refetch: refetchStats,
   } = useAdminStatsQuery();
 
   const kpis = statsData?.kpis;
   const systemEvents = statsData?.systemEvents || [];
-
-  const topCompanies = [
-    { name: "Northwind Traders", plan: "Company", members: 14, reviews: 210, health: 88 },
-    { name: "Acme Engineering",  plan: "Company", members: 5,  reviews: 92,  health: 80 },
-    { name: "Orbit Labs",        plan: "Pro",     members: 2,  reviews: 41,  health: 76 },
-    { name: "Pixelhaus",         plan: "Pro",     members: 3,  reviews: 27,  health: 72 },
+  const activityTrend = statsData?.activityTrend || [
+    { month: "May", count: 0, completed: 0 },
+    { month: "Jun", count: 0, completed: 0 },
+    { month: "Jul", count: 0, completed: 0 },
+    { month: "Aug", count: 0, completed: 0 },
+    { month: "Sep", count: 0, completed: 0 },
+    { month: "Oct", count: 0, completed: 0 },
   ];
-
-  const revenueData = [
-    { month: "Apr", value: 58 },
-    { month: "May", value: 63 },
-    { month: "Jun", value: 71 },
-    { month: "Jul", value: 68 },
-    { month: "Aug", value: 79 },
-    { month: "Sep", value: 84 },
-  ];
+  const maxActivity = Math.max(...activityTrend.map((x) => x.count), 1);
+  const topTenants = statsData?.topTenants || [];
 
   return (
     <>
@@ -3361,32 +3293,41 @@ function Admin() {
         </div>
       </div>
 
-      {/* ── Revenue trend + Quick actions ── */}
+      {/* ── Review activity trend + Quick actions ── */}
       <div className="mb-6 grid gap-4 xl:grid-cols-[1fr_240px]">
         <section className="panel p-5">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-sm font-semibold">Revenue trend</h2>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">ETB · last 6 months</p>
+              <h2 className="text-sm font-semibold">Review activity trend</h2>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">Code reviews processed · last 6 months</p>
             </div>
             <div className="text-right">
-              <div className="font-mono text-2xl font-semibold text-foreground">ETB 84k</div>
-              <div className="text-[10px] text-success">Sep · current</div>
+              <div className="font-mono text-2xl font-semibold text-foreground">
+                {isStatsLoading ? "…" : `${kpis?.totalReviews ?? 0} total`}
+              </div>
+              <div className="text-[10px] text-success">
+                {kpis?.completedReviews ?? 0} completed successfully
+              </div>
             </div>
           </div>
           <div className="mt-6 flex h-32 items-end gap-3">
-            {revenueData.map((d, i) => {
-              const isLast = i === revenueData.length - 1;
-              const maxVal = Math.max(...revenueData.map((x) => x.value));
+            {activityTrend.map((d, i) => {
+              const isLast = i === activityTrend.length - 1;
+              const heightPercent = d.count > 0 ? (d.count / maxActivity) * 100 : 4;
               return (
-                <div key={d.month} className="group flex flex-1 flex-col items-center gap-1.5">
+                <div
+                  key={d.month}
+                  className="group flex flex-1 flex-col items-center gap-1.5"
+                  title={`${d.count} reviews in ${d.month} (${d.completed} completed)`}
+                >
                   <div className="flex h-24 w-full items-end">
                     <div
                       className={cn(
                         "w-full rounded-t-sm transition-colors",
                         isLast ? "bg-primary" : "bg-primary/25 group-hover:bg-primary/50",
+                        d.count === 0 && "bg-muted/40"
                       )}
-                      style={{ height: `${(d.value / maxVal) * 100}%` }}
+                      style={{ height: `${heightPercent}%` }}
                     />
                   </div>
                   <span className="font-mono text-[9px] text-muted-foreground">{d.month}</span>
@@ -3400,10 +3341,10 @@ function Admin() {
           <h2 className="text-sm font-semibold">Quick actions</h2>
           <div className="mt-4 space-y-2">
             {[
-              { label: "View all users",     view: "users"     as const, icon: Users           },
-              { label: "View companies",     view: "companies" as const, icon: Building2        },
-              { label: "Payment history",    view: "payments"  as const, icon: CircleDollarSign },
-              { label: "All reviews",        view: "history"   as const, icon: History          },
+              { label: "User accounts",     view: "users"     as const, icon: Users           },
+              { label: "Tenant workspaces", view: "companies" as const, icon: Building2        },
+              { label: "Company rules",     view: "rules"     as const, icon: ShieldAlert      },
+              { label: "All code reviews",  view: "history"   as const, icon: History          },
             ].map(({ label, view, icon: Icon }) => (
               <button
                 key={view}
@@ -3419,48 +3360,58 @@ function Admin() {
         </section>
       </div>
 
-      {/* ── Top companies + Activity feed ── */}
+      {/* ── Enterprise workspaces + Activity feed ── */}
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold">Top companies</h2>
+            <h2 className="text-sm font-semibold">Enterprise workspaces</h2>
             <Button variant="ghost" size="sm" onClick={() => setView("companies")}>View all</Button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Company</th>
-                  <th>Plan</th>
-                  <th>Members</th>
-                  <th>Reviews</th>
-                  <th>Health</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topCompanies.map((c) => (
-                  <tr key={c.name}>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <Building2 className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="text-xs font-medium text-foreground">{c.name}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="code-chip">{c.plan}</span>
-                    </td>
-                    <td className="font-mono">{c.members}</td>
-                    <td className="font-mono">{c.reviews}</td>
-                    <td>
-                      <span className={cn("font-mono font-semibold text-xs", scoreColor(c.health))}>
-                        {c.health}
-                      </span>
-                    </td>
+          {topTenants.length === 0 ? (
+            <div className="p-8 text-center">
+              <Building2 className="mx-auto size-8 text-muted-foreground/30 mb-2" />
+              <p className="text-xs font-medium text-foreground">No enterprise workspaces registered yet</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                All registered accounts are currently operating as independent developers.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Workspace</th>
+                    <th>Plan</th>
+                    <th>Members</th>
+                    <th>Rules</th>
+                    <th>Health</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {topTenants.map((c) => (
+                    <tr key={c.id || c.name}>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="size-3.5 shrink-0 text-muted-foreground" />
+                          <span className="text-xs font-medium text-foreground">{c.name}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="code-chip">{c.plan}</span>
+                      </td>
+                      <td className="font-mono">{c.members}</td>
+                      <td className="font-mono">{c.rules}</td>
+                      <td>
+                        <span className={cn("font-mono font-semibold text-xs", scoreColor(c.health))}>
+                          {c.health}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <section className="panel overflow-hidden">

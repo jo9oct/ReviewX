@@ -572,9 +572,41 @@ export interface AdminSystemEvent {
   icon: "rev" | "usr" | "co" | "pay" | "up";
 }
 
+export interface AdminActivityMonth {
+  month: string;
+  count: number;
+  completed: number;
+}
+
+export interface AdminTenantItem {
+  id: string;
+  name: string;
+  plan: string;
+  members: number;
+  rules: number;
+  reviews: number;
+  health: number;
+}
+
 export interface AdminStatsResponse {
   kpis: AdminStatsKpis;
+  activityTrend: AdminActivityMonth[];
+  topTenants: AdminTenantItem[];
   systemEvents: AdminSystemEvent[];
+}
+
+export interface AdminCompanyItem {
+  id: string;
+  name: string;
+  plan: string;
+  members: number;
+  rulesCount: number;
+  reviewsCount: number;
+}
+
+export interface AdminCompaniesResponse {
+  companies: AdminCompanyItem[];
+  total: number;
 }
 
 export interface AdminUserItem {
@@ -599,6 +631,10 @@ export interface AdminUsersListResponse {
 
 export async function getAdminStats(): Promise<AdminStatsResponse> {
   return request<AdminStatsResponse>("/api/admin/stats");
+}
+
+export async function listAdminCompanies(): Promise<AdminCompaniesResponse> {
+  return request<AdminCompaniesResponse>("/api/admin/companies");
 }
 
 export async function listAdminUsers(params?: {
@@ -636,6 +672,14 @@ export function useAdminStatsQuery() {
   return useQuery({
     queryKey: ["admin-stats"],
     queryFn: getAdminStats,
+    refetchInterval: 10000,
+  });
+}
+
+export function useAdminCompaniesQuery() {
+  return useQuery({
+    queryKey: ["admin-companies"],
+    queryFn: listAdminCompanies,
     refetchInterval: 10000,
   });
 }
