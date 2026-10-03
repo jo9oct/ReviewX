@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { STORAGE_KEYS } from "./constants";
+import type { ReviewResult } from "./api";
 
 export type View =
   | "new"
@@ -33,6 +34,11 @@ interface ReviewState {
   userName: string;
   /** Email for the authenticated user shown in sidebar / profile. */
   userEmail: string;
+  /** Active backend review result, if available. */
+  activeReview: ReviewResult | null;
+  activeReviewId: string | null;
+  setActiveReview: (review: ReviewResult | null) => void;
+  setActiveReviewId: (id: string | null) => void;
   setView: (view: View) => void;
   setRole: (role: Role) => void;
   setAnalyzing: (value: boolean) => void;
@@ -66,6 +72,17 @@ export const useReviewStore = create<ReviewState>((set) => ({
   severity: "All",
   userName: "ReviewX member",
   userEmail: "",
+  activeReview: null,
+  activeReviewId: null,
+
+  setActiveReview: (activeReview) =>
+    set({
+      activeReview,
+      activeReviewId: activeReview ? activeReview.reviewId : null,
+      selectedFinding: activeReview?.findings?.[0]?._id || activeReview?.findings?.[0]?.id || "FND-1042",
+    }),
+
+  setActiveReviewId: (activeReviewId) => set({ activeReviewId }),
 
   setView: (view) => set({ view }),
   setRole: (role) => set({ role, view: role === "platform" ? "admin" : "dashboard" }),
@@ -106,5 +123,7 @@ export const useReviewStore = create<ReviewState>((set) => ({
       step: 0,
       severity: "All",
       findingStatuses: {},
+      activeReview: null,
+      activeReviewId: null,
     }),
 }));

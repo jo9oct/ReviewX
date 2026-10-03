@@ -12,8 +12,8 @@
 import jwt  from 'jsonwebtoken';
 import { config }    from '../config/env.js';
 import { ApiError }  from '../utils/ApiError.js';
-import * as userRepo from '../repositories/user.repository.js';
-import { User }      from '../models/User.js';
+import * as userRepo from '../database/repositories/user.repository.js';
+import { User }      from '../database/models/user.model.js';
 
 // ── JWT helpers ───────────────────────────────────────────────────────────────
 

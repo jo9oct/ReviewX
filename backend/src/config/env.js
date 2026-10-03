@@ -129,6 +129,16 @@ export const env = Object.freeze({
     )
   }),
 
+  jwtSecret: getString(
+    "JWT_SECRET",
+    "dev-jwt-secret-reviewx-change-in-production"
+  ),
+
+  jwtExpiresIn: getString(
+    "JWT_EXPIRES_IN",
+    "7d"
+  ),
+
   upload: Object.freeze({
     maxFileSize: getPositiveNumber(
       "UPLOAD_MAX_FILE_SIZE",
@@ -140,4 +150,12 @@ export const env = Object.freeze({
       1
     )
   })
+});
+export const config = Object.freeze({
+  ...env,
+  env: env.nodeEnv,
+  isProd: env.nodeEnv === "production",
+  mongoUri: env.mongodb.uri,
+  jwtSecret: env.jwtSecret,
+  jwtExpiresIn: env.jwtExpiresIn,
 });

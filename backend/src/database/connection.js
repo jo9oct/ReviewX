@@ -117,40 +117,65 @@ export async function disconnectDatabase() {
 export async function withDatabaseTransaction(
   work
 ) {
-  if (
-    typeof work !== "function"
-  ) {
-    throw new TypeError(
-      "Transaction callback must be a function."
-    );
+  if (typeof work !== "function") {
+    throw new TypeError("Transaction callback must be a function.");
   }
-
 
   await connectDatabase();
 
+  // Check if connected to a replica set or sharded cluster
+  const topologyType = mongoose.connection.client?.topology?.description?.type;
+  const isReplicaSetOrSharded =
+    topologyType === "ReplicaSetWithPrimary" ||
+    topologyType === "Sharded";
 
-  const session =
-    await mongoose.connection.startSession();
+  if (!isReplicaSetOrSharded) {
+    logger.warn(
+      "Running against standalone MongoDB (no replica set) — bypassing transaction wrapper."
+    );
+    return await work(null);
+  }
 
+  let session = null;
+  try {
+    session = await mongoose.connection.startSession();
+  } catch (err) {
+    logger.warn(
+      "Failed to start MongoDB session — proceeding without transaction",
+      { error: err.message }
+    );
+    return await work(null);
+  }
 
   try {
     return await session.withTransaction(
-      () =>
-        work(session),
+      () => work(session),
       {
-        readPreference:
-          "primary",
-
+        readPreference: "primary",
         writeConcern: {
           w: "majority"
         }
       }
     );
+  } catch (err) {
+    if (
+      err.message &&
+      err.message.includes(
+        "Transaction numbers are only allowed on a replica set member or mongos"
+      )
+    ) {
+      logger.warn(
+        "MongoDB instance rejected transaction — executing without transaction."
+      );
+      return await work(null);
+    }
+    throw err;
   } finally {
-    await session.endSession();
+    if (session) {
+      await session.endSession().catch(() => {});
+    }
   }
 }
-
 
 export function getDatabaseState() {
   return {

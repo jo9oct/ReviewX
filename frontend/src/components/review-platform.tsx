@@ -1,3 +1,10 @@
+import { toast } from "sonner";
+import {
+  useSubmitReviewMutation,
+  useGenerateReportMutation,
+  ApiClientError,
+  type ReviewFinding,
+} from "@/lib/api";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
 import {
@@ -72,6 +79,32 @@ type Finding = {
   status: string;
   description: string;
 };
+
+function mapBackendFindingToUi(bf: ReviewFinding, index: number): Finding {
+  const sevMap: Record<string, Severity> = {
+    critical: "CRITICAL",
+    high: "HIGH",
+    medium: "MEDIUM",
+    low: "LOW",
+    info: "INFO",
+  };
+  const confMap: Record<string, number> = {
+    high: 95,
+    medium: 80,
+    low: 60,
+  };
+  return {
+    id: bf._id || bf.id || `FND-${1042 + index}`,
+    title: bf.title || bf.ruleId || "Security Finding",
+    severity: sevMap[bf.severity?.toLowerCase()] || "MEDIUM",
+    category: bf.category ? bf.category.charAt(0).toUpperCase() + bf.category.slice(1) : "Security",
+    file: bf.file || "src/code.ts",
+    line: bf.line ? String(bf.line) : "1",
+    confidence: confMap[bf.confidence?.toLowerCase()] || 90,
+    status: bf.status ? bf.status.charAt(0).toUpperCase() + bf.status.slice(1) : "Detected",
+    description: bf.description || bf.title,
+  };
+}
 
 const source = `import express from 'express';
 import mysql from 'mysql2';
@@ -471,40 +504,65 @@ function PageHeading({
 }
 
 function NewReview() {
-  const { analyzing, setAnalyzing, progress, setProgress, step, setStep, setView } =
+  const { analyzing, setAnalyzing, progress, setProgress, step, setStep, setView, setActiveReview } =
     useReviewStore();
   const [language, setLanguage] = useState("typescript");
   const [code, setCode] = useState(source);
   const input = useRef<HTMLInputElement>(null);
+  const submitReviewMutation = useSubmitReviewMutation();
+
   const stages = [
-    "Parsing source",
-    "Analyzing patterns",
-    "Applying company rules",
-    "Generating AI explanations",
-    "Calculating score",
+    "Parsing source & AST structure",
+    "Running static security & bug analyzers",
+    "Applying company rules & deduplication",
+    "Synthesizing AI explanations & fixes",
+    "Calculating score & finalizing report",
   ];
-  const begin = () => {
+
+  const begin = async () => {
     setAnalyzing(true);
-    setProgress(4);
+    setProgress(5);
     setStep(0);
-  };
-  useEffect(() => {
-    if (!analyzing) return;
-    const timer = window.setInterval(
-      // Functional updater avoids reading stale `progress` from the closure.
-      () => setProgress((p) => Math.min(p + 4, 100)),
-      110,
-    );
-    if (progress >= 100) {
-      clearInterval(timer);
+
+    let curr = 5;
+    const interval = window.setInterval(() => {
+      curr = Math.min(curr + 6, 92);
+      setProgress(curr);
+      setStep(Math.min(3, Math.floor(curr / 24)));
+    }, 200);
+
+    try {
+      const ext = language === "python" ? "py" : language === "javascript" ? "js" : "ts";
+      const result = await submitReviewMutation.mutateAsync({
+        code,
+        language,
+        fileName: `src/code.${ext}`,
+      });
+
+      clearInterval(interval);
+      setProgress(100);
+      setStep(4);
+      setActiveReview(result);
+      toast.success("Code review completed!");
+
       window.setTimeout(() => {
         setAnalyzing(false);
         setView("result");
       }, 350);
+    } catch (err: unknown) {
+      clearInterval(interval);
+      const msg = err instanceof ApiClientError ? err.message : "Failed to run review against backend";
+      toast.error(msg);
+      // Fallback transition so user experience is uninterrupted
+      setProgress(100);
+      setStep(4);
+      window.setTimeout(() => {
+        setAnalyzing(false);
+        setView("result");
+      }, 400);
     }
-    setStep(Math.min(4, Math.floor(progress / 20)));
-    return () => clearInterval(timer);
-  }, [analyzing, progress, setAnalyzing, setProgress, setStep, setView]);
+  };
+
   const upload = (file?: File) => {
     if (!file) return;
     file.text().then(setCode);
@@ -756,8 +814,48 @@ function ScoreRing({ score = 78, size = "large" }: { score?: number; size?: "lar
 }
 
 function ReviewResult() {
-  const { severity, setSeverity, setSelectedFinding, setView } = useReviewStore();
-  const visible = severity === "All" ? findings : findings.filter((f) => f.severity === severity);
+  const { severity, setSeverity, setSelectedFinding, setView, activeReview } = useReviewStore();
+  const generateReportMutation = useGenerateReportMutation();
+
+  const allFindings = useMemo(() => {
+    if (activeReview?.findings && activeReview.findings.length > 0) {
+      return activeReview.findings.map(mapBackendFindingToUi);
+    }
+    return findings;
+  }, [activeReview]);
+
+  const visible = severity === "All" ? allFindings : allFindings.filter((f) => f.severity === severity);
+
+  const handleDownloadReport = async (type: "json" | "pdf") => {
+    if (!activeReview?.reviewId) {
+      toast.info(`Generating demo ${type.toUpperCase()} report...`);
+      const blob = new Blob([JSON.stringify(allFindings, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `review-report.${type}`;
+      a.click();
+      return;
+    }
+
+    try {
+      toast.info(`Generating ${type.toUpperCase()} report...`);
+      const report = await generateReportMutation.mutateAsync({
+        reviewId: activeReview.reviewId,
+        type,
+      });
+
+      if (report.storageUrl) {
+        window.open(report.storageUrl, "_blank");
+        toast.success(`${type.toUpperCase()} report ready!`);
+      } else {
+        toast.success(`Report generated`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof ApiClientError ? err.message : "Failed to generate report";
+      toast.error(msg);
+    }
+  };
   return (
     <>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
@@ -779,30 +877,34 @@ function ReviewResult() {
             <Mic />
             Ask Voxide
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => handleDownloadReport("json")}>
+            <FileText />
+            JSON
+          </Button>
+          <Button variant="outline" onClick={() => handleDownloadReport("pdf")}>
             <Download />
-            Report
+            PDF Report
           </Button>
         </div>
       </div>
       <section className="panel mb-4 grid gap-6 p-5 lg:grid-cols-[150px_1fr_260px]">
         <div className="flex items-center justify-center">
-          <ScoreRing />
+          <ScoreRing score={activeReview?.score?.score ?? 78} />
         </div>
         <div className="grid grid-cols-2 gap-x-8 gap-y-5 self-center">
-          <Metric label="Security" value={70} icon={ShieldAlert} />
-          <Metric label="Bugs" value={80} icon={Bug} />
-          <Metric label="Quality" value={85} icon={Code2} />
-          <Metric label="Performance" value={75} icon={Zap} />
+          <Metric label="Security" value={activeReview?.score?.breakdown?.security ?? 70} icon={ShieldAlert} />
+          <Metric label="Bugs" value={activeReview?.score?.breakdown?.bugs ?? 80} icon={Bug} />
+          <Metric label="Quality" value={activeReview?.score?.breakdown?.quality ?? 85} icon={Code2} />
+          <Metric label="Performance" value={activeReview?.score?.breakdown?.performance ?? 75} icon={Zap} />
         </div>
         <div className="border-t border-border pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
           <p className="text-[10px] font-semibold uppercase text-muted-foreground">
             Review summary
           </p>
           <div className="mt-4 grid grid-cols-3 gap-2">
-            <SummaryCount n="1" label="Critical" s="CRITICAL" />
-            <SummaryCount n="2" label="High" s="HIGH" />
-            <SummaryCount n="3" label="Other" s="LOW" />
+            <SummaryCount n={String(activeReview?.summary?.critical ?? 1)} label="Critical" s="CRITICAL" />
+            <SummaryCount n={String(activeReview?.summary?.high ?? 2)} label="High" s="HIGH" />
+            <SummaryCount n={String((activeReview?.summary?.medium ?? 2) + (activeReview?.summary?.low ?? 1))} label="Other" s="LOW" />
           </div>
           <p className="mt-4 text-[11px] leading-5 text-muted-foreground">
             6 findings across 4 categories. Fix the critical SQL injection before merging.
@@ -895,8 +997,15 @@ function SummaryCount({ n, label, s }: { n: string; label: string; s: Severity }
 }
 
 function FindingDetail() {
-  const { selectedFinding, setView, findingStatuses, setFindingStatus } = useReviewStore();
-  const f = findings.find((x) => x.id === selectedFinding) ?? findings[0]!;
+  const { selectedFinding, setView, findingStatuses, setFindingStatus, activeReview } = useReviewStore();
+  const allFindings = useMemo(() => {
+    if (activeReview?.findings && activeReview.findings.length > 0) {
+      return activeReview.findings.map(mapBackendFindingToUi);
+    }
+    return findings;
+  }, [activeReview]);
+  const f = allFindings.find((x) => x.id === selectedFinding) ?? allFindings[0]!;
+  const rawFinding = activeReview?.findings?.find((rf) => (rf._id || rf.id) === f.id);
   // Persist status in the store so it survives navigation away and back.
   const status = findingStatuses[f.id] ?? f.status;
   const setStatus = (s: string) => setFindingStatus(f.id, s);

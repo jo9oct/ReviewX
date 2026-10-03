@@ -100,7 +100,8 @@ reports/generated/
 
 uploads/
 upload/
-storage/
+/storage/
+!src/storage/
 files/
 
 # Keep empty directories if needed

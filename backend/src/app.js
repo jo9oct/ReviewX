@@ -1,13 +1,6 @@
-﻿import express from "express";
+import express from "express";
 
-import reviewRoutes
-  from "./routes/review.routes.js";
-
-import reportRoutes
-  from "./routes/report.routes.js";
-
-import healthRoutes
-  from "./routes/health.routes.js";
+import apiRoutes from "./routes/index.js";
 
 import {
   requestId
@@ -33,29 +26,14 @@ import {
   errorHandler
 } from "./middleware/error.middleware.js";
 
-const app =
-  express();
+const app = express();
 
-app.disable(
-  "x-powered-by"
-);
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
 
-app.set(
-  "trust proxy",
-  1
-);
-
-app.use(
-  requestId
-);
-
-app.use(
-  security
-);
-
-app.use(
-  rateLimit
-);
+app.use(requestId);
+app.use(security);
+app.use(rateLimit);
 
 app.use(
   express.json({
@@ -70,43 +48,21 @@ app.use(
   })
 );
 
-app.use(
-  analysisAccessMiddleware
-);
+app.use(analysisAccessMiddleware);
 
-app.get(
-  "/",
-  (_req, res) => {
-    res.json({
-      success: true,
-      service:
-        "Code Review Analysis Backend",
-      version: "1.0.0"
-    });
-  }
-);
+app.get("/", (_req, res) => {
+  res.json({
+    success: true,
+    service: "Code Review Analysis Backend",
+    version: "1.0.0"
+  });
+});
 
-app.use(
-  "/api/health",
-  healthRoutes
-);
+// Mount consolidated API router under /api and /api/v1
+app.use("/api", apiRoutes);
+app.use("/api/v1", apiRoutes);
 
-app.use(
-  "/api/reviews",
-  reviewRoutes
-);
-
-app.use(
-  "/api/reports",
-  reportRoutes
-);
-
-app.use(
-  notFound
-);
-
-app.use(
-  errorHandler
-);
+app.use(notFound);
+app.use(errorHandler);
 
 export default app;
