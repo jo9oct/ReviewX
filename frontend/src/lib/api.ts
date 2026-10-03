@@ -548,3 +548,134 @@ export function useDeleteCompanyRuleMutation() {
     },
   });
 }
+
+// ── Platform Admin API ─────────────────────────────────────────────────────
+
+export interface AdminStatsKpis {
+  totalUsers: number;
+  newUsersThisMonth: number;
+  totalReviews: number;
+  completedReviews: number;
+  failedReviews: number;
+  completionRate: number;
+  totalFindings: number;
+  criticalFindings: number;
+  highFindings: number;
+  activeEnvironment: string;
+  uptimeSeconds: number;
+}
+
+export interface AdminSystemEvent {
+  id: string;
+  text: string;
+  time: string;
+  icon: "rev" | "usr" | "co" | "pay" | "up";
+}
+
+export interface AdminStatsResponse {
+  kpis: AdminStatsKpis;
+  systemEvents: AdminSystemEvent[];
+}
+
+export interface AdminUserItem {
+  id: string;
+  _id?: string;
+  name: string;
+  email: string;
+  role: "member" | "company_admin" | "platform_admin";
+  company?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt?: string | null;
+}
+
+export interface AdminUsersListResponse {
+  users: AdminUserItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export async function getAdminStats(): Promise<AdminStatsResponse> {
+  return request<AdminStatsResponse>("/api/admin/stats");
+}
+
+export async function listAdminUsers(params?: {
+  role?: string | undefined;
+  search?: string | undefined;
+  page?: number | undefined;
+  limit?: number | undefined;
+}): Promise<AdminUsersListResponse> {
+  const query = new URLSearchParams();
+  if (params?.role && params.role !== "all") query.set("role", params.role);
+  if (params?.search) query.set("search", params.search);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const qs = query.toString();
+  return request<AdminUsersListResponse>(`/api/admin/users${qs ? `?${qs}` : ""}`);
+}
+
+export async function updateAdminUserRole(
+  userId: string,
+  role: "member" | "company_admin" | "platform_admin"
+): Promise<AdminUserItem> {
+  return request<AdminUserItem>(`/api/admin/users/${userId}/role`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+  });
+}
+
+export async function toggleAdminUserStatus(userId: string): Promise<AdminUserItem> {
+  return request<AdminUserItem>(`/api/admin/users/${userId}/status`, {
+    method: "PATCH",
+  });
+}
+
+export function useAdminStatsQuery() {
+  return useQuery({
+    queryKey: ["admin-stats"],
+    queryFn: getAdminStats,
+    refetchInterval: 10000,
+  });
+}
+
+export function useAdminUsersQuery(params?: {
+  role?: string | undefined;
+  search?: string | undefined;
+  page?: number | undefined;
+  limit?: number | undefined;
+}) {
+  return useQuery({
+    queryKey: ["admin-users", params],
+    queryFn: () => listAdminUsers(params),
+  });
+}
+
+export function useUpdateAdminUserRoleMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      userId,
+      role,
+    }: {
+      userId: string;
+      role: "member" | "company_admin" | "platform_admin";
+    }) => updateAdminUserRole(userId, role),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+    },
+  });
+}
+
+export function useToggleAdminUserStatusMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => toggleAdminUserStatus(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+    },
+  });
+}

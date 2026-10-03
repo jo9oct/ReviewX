@@ -16,6 +16,12 @@ import {
   useToggleCompanyRuleMutation,
   useDeleteCompanyRuleMutation,
   type CompanyRuleItem,
+  useAdminStatsQuery,
+  useAdminUsersQuery,
+  useUpdateAdminUserRoleMutation,
+  useToggleAdminUserStatusMutation,
+  type AdminUserItem,
+  type AdminSystemEvent,
 } from "@/lib/api";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
@@ -2147,104 +2153,219 @@ function CompanyDashboard() {
   );
 }
 
-const platformUsers = [
-  {
-    name: "Alex Morgan",
-    email: "alex@acme.dev",
-    company: "Acme Engineering",
-    plan: "Company",
-    status: "Active",
-  },
-  {
-    name: "Dana Kim",
-    email: "dana@acme.dev",
-    company: "Acme Engineering",
-    plan: "Company",
-    status: "Active",
-  },
-  {
-    name: "Ravi Patel",
-    email: "ravi@orbitlabs.io",
-    company: "Orbit Labs",
-    plan: "Pro",
-    status: "Active",
-  },
-  { name: "Maya Chen", email: "maya@freelance.dev", company: "—", plan: "Free", status: "Active" },
-  {
-    name: "Jonas Weber",
-    email: "jonas@pixelhaus.de",
-    company: "Pixelhaus",
-    plan: "Pro",
-    status: "Suspended",
-  },
-];
-
 function UsersView() {
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+
+  const { data, isLoading, isError, refetch } = useAdminUsersQuery({
+    search: search.trim() ? search.trim() : undefined,
+    role: roleFilter === "all" ? undefined : roleFilter,
+  });
+
+  const updateRoleMutation = useUpdateAdminUserRoleMutation();
+  const toggleStatusMutation = useToggleAdminUserStatusMutation();
+
+  const handleRoleChange = async (userId: string, newRole: "member" | "company_admin" | "platform_admin") => {
+    try {
+      await updateRoleMutation.mutateAsync({ userId, role: newRole });
+      toast.success("User role updated successfully");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update user role");
+    }
+  };
+
+  const handleToggleStatus = async (userId: string, currentStatus: boolean, userName: string) => {
+    try {
+      await toggleStatusMutation.mutateAsync(userId);
+      toast.success(`User ${userName} is now ${currentStatus ? "deactivated" : "active"}`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to toggle user status");
+    }
+  };
+
+  const users: AdminUserItem[] = data?.users || [];
+
+  const handleExportCSV = () => {
+    if (!users.length) {
+      toast.info("No users to export");
+      return;
+    }
+    const headers = ["ID", "Name", "Email", "Role", "Company", "Status", "Created At"];
+    const csvRows = [
+      headers.join(","),
+      ...users.map((u) =>
+        [
+          u.id,
+          `"${(u.name || "").replace(/"/g, '""')}"`,
+          `"${(u.email || "").replace(/"/g, '""')}"`,
+          u.role,
+          `"${(u.company || "").replace(/"/g, '""')}"`,
+          u.isActive ? "Active" : "Inactive",
+          u.createdAt,
+        ].join(",")
+      ),
+    ];
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `platform_users_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Users exported as CSV");
+  };
+
   return (
     <>
       <PageHeading
         title="Users"
         subtitle="Every account on the platform, across all companies."
         action={
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExportCSV}>
             <Download />
-            Export
+            Export CSV
           </Button>
         }
       />
       <div className="panel overflow-hidden">
-        <div className="flex flex-wrap gap-2 border-b border-border p-3">
-          <div className="relative min-w-56 flex-1">
-            <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
-            <Input className="pl-8" placeholder="Search users or emails…" />
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
+          <div className="flex flex-1 flex-wrap items-center gap-2">
+            <div className="relative min-w-56 flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8 text-xs"
+                placeholder="Search users or emails…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="w-36 text-xs">
+                <SelectValue placeholder="All roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All roles</SelectItem>
+                <SelectItem value="member">Member</SelectItem>
+                <SelectItem value="company_admin">Company Admin</SelectItem>
+                <SelectItem value="platform_admin">Platform Admin</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <Select defaultValue="all">
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All plans</SelectItem>
-              <SelectItem value="free">Free</SelectItem>
-              <SelectItem value="pro">Pro</SelectItem>
-              <SelectItem value="company">Company</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="font-mono text-xs text-muted-foreground">
+            {isLoading ? "Loading…" : `${users.length} ${users.length === 1 ? "user" : "users"}`}
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Company</th>
-                <th>Plan</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {platformUsers.map((u) => (
-                <tr key={u.email}>
-                  <td>
-                    <div className="text-xs font-medium">{u.name}</div>
-                    <div className="font-mono text-[10px] text-muted-foreground">{u.email}</div>
-                  </td>
-                  <td>{u.company}</td>
-                  <td>
-                    <span className="code-chip">{u.plan}</span>
-                  </td>
-                  <td>
-                    <span className="status-dot">{u.status}</span>
-                  </td>
-                  <td>
-                    <Button variant="ghost" size="icon">
-                      <MoreHorizontal />
-                    </Button>
-                  </td>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center p-12 text-sm text-muted-foreground">
+            <LoaderCircle className="mr-2 size-4 animate-spin text-primary" />
+            Loading platform users…
+          </div>
+        ) : isError ? (
+          <div className="p-8 text-center">
+            <p className="text-xs text-destructive">Failed to load platform users.</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-2 text-xs">
+              Retry
+            </Button>
+          </div>
+        ) : users.length === 0 ? (
+          <div className="p-12 text-center text-xs text-muted-foreground">
+            No users match your criteria.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Company</th>
+                  <th>Status</th>
+                  <th>Registered</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td>
+                      <div className="flex items-center gap-2.5">
+                        <div className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                          {u.name ? u.name.slice(0, 2).toUpperCase() : "U"}
+                        </div>
+                        <div>
+                          <div className="text-xs font-medium text-foreground">{u.name || "Unnamed"}</div>
+                          <div className="font-mono text-[10px] text-muted-foreground">{u.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <Select
+                        value={u.role}
+                        onValueChange={(val) => handleRoleChange(u.id, val as any)}
+                      >
+                        <SelectTrigger className="h-7 w-32 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="member">Member</SelectItem>
+                          <SelectItem value="company_admin">Company Admin</SelectItem>
+                          <SelectItem value="platform_admin">Platform Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td>
+                      <span className="text-xs text-muted-foreground">{u.company || "— Independent"}</span>
+                    </td>
+                    <td>
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          u.isActive
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : "bg-destructive/10 text-destructive"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "size-1.5 rounded-full",
+                            u.isActive ? "bg-emerald-500" : "bg-destructive"
+                          )}
+                        />
+                        {u.isActive ? "Active" : "Suspended"}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
+                      </span>
+                    </td>
+                    <td>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => handleToggleStatus(u.id, u.isActive, u.name)}
+                        disabled={toggleStatusMutation.isPending}
+                      >
+                        {u.isActive ? "Deactivate" : "Activate"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </>
   );
@@ -3135,15 +3256,15 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 function Admin() {
   const { setView } = useReviewStore();
+  const {
+    data: statsData,
+    isLoading: isStatsLoading,
+    isError: isStatsError,
+    refetch: refetchStats,
+  } = useAdminStatsQuery();
 
-  const systemEvents = [
-    { text: "Acme Engineering upgraded to Company plan",  time: "2m ago",  icon: "up"  },
-    { text: "Review REV-8E21A completed · score 78",      time: "10m ago", icon: "rev" },
-    { text: "New company registered: Northstar Labs",     time: "34m ago", icon: "co"  },
-    { text: "Chapa payment confirmed · INV-2091 · ETB 10,270", time: "1h ago", icon: "pay" },
-    { text: "Priya Shah signed in",                       time: "2h ago",  icon: "usr" },
-    { text: "5 new users registered this morning",        time: "3h ago",  icon: "usr" },
-  ];
+  const kpis = statsData?.kpis;
+  const systemEvents = statsData?.systemEvents || [];
 
   const topCompanies = [
     { name: "Northwind Traders", plan: "Company", members: 14, reviews: 210, health: 88 },
@@ -3165,45 +3286,78 @@ function Admin() {
     <>
       <PageHeading
         title="Platform overview"
-        subtitle="System health, revenue, accounts, and recent activity."
+        subtitle="System health, platform metrics, accounts, and live activity."
       />
 
       {/* ── Platform KPIs ── */}
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><Users className="size-3.5" />Total users</span>
-            <span className="font-mono text-[10px] text-success">↑ +411 this month</span>
+            <span className="flex items-center gap-1.5">
+              <Users className="size-3.5" />
+              Total users
+            </span>
+            <span className="font-mono text-[10px] text-success">
+              ↑ +{kpis?.newUsersThisMonth ?? 0} this month
+            </span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">12.4k</div>
-          <div className="mt-1 text-[10px] text-muted-foreground">328 companies</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
+            {isStatsLoading ? "…" : (kpis?.totalUsers ?? 0).toLocaleString()}
+          </div>
+          <div className="mt-1 text-[10px] text-muted-foreground">registered accounts</div>
         </div>
+
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><FileText className="size-3.5" />Reviews processed</span>
-            <span className="font-mono text-[10px] text-success">99.97% completion</span>
+            <span className="flex items-center gap-1.5">
+              <FileText className="size-3.5" />
+              Reviews processed
+            </span>
+            <span className="font-mono text-[10px] text-success">
+              {kpis?.completionRate ?? 100}% completion
+            </span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">482k</div>
-          <div className="mt-1 text-[10px] text-muted-foreground">all time</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
+            {isStatsLoading ? "…" : (kpis?.totalReviews ?? 0).toLocaleString()}
+          </div>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            {kpis?.completedReviews ?? 0} completed · {kpis?.failedReviews ?? 0} failed
+          </div>
         </div>
+
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><CircleDollarSign className="size-3.5" />Monthly revenue</span>
-            <span className="font-mono text-[10px] text-success">↑ +12.4%</span>
+            <span className="flex items-center gap-1.5">
+              <ShieldAlert className="size-3.5" />
+              Total findings
+            </span>
+            <span className="font-mono text-[10px] text-destructive">
+              {kpis?.criticalFindings ?? 0} critical
+            </span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">ETB 84k</div>
-          <div className="mt-1 text-[10px] text-muted-foreground">19 paid companies</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
+            {isStatsLoading ? "…" : (kpis?.totalFindings ?? 0).toLocaleString()}
+          </div>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            {kpis?.highFindings ?? 0} high severity issues
+          </div>
         </div>
+
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><Activity className="size-3.5" />System status</span>
+            <span className="flex items-center gap-1.5">
+              <Activity className="size-3.5" />
+              System status
+            </span>
             <span className="flex items-center gap-1 font-mono text-[10px] text-success">
               <span className="size-1.5 rounded-full bg-success" />
               Operational
             </span>
           </div>
           <div className="mt-3 font-mono text-3xl font-semibold text-foreground">100%</div>
-          <div className="mt-1 text-[10px] text-muted-foreground">uptime this month</div>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            {Math.floor((kpis?.uptimeSeconds ?? 0) / 3600)}h uptime · {kpis?.activeEnvironment || "production"}
+          </div>
         </div>
       </div>
 
@@ -3318,15 +3472,42 @@ function Admin() {
             </span>
           </div>
           <div className="divide-y divide-border">
-            {systemEvents.map((e) => (
-              <div key={e.text} className="flex items-center gap-3 px-4 py-3">
-                <div className="grid size-7 shrink-0 place-items-center rounded bg-accent">
-                  <Activity className="size-3.5" />
-                </div>
-                <span className="flex-1 text-xs text-foreground">{e.text}</span>
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{e.time}</span>
+            {isStatsLoading ? (
+              <div className="flex items-center justify-center p-8 text-xs text-muted-foreground">
+                <LoaderCircle className="mr-2 size-3.5 animate-spin text-primary" />
+                Loading recent activity…
               </div>
-            ))}
+            ) : isStatsError ? (
+              <div className="p-6 text-center text-xs text-destructive">
+                Failed to load system activity.
+              </div>
+            ) : systemEvents.length === 0 ? (
+              <div className="p-8 text-center text-xs text-muted-foreground">
+                No recent activity recorded yet.
+              </div>
+            ) : (
+              systemEvents.map((e) => {
+                const IconComponent =
+                  e.icon === "rev"
+                    ? Code2
+                    : e.icon === "usr"
+                    ? Users
+                    : e.icon === "co"
+                    ? Building2
+                    : e.icon === "pay"
+                    ? CircleDollarSign
+                    : Activity;
+                return (
+                  <div key={e.id || e.text} className="flex items-center gap-3 px-4 py-3">
+                    <div className="grid size-7 shrink-0 place-items-center rounded bg-accent">
+                      <IconComponent className="size-3.5 text-muted-foreground" />
+                    </div>
+                    <span className="flex-1 text-xs text-foreground">{e.text}</span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{e.time}</span>
+                  </div>
+                );
+              })
+            )}
           </div>
         </section>
       </div>

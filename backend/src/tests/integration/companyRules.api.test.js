@@ -50,6 +50,7 @@ test("Company Rules API integration tests", async (t) => {
     // Create test users in DB so authenticate middleware finds them
     adminA = await User.create({
       name: "Admin Company A",
+      passwordHash: "dummyHash123",
       email: `adminA_${Date.now()}@test.com`,
       role: "company_admin",
       company: companyA,
@@ -58,6 +59,7 @@ test("Company Rules API integration tests", async (t) => {
 
     memberA = await User.create({
       name: "Member Company A",
+      passwordHash: "dummyHash123",
       email: `memberA_${Date.now()}@test.com`,
       role: "member",
       company: companyA,
@@ -66,6 +68,7 @@ test("Company Rules API integration tests", async (t) => {
 
     adminB = await User.create({
       name: "Admin Company B",
+      passwordHash: "dummyHash123",
       email: `adminB_${Date.now()}@test.com`,
       role: "company_admin",
       company: companyB,
