@@ -10,6 +10,12 @@ import {
   type ReviewFinding,
   type DashboardReview,
   type DashboardFinding,
+  useCompanyRulesQuery,
+  useCreateCompanyRuleMutation,
+  useUpdateCompanyRuleMutation,
+  useToggleCompanyRuleMutation,
+  useDeleteCompanyRuleMutation,
+  type CompanyRuleItem,
 } from "@/lib/api";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
@@ -57,6 +63,10 @@ import {
   X,
   Zap,
   LogOut,
+  Pencil,
+  Trash2,
+  AlertCircle,
+  Filter,
 } from "lucide-react";
 import {
   Button,
@@ -229,13 +239,31 @@ export function ReviewPlatform() {
     : role === "company" ? "Company admin"
     : "Member";
 
+  const { user } = useAuthStore();
+
   const orgName =
-    role === "platform" ? "ReviewX Platform" : "Acme Engineering";
+    role === "platform"
+      ? "ReviewX Platform"
+      : user?.company && typeof user.company === "string" && !user.company.match(/^[a-f\d]{24}$/i)
+      ? user.company
+      : `${userName ? `${userName}'s Workspace` : "Personal Workspace"}`;
+
+  const orgInitials =
+    role === "platform"
+      ? "RX"
+      : orgName
+          .split(" ")
+          .map((n) => n[0] ?? "")
+          .join("")
+          .slice(0, 2)
+          .toUpperCase() || "PW";
 
   const headerSubtitle =
-    role === "platform" ? "ReviewX / platform"
-    : role === "company" ? "Acme Engineering / admin"
-    : "Acme Engineering / personal";
+    role === "platform"
+      ? "ReviewX / platform"
+      : role === "company"
+      ? `${orgName} / admin`
+      : `${orgName} / personal`;
 
   const nav = roleNav[role];
   const titles: Record<View, string> = {
@@ -277,7 +305,7 @@ export function ReviewPlatform() {
         <div className="border-b border-border p-3">
           <div className="flex items-center gap-2 rounded border border-border bg-surface-raised p-2">
             <div className="grid size-7 place-items-center rounded bg-accent text-xs font-semibold">
-              {role === "platform" ? "RX" : "AC"}
+              {orgInitials}
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-xs font-medium">{orgName}</div>
@@ -808,13 +836,13 @@ function NewReview() {
                 <label className="mb-1.5 block text-[10px] font-medium uppercase text-muted-foreground">
                   Ruleset
                 </label>
-                <Select defaultValue="acme">
+                <Select defaultValue="standard">
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="acme">Acme production</SelectItem>
                     <SelectItem value="standard">ReviewX standard</SelectItem>
+                    <SelectItem value="company">Company rules</SelectItem>
                     <SelectItem value="strict">OWASP strict</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1935,7 +1963,7 @@ function CompanyDashboard() {
   return (
     <>
       <PageHeading
-        title="Acme Engineering"
+        title="Team & Members"
         subtitle="Team-wide code health, rule enforcement, and member activity."
         action={
           <Button onClick={() => setView("new")}>
@@ -2422,75 +2450,497 @@ function HistoryView() {
   );
 }
 function Rules() {
-  const [items, setItems] = useState([
-    {
-      name: "No raw SQL interpolation",
-      cat: "Security",
-      severity: "CRITICAL" as Severity,
-      on: true,
-    },
-    {
-      name: "Require structured logging",
-      cat: "Quality",
-      severity: "MEDIUM" as Severity,
-      on: true,
-    },
-    { name: "Maximum function complexity", cat: "Quality", severity: "LOW" as Severity, on: false },
-    {
-      name: "Disallow synchronous I/O",
-      cat: "Performance",
-      severity: "HIGH" as Severity,
-      on: true,
-    },
-  ]);
+  const { user } = useAuthStore();
+  const canManageRules =
+    user?.role === "company_admin" ||
+    user?.role === "platform_admin" ||
+    user?.role === "company" ||
+    user?.role === "platform";
+
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<CompanyRuleItem | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const {
+    data: rules = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useCompanyRulesQuery(
+    categoryFilter !== "all" ? { category: categoryFilter } : undefined
+  );
+
+  const toggleMutation = useToggleCompanyRuleMutation();
+  const deleteMutation = useDeleteCompanyRuleMutation();
+
+  const filteredRules = useMemo(() => {
+    if (!searchQuery.trim()) return rules;
+    const q = searchQuery.toLowerCase();
+    return rules.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q) ||
+        r.ruleText.toLowerCase().includes(q)
+    );
+  }, [rules, searchQuery]);
+
+  const handleOpenCreate = () => {
+    setEditingRule(null);
+    setModalOpen(true);
+  };
+
+  const handleOpenEdit = (rule: CompanyRuleItem) => {
+    setEditingRule(rule);
+    setModalOpen(true);
+  };
+
+  const handleToggle = async (rule: CompanyRuleItem) => {
+    if (!canManageRules) return;
+    try {
+      await toggleMutation.mutateAsync(rule._id);
+      toast.success(`Rule "${rule.name}" ${rule.enabled ? "disabled" : "enabled"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to toggle rule");
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!canManageRules) return;
+    try {
+      await deleteMutation.mutateAsync(id);
+      setDeletingId(null);
+      toast.success(`Rule "${name}" deleted`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete rule");
+    }
+  };
+
+  const categories = [
+    { id: "all", label: "All categories" },
+    { id: "security", label: "Security" },
+    { id: "bug", label: "Bugs" },
+    { id: "quality", label: "Quality" },
+    { id: "performance", label: "Performance" },
+    { id: "custom", label: "Custom" },
+  ];
+
   return (
     <>
       <PageHeading
         title="Company rules"
-        subtitle="Enforce engineering standards across every review."
+        subtitle={
+          canManageRules
+            ? "Enforce organization engineering standards and custom security policies across every review."
+            : "Engineering standards enforced across your organization's code reviews (read-only)."
+        }
         action={
-          <Button>
-            <Plus />
-            Create rule
-          </Button>
+          canManageRules ? (
+            <Button onClick={handleOpenCreate}>
+              <Plus className="size-4" />
+              Create rule
+            </Button>
+          ) : undefined
         }
       />
-      <div className="panel overflow-hidden">
-        <div className="border-b border-border p-3">
-          <Input placeholder="Search rules…" className="max-w-sm" />
+
+      {isError && (
+        <div className="mb-4 flex items-center justify-between rounded border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>{error instanceof Error ? error.message : "Failed to load company rules."}</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            Retry
+          </Button>
         </div>
-        {items.map((r, i) => (
-          <div
-            key={r.name}
-            className="flex flex-wrap items-center gap-3 border-b border-border p-4 last:border-0"
-          >
-            <Switch
-              checked={r.on}
-              onCheckedChange={(checked: boolean) =>
-                setItems((items) =>
-                  items.map((item, index) => (index === i ? { ...item, on: checked } : item)),
-                )
-              }
+      )}
+
+      <div className="panel overflow-hidden">
+        {/* Search and Category Filter Toolbar */}
+        <div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search rules by name, description, pattern…"
+              className="pl-8"
             />
-            <div className="min-w-52 flex-1">
-              <p className="text-sm font-medium">{r.name}</p>
-              <p className="mt-1 text-[10px] text-muted-foreground">{r.cat} · Updated 3 days ago</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Filter className="size-3.5 text-muted-foreground" />
+            <div className="flex flex-wrap gap-1">
+              {categories.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCategoryFilter(c.id)}
+                  className={cn(
+                    "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                    categoryFilter === c.id
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-surface text-muted-foreground hover:bg-accent hover:text-foreground"
+                  )}
+                >
+                  {c.label}
+                </button>
+              ))}
             </div>
-            <SeverityBadge severity={r.severity} />
-            <Button variant="ghost" size="icon">
-              <MoreHorizontal />
+          </div>
+        </div>
+
+        {/* Content list */}
+        {isLoading ? (
+          <div className="divide-y divide-border">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className="flex items-center gap-4 p-4 animate-pulse">
+                <div className="h-5 w-8 rounded-full bg-accent" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-44 rounded bg-accent" />
+                  <div className="h-3 w-64 rounded bg-accent" />
+                </div>
+                <div className="h-5 w-16 rounded bg-accent" />
+              </div>
+            ))}
+          </div>
+        ) : filteredRules.length === 0 ? (
+          <div className="p-12 text-center">
+            <div className="mx-auto grid size-12 place-items-center rounded-full bg-accent text-muted-foreground">
+              <FileCode2 className="size-6 text-primary" />
+            </div>
+            <h3 className="mt-4 text-sm font-semibold text-foreground">
+              {searchQuery || categoryFilter !== "all"
+                ? "No matching rules found"
+                : "No rules yet"}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
+              {searchQuery || categoryFilter !== "all"
+                ? "Try adjusting your search terms or category filter."
+                : "Add your team's first coding standard to automatically catch architectural flaws and security issues."}
+            </p>
+            {canManageRules && !searchQuery && categoryFilter === "all" && (
+              <Button className="mt-5" onClick={handleOpenCreate}>
+                <Plus className="size-4" />
+                Create rule
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {filteredRules.map((r) => (
+              <div
+                key={r._id}
+                className={cn(
+                  "flex flex-wrap items-center gap-3 p-4 transition-colors",
+                  !r.enabled && "opacity-60 bg-surface/30"
+                )}
+              >
+                <Switch
+                  checked={r.enabled}
+                  disabled={!canManageRules || toggleMutation.isPending}
+                  onCheckedChange={() => handleToggle(r)}
+                />
+
+                <div className="min-w-52 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-foreground">{r.name}</p>
+                    <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground uppercase">
+                      {r.category}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                    {r.description}
+                  </p>
+                  <p className="mt-1 font-mono text-[10px] text-primary/80 truncate max-w-lg">
+                    Pattern: {r.ruleText}
+                  </p>
+                </div>
+
+                <SeverityBadge severity={r.severity.toUpperCase() as Severity} />
+
+                {canManageRules && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Edit rule"
+                      onClick={() => handleOpenEdit(r)}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Delete rule"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={() => setDeletingId(r._id)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {deletingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 backdrop-blur-sm p-4">
+          <div className="panel max-w-sm w-full p-5 space-y-4 border border-border shadow-xl">
+            <h3 className="text-sm font-semibold text-foreground">Delete company rule?</h3>
+            <p className="text-xs text-muted-foreground">
+              Are you sure you want to delete this rule? It will no longer be applied during code reviews.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeletingId(null)}
+                disabled={deleteMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  const rule = rules.find((r) => r._id === deletingId);
+                  if (rule) handleDelete(rule._id, rule.name);
+                }}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? <LoaderCircle className="animate-spin size-3.5" /> : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create / Edit Rule Modal */}
+      {modalOpen && (
+        <RuleModal
+          rule={editingRule}
+          onClose={() => {
+            setModalOpen(false);
+            setEditingRule(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function RuleModal({
+  rule,
+  onClose,
+}: {
+  rule: CompanyRuleItem | null;
+  onClose: () => void;
+}) {
+  const isEdit = Boolean(rule);
+  const [name, setName] = useState(rule?.name || "");
+  const [category, setCategory] = useState<CompanyRuleItem["category"]>(
+    rule?.category || "security"
+  );
+  const [severity, setSeverity] = useState<CompanyRuleItem["severity"]>(
+    rule?.severity || "medium"
+  );
+  const [ruleText, setRuleText] = useState(rule?.ruleText || "");
+  const [description, setDescription] = useState(rule?.description || "");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const createMutation = useCreateCompanyRuleMutation();
+  const updateMutation = useUpdateCompanyRuleMutation();
+  const busy = createMutation.isPending || updateMutation.isPending;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    const cleanName = name.trim();
+    const cleanDesc = description.trim();
+    const cleanText = ruleText.trim();
+
+    if (!cleanName || cleanName.length < 2) {
+      setFormError("Rule name must be at least 2 characters.");
+      return;
+    }
+    if (!cleanText || cleanText.length < 2) {
+      setFormError("Rule pattern / rule text is required (min 2 characters).");
+      return;
+    }
+    if (!cleanDesc || cleanDesc.length < 3) {
+      setFormError("Description is required (min 3 characters).");
+      return;
+    }
+
+    try {
+      if (isEdit && rule) {
+        await updateMutation.mutateAsync({
+          id: rule._id,
+          data: {
+            name: cleanName,
+            category,
+            severity,
+            ruleText: cleanText,
+            description: cleanDesc,
+          },
+        });
+        toast.success("Rule updated successfully");
+      } else {
+        await createMutation.mutateAsync({
+          name: cleanName,
+          category,
+          severity,
+          ruleText: cleanText,
+          description: cleanDesc,
+        });
+        toast.success("Rule created successfully");
+      }
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save rule";
+      setFormError(msg);
+      toast.error(msg);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 backdrop-blur-sm p-4">
+      <div className="panel max-w-lg w-full p-6 border border-border shadow-2xl relative space-y-5">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div>
+            <h3 className="text-base font-semibold text-foreground">
+              {isEdit ? "Edit company rule" : "Create new company rule"}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Enforce architectural patterns and security standards across code reviews.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground p-1 rounded"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {formError && (
+          <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <AlertCircle className="size-4 shrink-0 mt-0.5" />
+            <span>{formError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              Rule name
+            </label>
+            <Input
+              required
+              value={name}
+              onChange={(e) => {
+                setFormError(null);
+                setName(e.target.value);
+              }}
+              placeholder="e.g. Disallow raw SQL queries"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                Category
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as any)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="security" className="bg-background">Security</option>
+                <option value="bug" className="bg-background">Bug</option>
+                <option value="quality" className="bg-background">Quality</option>
+                <option value="performance" className="bg-background">Performance</option>
+                <option value="custom" className="bg-background">Custom</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                Severity
+              </label>
+              <select
+                value={severity}
+                onChange={(e) => setSeverity(e.target.value as any)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="critical" className="bg-background">Critical</option>
+                <option value="high" className="bg-background">High</option>
+                <option value="medium" className="bg-background">Medium</option>
+                <option value="low" className="bg-background">Low</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              Rule text / pattern
+            </label>
+            <Input
+              required
+              value={ruleText}
+              onChange={(e) => {
+                setFormError(null);
+                setRuleText(e.target.value);
+              }}
+              placeholder="e.g. query\(.*\) or regex pattern"
+              className="font-mono text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              Description & remediation
+            </label>
+            <textarea
+              required
+              rows={3}
+              value={description}
+              onChange={(e) => {
+                setFormError(null);
+                setDescription(e.target.value);
+              }}
+              placeholder="Explain why this rule exists and how developers should fix violations."
+              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy && <LoaderCircle className="size-3.5 animate-spin mr-1.5" />}
+              {isEdit ? "Save changes" : "Create rule"}
             </Button>
           </div>
-        ))}
+        </form>
       </div>
-    </>
+    </div>
   );
 }
 function Company() {
   return (
     <>
       <PageHeading
-        title="Acme Engineering"
+        title="Team & Members"
         subtitle="Organization-wide review activity and member access."
         action={
           <Button>

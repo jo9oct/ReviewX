@@ -47,9 +47,11 @@ export async function authenticate(req, res, next) {
   }
 
   req.user = {
+    _id: user._id.toString(),
     id: user._id.toString(),
     userId: user._id.toString(),
     role: user.role,
+    company: user.company ? user.company.toString() : null,
   };
 
   next();

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 /**
  * ReviewX API Client
@@ -424,5 +424,127 @@ export function useReviewsQuery(limit = 20) {
     queryKey: ["reviews-list", limit],
     queryFn: () => listReviews(limit),
     refetchInterval: 5000,
+  });
+}
+
+// ── Company Rules API ──────────────────────────────────────────────────────
+
+export interface CompanyRuleItem {
+  _id: string;
+  name: string;
+  category: "security" | "bug" | "quality" | "performance" | "custom";
+  description: string;
+  ruleText: string;
+  severity: "critical" | "high" | "medium" | "low";
+  enabled: boolean;
+  company: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCompanyRuleInput {
+  name: string;
+  category: "security" | "bug" | "quality" | "performance" | "custom";
+  description: string;
+  ruleText: string;
+  severity: "critical" | "high" | "medium" | "low";
+  enabled?: boolean;
+}
+
+export interface UpdateCompanyRuleInput {
+  name?: string;
+  category?: "security" | "bug" | "quality" | "performance" | "custom";
+  description?: string;
+  ruleText?: string;
+  severity?: "critical" | "high" | "medium" | "low";
+  enabled?: boolean;
+}
+
+export async function listCompanyRules(params?: {
+  category?: string;
+  enabled?: boolean;
+}): Promise<CompanyRuleItem[]> {
+  const query = new URLSearchParams();
+  if (params?.category && params.category !== "all") query.set("category", params.category);
+  if (params?.enabled !== undefined) query.set("enabled", String(params.enabled));
+  const qs = query.toString();
+  return request<CompanyRuleItem[]>(`/api/company-rules${qs ? `?${qs}` : ""}`);
+}
+
+export async function createCompanyRule(data: CreateCompanyRuleInput): Promise<CompanyRuleItem> {
+  return request<CompanyRuleItem>("/api/company-rules", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCompanyRule(
+  id: string,
+  data: UpdateCompanyRuleInput
+): Promise<CompanyRuleItem> {
+  return request<CompanyRuleItem>(`/api/company-rules/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function toggleCompanyRule(id: string): Promise<CompanyRuleItem> {
+  return request<CompanyRuleItem>(`/api/company-rules/${id}/toggle`, {
+    method: "PATCH",
+  });
+}
+
+export async function deleteCompanyRule(id: string): Promise<{ id: string; deleted: boolean }> {
+  return request<{ id: string; deleted: boolean }>(`/api/company-rules/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function useCompanyRulesQuery(params?: { category?: string; enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["company-rules", params],
+    queryFn: () => listCompanyRules(params),
+  });
+}
+
+export function useCreateCompanyRuleMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateCompanyRuleInput) => createCompanyRule(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["company-rules"] });
+    },
+  });
+}
+
+export function useUpdateCompanyRuleMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateCompanyRuleInput }) =>
+      updateCompanyRule(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["company-rules"] });
+    },
+  });
+}
+
+export function useToggleCompanyRuleMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => toggleCompanyRule(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["company-rules"] });
+    },
+  });
+}
+
+export function useDeleteCompanyRuleMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteCompanyRule(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["company-rules"] });
+    },
   });
 }
