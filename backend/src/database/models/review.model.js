@@ -89,6 +89,11 @@ const reviewSchema = new Schema(
       type: String,
       enum: [
         "pending",
+        "parsing",
+        "analyzing",
+        "applying_rules",
+        "generating_ai",
+        "scoring",
         "running",
         "completed",
         "failed",
@@ -96,6 +101,13 @@ const reviewSchema = new Schema(
       ],
       default: "pending",
       required: true
+    },
+
+    progress: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0
     },
 
     summary: {

@@ -1,10 +1,12 @@
-﻿import {
+import {
   Router
 } from "express";
 
 import {
   create,
-  getById
+  getById,
+  list,
+  getMetrics
 } from "../controllers/review.controller.js";
 
 import {
@@ -29,6 +31,16 @@ router.post(
     reviewRequestSchema
   ),
   create
+);
+
+router.get(
+  "/metrics",
+  getMetrics
+);
+
+router.get(
+  "/",
+  list
 );
 
 router.get(

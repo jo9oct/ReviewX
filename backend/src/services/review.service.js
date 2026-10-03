@@ -1,3 +1,4 @@
+import { logger } from "../utils/logger.js";
 ﻿import {
   processReviewInput
 } from "./file.service.js";
@@ -64,276 +65,124 @@ export async function createReview({
   file = null,
   accessContext = null
 }) {
-  /*
-   * ----------------------------------------------------------
-   * Analysis access
-   * ----------------------------------------------------------
-   */
-  const access =
-    await getAnalysisAccess(
-      accessContext
-    );
+  const access = await getAnalysisAccess(accessContext);
 
+  const processed = await processReviewInput({
+    input,
+    file,
+    maxSourceSize: access.limits.maxSourceSize
+  });
 
-  /*
-   * ----------------------------------------------------------
-   * Input processing
-   * ----------------------------------------------------------
-   *
-   * Validation and source processing happen before the Review
-   * document is created.
-   */
-  const processed =
-    await processReviewInput({
-      input,
-      file,
+  const language = detectLanguage({
+    language: processed.language,
+    fileName: processed.fileName,
+    code: processed.code
+  });
 
-      maxSourceSize:
-        access
-          .limits
-          .maxSourceSize
-    });
+  const review = await reviewRepository.create({
+    source: processed.sourceType,
+    fileName: processed.fileName,
+    language,
+    fileExtension: processed.fileExtension,
+    sourceSize: processed.sourceSize,
+    status: "pending",
+    progress: 0,
+    startedAt: new Date()
+  });
 
+  return {
+    reviewId: review._id.toString(),
+    status: "pending",
+    processed,
+    access,
+    language
+  };
+}
 
-  /*
-   * ----------------------------------------------------------
-   * Language detection
-   * ----------------------------------------------------------
-   */
-  const language =
-    detectLanguage({
-      language:
-        processed.language,
-
-      fileName:
-        processed.fileName,
-
-      code:
-        processed.code
-    });
-
-
-  /*
-   * ----------------------------------------------------------
-   * Create Review execution record
-   * ----------------------------------------------------------
-   *
-   * This record intentionally exists outside the result
-   * transaction.
-   *
-   * It represents the execution itself.
-   */
-  const review =
-    await reviewRepository.create({
-      source:
-        processed.sourceType,
-
-      fileName:
-        processed.fileName,
-
-      language,
-
-      fileExtension:
-        processed.fileExtension,
-
-      sourceSize:
-        processed.sourceSize,
-
-      status:
-        "running",
-
-      startedAt:
-        new Date()
-    });
-
-
+/**
+ * Executes the review analysis pipeline asynchronously in the background.
+ */
+export async function executeReviewPipeline(
+  reviewId,
+  { processed, access, language }
+) {
   try {
-    /*
-     * --------------------------------------------------------
-     * Parsing
-     * --------------------------------------------------------
-     */
-    const parsed =
-      parseSource({
-        code:
-          processed.code,
+    // Stage 1: Parsing
+    await updateReviewProgress(reviewId, "parsing", 15);
+    const parsed = parseSource({
+      code: processed.code,
+      language,
+      fileName: processed.fileName
+    });
 
-        language,
+    // Review context
+    const context = createReviewContext({
+      code: processed.code,
+      fileName: processed.fileName,
+      fileExtension: processed.fileExtension,
+      language,
+      sourceSize: processed.sourceSize,
+      parsed,
+      companyRules: processed.companyRules
+    });
 
-        fileName:
-          processed.fileName
+    // Stage 2..5: Analyzers -> Rules -> AI -> Score
+    const result = await runReview(context, access, async (stage, progress) => {
+      await updateReviewProgress(reviewId, stage, progress);
+    });
+
+    // Stage 6: Atomic persistence
+    await withDatabaseTransaction(async (session) => {
+      await persistReviewResult({
+        reviewId,
+        result,
+        session
       });
 
-
-    /*
-     * --------------------------------------------------------
-     * Review context
-     * --------------------------------------------------------
-     */
-    const context =
-      createReviewContext({
-        code:
-          processed.code,
-
-        fileName:
-          processed.fileName,
-
-        fileExtension:
-          processed.fileExtension,
-
-        language,
-
-        sourceSize:
-          processed.sourceSize,
-
-        parsed,
-
-        companyRules:
-          processed.companyRules
-      });
-
-
-    /*
-     * --------------------------------------------------------
-     * Review engine
-     * --------------------------------------------------------
-     *
-     * Runs:
-     *
-     * - analyzers
-     * - company rules
-     * - normalization
-     * - merging
-     * - deduplication
-     * - evidence collection
-     * - AI analysis
-     * - scoring
-     */
-    const result =
-      await runReview(
-        context,
-        access
+      await reviewRepository.updateById(
+        reviewId,
+        {
+          status: "completed",
+          progress: 100,
+          summary: result.summary,
+          findingCount: Array.isArray(result.findings)
+            ? result.findings.length
+            : 0,
+          completedAt: new Date(),
+          failedAt: null,
+          errorMessage: null
+        },
+        { session }
       );
+    });
 
-
-    /*
-     * --------------------------------------------------------
-     * Atomic result persistence
-     * --------------------------------------------------------
-     *
-     * Every result write and the Review -> completed update
-     * happen inside ONE MongoDB transaction.
-     *
-     * If any operation throws:
-     *
-     *     findings
-     *     evidence
-     *     score
-     *     AI analysis
-     *     completed state
-     *
-     * are all rolled back.
-     */
-    await withDatabaseTransaction(
-      async (session) => {
-        await persistReviewResult({
-          reviewId:
-            review._id,
-
-          result,
-
-          session
-        });
-
-
-        /*
-         * ----------------------------------------------------
-         * Mark Review completed INSIDE the transaction.
-         * ----------------------------------------------------
-         *
-         * This guarantees that a Review cannot become
-         * "completed" unless all result data was successfully
-         * persisted.
-         */
-        await reviewRepository.updateById(
-          review._id,
-
-          {
-            status:
-              "completed",
-
-            summary:
-              result.summary,
-
-            findingCount:
-              Array.isArray(
-                result.findings
-              )
-                ? result.findings.length
-                : 0,
-
-            completedAt:
-              new Date(),
-
-            failedAt:
-              null,
-
-            errorMessage:
-              null
-          },
-
-          {
-            session
-          }
-        );
-      }
-    );
-
-
-    /*
-     * --------------------------------------------------------
-     * Success
-     * --------------------------------------------------------
-     */
-    return {
-      reviewId:
-        review._id,
-
-      result
-    };
+    logger.info("Review pipeline completed successfully", { reviewId });
+    return result;
   } catch (error) {
-    /*
-     * --------------------------------------------------------
-     * Failure recovery
-     * --------------------------------------------------------
-     *
-     * If the transaction failed, MongoDB has already rolled
-     * back all transactional writes.
-     *
-     * The failure state is deliberately saved OUTSIDE the
-     * transaction so that the Review remains available as a
-     * failed execution record.
-     */
-    await markReviewFailed(
-      review._id,
-      error
-    );
+    logger.error("Review pipeline execution failed", {
+      reviewId,
+      error: error.message,
+      stack: error.stack
+    });
 
-
-    /*
-     * Preserve the original error.
-     */
-    throw error;
+    await markReviewFailed(reviewId, error);
   }
 }
 
-
-
-/*
- * ============================================================
- * Get Review
- * ============================================================
- */
+async function updateReviewProgress(reviewId, status, progress) {
+  try {
+    await reviewRepository.updateById(reviewId, {
+      status,
+      progress
+    });
+  } catch (err) {
+    logger.warn("Failed to update review progress state", {
+      reviewId,
+      status,
+      error: err.message
+    });
+  }
+}
 
 export async function getReview(
   reviewId
@@ -378,13 +227,15 @@ export async function getReview(
 
 
   return {
+    reviewId: review._id.toString(),
+    status: review.status,
+    progress: review.progress ?? (review.status === "completed" ? 100 : 0),
     review,
-
+    summary: review.summary || null,
     findings,
-
     score,
-
-    aiAnalysis
+    aiAnalysis,
+    errorMessage: review.errorMessage || null
   };
 }
 
@@ -734,4 +585,157 @@ async function persistReviewResult({
         }
       );
   }
+}
+
+function getLangBadge(lang) {
+  if (!lang) return "CODE";
+  const l = lang.toLowerCase();
+  if (l.includes("typescript")) return "TS";
+  if (l.includes("javascript")) return "JS";
+  if (l.includes("python")) return "PY";
+  if (l.includes("java")) return "JV";
+  if (l.includes("php")) return "PHP";
+  if (l.includes("go")) return "GO";
+  if (l.includes("rust")) return "RS";
+  if (l.includes("c++") || l.includes("cpp")) return "C++";
+  if (l.includes("c#") || l.includes("csharp")) return "C#";
+  return lang.slice(0, 3).toUpperCase();
+}
+
+function getRelativeDate(d) {
+  if (!d) return "Recently";
+  const now = Date.now();
+  const diffMs = now - new Date(d).getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (diffDay > 30) {
+    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  if (diffDay === 1) return "Yesterday";
+  if (diffDay > 1) return `${diffDay} days ago`;
+  if (diffHour === 1) return "1 hour ago";
+  if (diffHour > 1) return `${diffHour} hours ago`;
+  if (diffMin === 1) return "1 minute ago";
+  if (diffMin > 1) return `${diffMin} minutes ago`;
+  return "Just now";
+}
+
+function formatDate(d) {
+  if (!d) return "Today";
+  const date = new Date(d);
+  const isToday = new Date().toDateString() === date.toDateString();
+  const time = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (isToday) return `Today, ${time}`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+export async function listReviews({ limit = 20 } = {}) {
+  const reviews = await reviewRepository.findRecent(limit);
+  if (!reviews || reviews.length === 0) return [];
+
+  const reviewIds = reviews.map((r) => r._id);
+  const scores = await scoreRepository.findByReviewIds(reviewIds);
+  const scoreMap = new Map(scores.map((s) => [s.reviewId.toString(), s]));
+
+  return reviews.map((r) => {
+    const s = scoreMap.get(r._id.toString());
+    const scoreVal = s ? s.overall : (r.score?.overall ?? (r.status === "completed" ? 85 : 0));
+    const totalFindings = r.summary?.totalFindings ?? 0;
+    const severityCounts = {
+      critical: r.summary?.critical ?? 0,
+      high: r.summary?.high ?? 0,
+      medium: r.summary?.medium ?? 0,
+      low: r.summary?.low ?? 0,
+    };
+
+    return {
+      id: r._id.toString(),
+      reviewId: r._id.toString(),
+      name: r.fileName || `source.${r.fileExtension || "txt"}`,
+      lang: r.language ? r.language.charAt(0).toUpperCase() + r.language.slice(1) : "Unknown",
+      langBadge: getLangBadge(r.language),
+      score: scoreVal,
+      date: formatDate(r.createdAt),
+      relativeDate: getRelativeDate(r.createdAt),
+      status: r.status === "completed" ? (scoreVal < 70 ? "Needs attention" : "Completed") : r.status,
+      findings: totalFindings,
+      severityCounts,
+      createdAt: r.createdAt
+    };
+  });
+}
+
+export async function getDashboardMetrics() {
+  const recentReviewsList = await listReviews({ limit: 10 });
+  const openFindingsList = await findingRepository.findOpenFindings(20);
+  const { total: totalFindingsCount, resolved: resolvedFindingsCount } = await findingRepository.countFindings();
+
+  let criticalCount = 0;
+  let highCount = 0;
+  let mediumCount = 0;
+  let lowCount = 0;
+
+  for (const f of openFindingsList) {
+    const sev = (f.severity || "").toLowerCase();
+    if (sev === "critical") criticalCount++;
+    else if (sev === "high") highCount++;
+    else if (sev === "medium") mediumCount++;
+    else if (sev === "low") lowCount++;
+  }
+
+  const recentScores = await scoreRepository.findRecent(20);
+  let avgScore = 0;
+  let catHealth = null;
+
+  if (recentScores.length > 0) {
+    const totalScore = recentScores.reduce((acc, s) => acc + (s.overall || 0), 0);
+    avgScore = Math.round(totalScore / recentScores.length);
+
+    catHealth = {
+      security: Math.round(recentScores.reduce((acc, s) => acc + (s.security ?? 0), 0) / recentScores.length),
+      bugs: Math.round(recentScores.reduce((acc, s) => acc + (s.bugs ?? 0), 0) / recentScores.length),
+      quality: Math.round(recentScores.reduce((acc, s) => acc + (s.quality ?? 0), 0) / recentScores.length),
+      performance: Math.round(recentScores.reduce((acc, s) => acc + (s.performance ?? 0), 0) / recentScores.length),
+    };
+  }
+
+  const trendScores = [...recentScores].reverse().slice(-5);
+  const scoreTrend = trendScores.map((s) => ({
+    label: new Date(s.createdAt || Date.now()).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    score: s.overall
+  }));
+
+  const totalOpen = criticalCount + highCount + mediumCount + lowCount;
+  const resolvedPct = totalFindingsCount > 0 
+    ? Math.round((resolvedFindingsCount / totalFindingsCount) * 100)
+    : null;
+
+  const formattedOpenFindings = openFindingsList.map((f) => ({
+    id: f._id.toString(),
+    title: f.title,
+    severity: (f.severity || "info").toUpperCase(),
+    file: f.location?.filePath || "src/code",
+    category: f.category ? f.category.charAt(0).toUpperCase() + f.category.slice(1) : "General",
+    reviewId: f.reviewId ? f.reviewId.toString() : null
+  }));
+
+  const totalReviewsCount = await reviewRepository.countAll();
+
+  return {
+    totalReviews: totalReviewsCount,
+    totalFindings: totalOpen,
+    criticalCount,
+    highCount,
+    mediumCount,
+    lowCount,
+    resolvedPercentage: resolvedPct,
+    averageScore: avgScore,
+    categoryHealth: catHealth,
+    scoreTrend,
+    recentReviews: recentReviewsList,
+    openFindings: formattedOpenFindings
+  };
 }

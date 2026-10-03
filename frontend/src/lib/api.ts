@@ -58,7 +58,8 @@ export interface ReviewSummary {
 
 export interface ReviewResult {
   reviewId: string;
-  status: "pending" | "parsing" | "analyzing" | "completed" | "failed";
+  status: "pending" | "parsing" | "analyzing" | "applying_rules" | "generating_ai" | "scoring" | "completed" | "failed";
+  progress?: number;
   summary: ReviewSummary;
   score: ReviewScore;
   findings: ReviewFinding[];
@@ -73,6 +74,7 @@ export interface ReviewResult {
     analyzerVersion: string;
     generatedAt: string;
   };
+  errorMessage?: string | null;
 }
 
 export interface ReportResult {
@@ -91,6 +93,57 @@ export interface SubmitReviewInput {
   language?: string;
   fileName?: string;
 }
+
+export interface SubmitReviewResponse {
+  reviewId: string;
+  status: string;
+  message?: string;
+}
+
+export interface DashboardReview {
+  id: string;
+  reviewId: string;
+  name: string;
+  lang: string;
+  langBadge: string;
+  score: number;
+  date: string;
+  relativeDate: string;
+  status: string;
+  findings: number;
+  severityCounts: { critical: number; high: number; medium: number; low: number };
+  createdAt?: string;
+}
+
+export interface DashboardFinding {
+  id: string;
+  title: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+  file: string;
+  category: string;
+  reviewId?: string | null;
+}
+
+export interface DashboardMetrics {
+  totalReviews: number;
+  totalFindings: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  resolvedPercentage: number | null;
+  averageScore: number;
+  categoryHealth: {
+    security: number;
+    bugs: number;
+    quality: number;
+    performance: number;
+  } | null;
+  scoreTrend: Array<{ label: string; score: number }>;
+  recentReviews: DashboardReview[];
+  openFindings: DashboardFinding[];
+}
+
 
 export interface AuthUser {
   id: string;
@@ -125,7 +178,13 @@ const API_BASE_URL = typeof window !== "undefined"
   ? (import.meta.env.VITE_API_URL || "")
   : "";
 
-function getAuthToken(): string | null {
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: () => void): void {
+  unauthorizedHandler = handler;
+}
+
+export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("reviewx_token") || sessionStorage.getItem("reviewx_token");
 }
@@ -136,6 +195,7 @@ export function setAuthToken(token: string | null): void {
     localStorage.setItem("reviewx_token", token);
   } else {
     localStorage.removeItem("reviewx_token");
+    sessionStorage.removeItem("reviewx_token");
   }
 }
 
@@ -158,6 +218,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers,
   });
 
+  if (res.status === 401) {
+    const isAuthEndpoint = path.includes("/api/auth/login") || path.includes("/api/auth/register");
+    if (!isAuthEndpoint) {
+      if (unauthorizedHandler) {
+        unauthorizedHandler();
+      } else {
+        setAuthToken(null);
+        if (typeof window !== "undefined") {
+          window.location.href = "/auth";
+        }
+      }
+    }
+  }
+
   const body = await res.json().catch(() => ({}));
 
   if (!res.ok) {
@@ -172,8 +246,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // ── Review API ─────────────────────────────────────────────────────────────
 
-export async function submitReview(input: SubmitReviewInput): Promise<ReviewResult> {
-  return request<ReviewResult>("/api/reviews", {
+export async function submitReview(input: SubmitReviewInput): Promise<SubmitReviewResponse> {
+  return request<SubmitReviewResponse>("/api/reviews", {
     method: "POST",
     body: JSON.stringify({
       code: input.code,
@@ -197,18 +271,26 @@ export async function pollReviewStatus(
   options: {
     intervalMs?: number;
     maxAttempts?: number;
-    onProgress?: (status: string, attempt: number) => void;
+    onProgress?: (status: string, progress: number) => void;
   } = {}
 ): Promise<ReviewResult> {
-  const { intervalMs = 1000, maxAttempts = 30, onProgress } = options;
+  const { intervalMs = 1500, maxAttempts = 120, onProgress } = options;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const result = await getReview(reviewId);
     if (onProgress) {
-      onProgress(result.status, attempt);
+      const prog = (result as { progress?: number }).progress ?? Math.min(attempt * 5, 95);
+      onProgress(result.status, prog);
     }
-    if (result.status === "completed" || result.status === "failed") {
+    if (result.status === "completed") {
       return result;
+    }
+    if (result.status === "failed") {
+      throw new ApiClientError(
+        (result as { errorMessage?: string }).errorMessage || "Analysis pipeline failed",
+        "ANALYSIS_FAILED",
+        500
+      );
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
@@ -272,10 +354,14 @@ export async function loginUser(credentials: {
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {
-  const res = await request<{ user: AuthUser }>("/api/auth/me", {
+  const res = await request<{ user: any }>("/api/auth/me", {
     method: "GET",
   });
-  return res.user;
+  const u = res.user;
+  return {
+    ...u,
+    id: u.id || u._id?.toString() || u._id,
+  };
 }
 
 // ── TanStack Query Hooks ───────────────────────────────────────────────────
@@ -286,11 +372,18 @@ export function useSubmitReviewMutation() {
   });
 }
 
-export function useReviewQuery(reviewId: string | null | undefined) {
+export function useReviewQuery(
+  reviewId: string | null | undefined,
+  options?: {
+    refetchInterval?: number | false | ((query: { state: { data: ReviewResult | null } }) => number | false);
+    enabled?: boolean;
+  }
+) {
   return useQuery({
     queryKey: ["review", reviewId],
     queryFn: () => (reviewId ? getReview(reviewId) : null),
-    enabled: Boolean(reviewId),
+    enabled: options?.enabled !== undefined ? options.enabled : Boolean(reviewId),
+    refetchInterval: options?.refetchInterval,
   });
 }
 
@@ -306,5 +399,30 @@ export function useGenerateReportMutation() {
   return useMutation({
     mutationFn: ({ reviewId, type }: { reviewId: string; type: "json" | "pdf" }) =>
       generateReport(reviewId, type),
+  });
+}
+
+
+export async function getDashboardMetrics(): Promise<DashboardMetrics> {
+  return request<DashboardMetrics>("/api/reviews/metrics");
+}
+
+export async function listReviews(limit = 20): Promise<DashboardReview[]> {
+  return request<DashboardReview[]>(`/api/reviews?limit=${limit}`);
+}
+
+export function useDashboardMetricsQuery() {
+  return useQuery({
+    queryKey: ["dashboard-metrics"],
+    queryFn: getDashboardMetrics,
+    refetchInterval: 5000,
+  });
+}
+
+export function useReviewsQuery(limit = 20) {
+  return useQuery({
+    queryKey: ["reviews-list", limit],
+    queryFn: () => listReviews(limit),
+    refetchInterval: 5000,
   });
 }

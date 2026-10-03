@@ -1,9 +1,15 @@
 import { toast } from "sonner";
 import {
   useSubmitReviewMutation,
+  useReviewQuery,
   useGenerateReportMutation,
+  useDashboardMetricsQuery,
+  useReviewsQuery,
+  getReview,
   ApiClientError,
   type ReviewFinding,
+  type DashboardReview,
+  type DashboardFinding,
 } from "@/lib/api";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
@@ -50,6 +56,7 @@ import {
   WandSparkles,
   X,
   Zap,
+  LogOut,
 } from "lucide-react";
 import {
   Button,
@@ -63,6 +70,7 @@ import {
   Switch,
 } from "@/components/primitives";
 import { useReviewStore, type Role, type View } from "@/lib/review-store";
+import { useAuthStore } from "@/lib/auth-store";
 import { cn } from "@/lib/utils";
 
 const Editor = lazy(() => import("@monaco-editor/react").then((m) => ({ default: m.Editor })));
@@ -106,100 +114,7 @@ function mapBackendFindingToUi(bf: ReviewFinding, index: number): Finding {
   };
 }
 
-const source = `import express from 'express';
-import mysql from 'mysql2';
-
-const app = express();
-const db = mysql.createConnection(process.env.DATABASE_URL);
-
-app.get('/api/users', async (req, res) => {
-  const userId = req.query.id;
-  const query = \`SELECT * FROM users WHERE id = \${userId}\`;
-  const [rows] = await db.promise().query(query);
-  res.json(rows);
-});
-
-app.post('/api/session', (req, res) => {
-  const token = Buffer.from(req.body.password).toString('base64');
-  res.cookie('session', token);
-  res.sendStatus(201);
-});
-
-app.listen(3000);`;
-
-const findings: Finding[] = [
-  {
-    id: "FND-1042",
-    title: "Unsanitized input in SQL query",
-    severity: "CRITICAL",
-    category: "Security",
-    file: "src/routes/users.ts",
-    line: "8–9",
-    confidence: 98,
-    status: "Detected",
-    description:
-      "User-controlled input is interpolated directly into a SQL statement, allowing an attacker to alter the query.",
-  },
-  {
-    id: "FND-1043",
-    title: "Password encoded with reversible Base64",
-    severity: "HIGH",
-    category: "Security",
-    file: "src/routes/session.ts",
-    line: "14",
-    confidence: 96,
-    status: "Detected",
-    description:
-      "Base64 is an encoding, not a password hashing mechanism. Stored credentials can be recovered immediately.",
-  },
-  {
-    id: "FND-1044",
-    title: "Session cookie missing security flags",
-    severity: "HIGH",
-    category: "Security",
-    file: "src/routes/session.ts",
-    line: "15",
-    confidence: 93,
-    status: "Detected",
-    description: "The session cookie does not set httpOnly, secure, or sameSite attributes.",
-  },
-  {
-    id: "FND-1045",
-    title: "Database connection has no error handler",
-    severity: "MEDIUM",
-    category: "Bugs",
-    file: "src/db.ts",
-    line: "4",
-    confidence: 88,
-    status: "Detected",
-    description:
-      "Connection failures can become unhandled errors and terminate the request unexpectedly.",
-  },
-  {
-    id: "FND-1046",
-    title: "Unbounded user query may return excess data",
-    severity: "LOW",
-    category: "Performance",
-    file: "src/routes/users.ts",
-    line: "9",
-    confidence: 82,
-    status: "Detected",
-    description:
-      "The query has no explicit projection or result limit, increasing transfer and allocation costs.",
-  },
-  {
-    id: "FND-1047",
-    title: "Server port is hard-coded",
-    severity: "INFO",
-    category: "Quality",
-    file: "src/index.ts",
-    line: "19",
-    confidence: 79,
-    status: "Detected",
-    description:
-      "Read the port from environment configuration to support multiple deployment targets.",
-  },
-];
+const defaultSource = "";
 
 const severityClass: Record<Severity, string> = {
   CRITICAL: "severity-critical",
@@ -400,12 +315,12 @@ export function ReviewPlatform() {
             </div>
           ))}
         </nav>
-        <div className="absolute inset-x-0 bottom-0 border-t border-border p-3">
+        <div className="absolute inset-x-0 bottom-0 flex items-center border-t border-border p-3 gap-1">
           <button
             onClick={() => setView("profile")}
-            className="flex w-full items-center gap-2 rounded p-2 hover:bg-accent"
+            className="flex flex-1 items-center gap-2 rounded p-2 hover:bg-accent min-w-0"
           >
-            <div className="grid size-7 place-items-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+            <div className="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
               {userName
                 .split(" ")
                 .map((n) => n[0] ?? "")
@@ -417,7 +332,15 @@ export function ReviewPlatform() {
               <div className="truncate text-xs font-medium">{userName}</div>
               <div className="truncate text-[10px] text-muted-foreground">{userEmail}</div>
             </div>
-            <MoreHorizontal className="size-4 text-muted-foreground" />
+          </button>
+          <button
+            type="button"
+            title="Sign out"
+            aria-label="Sign out"
+            onClick={() => useAuthStore.getState().logout()}
+            className="grid size-8 shrink-0 place-items-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+          >
+            <LogOut className="size-4" />
           </button>
         </div>
       </aside>
@@ -504,12 +427,26 @@ function PageHeading({
 }
 
 function NewReview() {
-  const { analyzing, setAnalyzing, progress, setProgress, step, setStep, setView, setActiveReview } =
-    useReviewStore();
+  const {
+    analyzing,
+    setAnalyzing,
+    progress,
+    setProgress,
+    step,
+    setStep,
+    setView,
+    activeReviewId,
+    setActiveReviewId,
+    activeReviewStatus,
+    setActiveReviewStatus,
+    setActiveReview,
+  } = useReviewStore();
+
   const [language, setLanguage] = useState("typescript");
-  const [code, setCode] = useState(source);
+  const [fileName, setFileName] = useState("src/code.ts");
+  const [code, setCode] = useState(defaultSource);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const submitReviewMutation = useSubmitReviewMutation();
 
   const stages = [
     "Parsing source & AST structure",
@@ -519,64 +456,192 @@ function NewReview() {
     "Calculating score & finalizing report",
   ];
 
+  const submitReviewMutation = useSubmitReviewMutation();
+
+  // Resume polling on mount if an active review was in progress (survives refresh / navigate away)
+  useEffect(() => {
+    if (activeReviewId && activeReviewStatus && !["completed", "failed"].includes(activeReviewStatus)) {
+      if (!analyzing) {
+        setAnalyzing(true);
+      }
+    }
+  }, [activeReviewId, activeReviewStatus, analyzing, setAnalyzing]);
+
+  // Real-time polling query on getReview(activeReviewId) with 1500ms refetchInterval
+  const isTerminal = activeReviewStatus === "completed" || activeReviewStatus === "failed";
+  const shouldPoll = Boolean(activeReviewId) && analyzing && !isTerminal;
+
+  const { data: polledReview, error: pollError } = useReviewQuery(activeReviewId, {
+    enabled: shouldPoll,
+    refetchInterval: (query) => {
+      const current = query.state.data?.status;
+      if (current === "completed" || current === "failed") {
+        return false;
+      }
+      return 1500;
+    },
+  });
+
+  // Map real backend status directly to the 5-step progress UI and percentage
+  useEffect(() => {
+    if (!polledReview) return;
+
+    const currentStatus = polledReview.status;
+    setActiveReviewStatus(currentStatus);
+
+    switch (currentStatus) {
+      case "pending":
+        setStep(0);
+        setProgress(5);
+        break;
+      case "parsing":
+        setStep(0);
+        setProgress(20);
+        break;
+      case "analyzing":
+        setStep(1);
+        setProgress(40);
+        break;
+      case "applying_rules":
+        setStep(2);
+        setProgress(60);
+        break;
+      case "generating_ai":
+        setStep(3);
+        setProgress(80);
+        break;
+      case "scoring":
+        setStep(4);
+        setProgress(95);
+        break;
+      case "completed":
+        setStep(5);
+        setProgress(100);
+        setActiveReview(polledReview);
+        toast.success("Code review completed!");
+        const timer = window.setTimeout(() => {
+          setAnalyzing(false);
+          setView("result");
+        }, 350);
+        return () => clearTimeout(timer);
+      case "failed":
+        setPipelineError(polledReview.errorMessage || "The review pipeline failed during analysis.");
+        toast.error(polledReview.errorMessage || "Review failed.");
+        break;
+      default:
+        break;
+    }
+  }, [polledReview, setActiveReviewStatus, setStep, setProgress, setActiveReview, setAnalyzing, setView]);
+
+  // Handle polling network error if any
+  useEffect(() => {
+    if (pollError) {
+      const msg = pollError instanceof Error ? pollError.message : "Failed to fetch review status";
+      setPipelineError(msg);
+      toast.error(msg);
+    }
+  }, [pollError]);
+
+  // Submit review: calls submitReview() via mutation
   const begin = async () => {
+    setPipelineError(null);
     setAnalyzing(true);
     setProgress(5);
     setStep(0);
 
-    let curr = 5;
-    const interval = window.setInterval(() => {
-      curr = Math.min(curr + 6, 92);
-      setProgress(curr);
-      setStep(Math.min(3, Math.floor(curr / 24)));
-    }, 200);
+    if (!code.trim()) {
+      toast.error("Please enter or upload code to analyze.");
+      setAnalyzing(false);
+      return;
+    }
 
     try {
-      const ext = language === "python" ? "py" : language === "javascript" ? "js" : "ts";
-      const result = await submitReviewMutation.mutateAsync({
+      const initial = await submitReviewMutation.mutateAsync({
         code,
         language,
-        fileName: `src/code.${ext}`,
+        fileName,
       });
 
-      clearInterval(interval);
-      setProgress(100);
-      setStep(4);
-      setActiveReview(result);
-      toast.success("Code review completed!");
-
-      window.setTimeout(() => {
-        setAnalyzing(false);
-        setView("result");
-      }, 350);
+      // On 202 Accepted, store returned reviewId and status: "pending"
+      setActiveReviewId(initial.reviewId);
+      setActiveReviewStatus(initial.status || "pending");
     } catch (err: unknown) {
-      clearInterval(interval);
-      const msg = err instanceof ApiClientError ? err.message : "Failed to run review against backend";
+      const msg = err instanceof ApiClientError ? err.message : "Failed to submit review request";
+      setPipelineError(msg);
       toast.error(msg);
-      // Fallback transition so user experience is uninterrupted
-      setProgress(100);
-      setStep(4);
-      window.setTimeout(() => {
-        setAnalyzing(false);
-        setView("result");
-      }, 400);
+      setAnalyzing(false);
     }
   };
 
   const upload = (file?: File) => {
     if (!file) return;
+    setFileName(file.name);
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext === "py") setLanguage("python");
+    else if (ext === "js" || ext === "jsx") setLanguage("javascript");
+    else if (ext === "ts" || ext === "tsx") setLanguage("typescript");
+    else if (ext === "java") setLanguage("java");
+    else if (ext === "php") setLanguage("php");
     file.text().then(setCode);
   };
-  if (analyzing)
+
+  const handleRetry = () => {
+    setPipelineError(null);
+    setActiveReviewId(null);
+    setActiveReviewStatus(null);
+    setAnalyzing(false);
+    setProgress(0);
+    setStep(0);
+  };
+
+  if (analyzing) {
+    if (pipelineError || activeReviewStatus === "failed") {
+      return (
+        <div className="mx-auto max-w-4xl py-8">
+          <PageHeading
+            title="Review Failed"
+            subtitle="An error occurred while analyzing your source code."
+          />
+          <div className="panel p-6">
+            <div className="flex items-start gap-4">
+              <div className="grid size-10 place-items-center rounded-full bg-destructive/10 text-destructive">
+                <AlertTriangle className="size-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-semibold text-foreground">Analysis Error</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {pipelineError || polledReview?.errorMessage || "An unexpected error occurred in the analysis pipeline."}
+                </p>
+                <div className="mt-5 flex gap-3">
+                  <Button onClick={handleRetry} variant="default">
+                    Try again
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      handleRetry();
+                      setView("dashboard");
+                    }}
+                    variant="outline"
+                  >
+                    Back to dashboard
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="mx-auto max-w-4xl py-8">
         <PageHeading
           title="Review in progress"
-          subtitle="Analyzing api/users.ts against 24 built-in and 8 company rules."
+          subtitle={`Analyzing ${fileName} against security, bugs, and company rules.`}
         />
         <div className="panel overflow-hidden">
           <div className="border-b border-border bg-editor px-5 py-3 font-mono text-xs text-code-muted">
-            <span className="text-success">●</span> review://api/users.ts
+            <span className="text-success">●</span> review://{fileName}
           </div>
           <div className="grid gap-8 p-6 md:grid-cols-[1fr_320px]">
             <div className="space-y-3">
@@ -645,6 +710,8 @@ function NewReview() {
         </div>
       </div>
     );
+  }
+
   return (
     <>
       <PageHeading
@@ -656,11 +723,22 @@ function NewReview() {
           <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
             <div className="flex items-center gap-2 font-mono text-xs">
               <FileCode2 className="size-3.5 text-muted-foreground" />
-              api/users.ts
-              <span className="size-1.5 rounded-full bg-warning" />
+              <input
+                value={fileName}
+                onChange={(e) => setFileName(e.target.value)}
+                className="bg-transparent text-foreground border-none outline-none font-mono text-xs w-48 hover:underline focus:underline"
+                placeholder="file.ext"
+              />
+              {code.trim().length > 0 && <span className="size-1.5 rounded-full bg-warning" />}
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <Select value={language} onValueChange={setLanguage}>
+              <Select value={language} onValueChange={(val) => {
+                setLanguage(val);
+                const ext = val === "python" ? "py" : val === "javascript" ? "js" : val === "java" ? "java" : val === "php" ? "php" : "ts";
+                if (fileName.startsWith("src/code.")) {
+                  setFileName(`src/code.${ext}`);
+                }
+              }}>
                 <SelectTrigger className="h-7 w-32 font-mono text-[11px]">
                   <SelectValue />
                 </SelectTrigger>
@@ -821,14 +899,14 @@ function ReviewResult() {
     if (activeReview?.findings && activeReview.findings.length > 0) {
       return activeReview.findings.map(mapBackendFindingToUi);
     }
-    return findings;
+    return [];
   }, [activeReview]);
 
   const visible = severity === "All" ? allFindings : allFindings.filter((f) => f.severity === severity);
 
   const handleDownloadReport = async (type: "json" | "pdf") => {
     if (!activeReview?.reviewId) {
-      toast.info(`Generating demo ${type.toUpperCase()} report...`);
+      toast.info(`Generating ${type.toUpperCase()} report...`);
       const blob = new Blob([JSON.stringify(allFindings, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -856,6 +934,12 @@ function ReviewResult() {
       toast.error(msg);
     }
   };
+
+  const reviewScore = activeReview?.score?.overall ?? activeReview?.score?.score ?? 0;
+  const fileName = activeReview?.review?.fileName || activeReview?.fileName || "Code Review Result";
+  const language = activeReview?.review?.language ? activeReview.review.language.charAt(0).toUpperCase() + activeReview.review.language.slice(1) : "Source";
+  const reviewId = activeReview?.reviewId ? activeReview.reviewId.slice(-8).toUpperCase() : "REV";
+
   return (
     <>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
@@ -867,9 +951,9 @@ function ReviewResult() {
             <ArrowLeft className="size-3" />
             New review
           </button>
-          <h1 className="text-xl font-semibold">api/users.ts</h1>
+          <h1 className="text-xl font-semibold">{fileName}</h1>
           <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-            REV-8E21A · TypeScript · completed just now · 19 lines
+            {reviewId} · {language} · completed · {allFindings.length} {allFindings.length === 1 ? "finding" : "findings"}
           </p>
         </div>
         <div className="flex gap-2">
@@ -887,30 +971,32 @@ function ReviewResult() {
           </Button>
         </div>
       </div>
+
       <section className="panel mb-4 grid gap-6 p-5 lg:grid-cols-[150px_1fr_260px]">
         <div className="flex items-center justify-center">
-          <ScoreRing score={activeReview?.score?.score ?? 78} />
+          <ScoreRing score={reviewScore} />
         </div>
         <div className="grid grid-cols-2 gap-x-8 gap-y-5 self-center">
-          <Metric label="Security" value={activeReview?.score?.breakdown?.security ?? 70} icon={ShieldAlert} />
-          <Metric label="Bugs" value={activeReview?.score?.breakdown?.bugs ?? 80} icon={Bug} />
-          <Metric label="Quality" value={activeReview?.score?.breakdown?.quality ?? 85} icon={Code2} />
-          <Metric label="Performance" value={activeReview?.score?.breakdown?.performance ?? 75} icon={Zap} />
+          <Metric label="Security" value={activeReview?.score?.security ?? (activeReview ? "--" : 0)} barValue={activeReview?.score?.security ?? 0} icon={ShieldAlert} />
+          <Metric label="Bugs" value={activeReview?.score?.bugs ?? (activeReview ? "--" : 0)} barValue={activeReview?.score?.bugs ?? 0} icon={Bug} />
+          <Metric label="Quality" value={activeReview?.score?.quality ?? (activeReview ? "--" : 0)} barValue={activeReview?.score?.quality ?? 0} icon={Code2} />
+          <Metric label="Performance" value={activeReview?.score?.performance ?? (activeReview ? "--" : 0)} barValue={activeReview?.score?.performance ?? 0} icon={Zap} />
         </div>
         <div className="border-t border-border pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
           <p className="text-[10px] font-semibold uppercase text-muted-foreground">
             Review summary
           </p>
           <div className="mt-4 grid grid-cols-3 gap-2">
-            <SummaryCount n={String(activeReview?.summary?.critical ?? 1)} label="Critical" s="CRITICAL" />
-            <SummaryCount n={String(activeReview?.summary?.high ?? 2)} label="High" s="HIGH" />
-            <SummaryCount n={String((activeReview?.summary?.medium ?? 2) + (activeReview?.summary?.low ?? 1))} label="Other" s="LOW" />
+            <SummaryCount n={String(activeReview?.summary?.critical ?? 0)} label="Critical" s="CRITICAL" />
+            <SummaryCount n={String(activeReview?.summary?.high ?? 0)} label="High" s="HIGH" />
+            <SummaryCount n={String((activeReview?.summary?.medium ?? 0) + (activeReview?.summary?.low ?? 0))} label="Other" s="LOW" />
           </div>
           <p className="mt-4 text-[11px] leading-5 text-muted-foreground">
-            6 findings across 4 categories. Fix the critical SQL injection before merging.
+            {activeReview?.aiAnalysis?.summary || (allFindings.length > 0 ? `${allFindings.length} findings detected across ${new Set(allFindings.map((f) => f.category)).size} categories.` : "Clean analysis. No findings detected.")}
           </p>
         </div>
       </section>
+
       <section className="panel overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
           <h2 className="mr-3 text-sm font-semibold">
@@ -935,30 +1021,45 @@ function ReviewResult() {
             Category
           </button>
         </div>
+
         <div>
-          {visible.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => setSelectedFinding(f.id)}
-              className="group flex w-full items-start gap-3 border-b border-border px-4 py-4 text-left last:border-0 hover:bg-accent/40"
-            >
-              <span className={cn("mt-1 h-9 w-0.5 rounded-full", severityClass[f.severity])} />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <SeverityBadge severity={f.severity} />
-                  <span className="text-sm font-medium group-hover:text-primary">{f.title}</span>
+          {visible.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center text-sm text-muted-foreground">
+              <CheckCircle2 className="size-8 text-success mb-2" />
+              <p className="font-semibold text-foreground">
+                {allFindings.length === 0 ? "Clean bill of health!" : "No matching findings"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {allFindings.length === 0
+                  ? "No security vulnerabilities, bugs, or performance issues detected."
+                  : `No findings matching severity "${severity}".`}
+              </p>
+            </div>
+          ) : (
+            visible.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setSelectedFinding(f.id)}
+                className="group flex w-full items-start gap-3 border-b border-border px-4 py-4 text-left last:border-0 hover:bg-accent/40"
+              >
+                <span className={cn("mt-1 h-9 w-0.5 rounded-full", severityClass[f.severity])} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SeverityBadge severity={f.severity} />
+                    <span className="text-sm font-medium group-hover:text-primary">{f.title}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[10px] text-muted-foreground">
+                    <span>{f.category}</span>
+                    <span>
+                      {f.file}:{f.line}
+                    </span>
+                    <span>{f.confidence}% confidence</span>
+                  </div>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[10px] text-muted-foreground">
-                  <span>{f.category}</span>
-                  <span>
-                    {f.file}:{f.line}
-                  </span>
-                  <span>{f.confidence}% confidence</span>
-                </div>
-              </div>
-              <ChevronDown className="mt-2 size-4 -rotate-90 text-muted-foreground" />
-            </button>
-          ))}
+                <ChevronDown className="mt-2 size-4 -rotate-90 text-muted-foreground" />
+              </button>
+            ))
+          )}
         </div>
       </section>
     </>
@@ -968,12 +1069,15 @@ function ReviewResult() {
 function Metric({
   label,
   value,
+  barValue,
   icon: Icon,
 }: {
   label: string;
   value: number | string;
+  barValue?: number;
   icon: typeof Code2;
 }) {
+  const barPct = typeof barValue === "number" ? barValue : typeof value === "number" ? value : 0;
   return (
     <div>
       <div className="mb-2 flex items-center text-xs">
@@ -982,11 +1086,15 @@ function Metric({
         <span className="ml-auto font-mono font-semibold">{value}</span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-        <div className="h-full rounded-full bg-score" style={{ width: `${value}%` }} />
+        <div
+          className="h-full rounded-full bg-score transition-all duration-500"
+          style={{ width: `${Math.max(0, Math.min(barPct, 100))}%` }}
+        />
       </div>
     </div>
   );
 }
+
 function SummaryCount({ n, label, s }: { n: string; label: string; s: Severity }) {
   return (
     <div>
@@ -996,23 +1104,69 @@ function SummaryCount({ n, label, s }: { n: string; label: string; s: Severity }
   );
 }
 
+function CodeEvidence({ rawFinding, finding }: { rawFinding?: any; finding: Finding }) {
+  const snippet = rawFinding?.evidence?.snippet || rawFinding?.snippet;
+  const startLine = Number(rawFinding?.location?.startLine || finding.line || 1);
+
+  if (snippet) {
+    const lines = String(snippet).split("\n");
+    return (
+      <section className="panel overflow-hidden">
+        <div className="border-b border-border px-4 py-3 text-xs font-semibold">Offending code</div>
+        <div className="bg-editor py-3 font-mono text-xs">
+          {lines.map((lineText: string, idx: number) => (
+            <div key={idx} className="code-line code-critical">
+              <span>{startLine + idx}</span>
+              <code> {lineText}</code>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel overflow-hidden">
+      <div className="border-b border-border px-4 py-3 text-xs font-semibold">Code location</div>
+      <div className="bg-editor px-4 py-3 font-mono text-xs text-muted-foreground">
+        <span>{finding.file} : line {finding.line}</span>
+      </div>
+    </section>
+  );
+}
+
 function FindingDetail() {
   const { selectedFinding, setView, findingStatuses, setFindingStatus, activeReview } = useReviewStore();
   const allFindings = useMemo(() => {
     if (activeReview?.findings && activeReview.findings.length > 0) {
       return activeReview.findings.map(mapBackendFindingToUi);
     }
-    return findings;
+    return [];
   }, [activeReview]);
-  const f = allFindings.find((x) => x.id === selectedFinding) ?? allFindings[0]!;
-  const rawFinding = activeReview?.findings?.find((rf) => (rf._id || rf.id) === f.id);
-  // Persist status in the store so it survives navigation away and back.
+
+  const f = allFindings.find((x) => x.id === selectedFinding) ?? allFindings[0];
+  if (!f) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-muted-foreground">No finding selected.</p>
+        <Button onClick={() => setView("result")} variant="outline" className="mt-4">
+          <ArrowLeft className="size-3 mr-1" />
+          Back to review result
+        </Button>
+      </div>
+    );
+  }
+
+  const rawFinding: any = activeReview?.findings?.find((rf: any) => (rf._id || rf.id) === f.id);
   const status = findingStatuses[f.id] ?? f.status;
   const setStatus = (s: string) => setFindingStatus(f.id, s);
-  const before =
-    "const query = `SELECT * FROM users WHERE id = ${userId}`;\nconst [rows] = await db.promise().query(query);";
-  const after =
-    "const query = 'SELECT id, name, email FROM users WHERE id = ?';\nconst [rows] = await db.promise().execute(query, [userId]);";
+
+  const aiExplanation = rawFinding?.aiAnalysis?.explanation || rawFinding?.explanation || f.description;
+  const fixDiff = rawFinding?.aiAnalysis?.fix || rawFinding?.aiAnalysis?.improvedCode || rawFinding?.fix || rawFinding?.suggestedFix;
+  const rule = rawFinding?.ruleId || f.id;
+  const cwe = rawFinding?.cwe || rawFinding?.cweId || null;
+  const owasp = rawFinding?.owasp || null;
+
   return (
     <>
       <button
@@ -1022,6 +1176,7 @@ function FindingDetail() {
         <ArrowLeft className="size-3" />
         Back to all findings
       </button>
+
       <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
         <div className="space-y-4">
           <section className="panel p-5">
@@ -1040,69 +1195,69 @@ function FindingDetail() {
             </div>
             <p className="mt-5 text-sm leading-6 text-muted-foreground">{f.description}</p>
           </section>
-          <CodeEvidence />
+
+          <CodeEvidence rawFinding={rawFinding} finding={f} />
+
           <section className="panel overflow-hidden">
             <div className="flex items-center gap-2 border-b border-border px-4 py-3">
               <Bot className="size-4 text-ai" />
-              <h2 className="text-xs font-semibold">AI explanation</h2>
-              <span className="rounded border border-ai/30 bg-ai/10 px-1.5 py-0.5 text-[9px] text-ai">
-                AI-GENERATED
-              </span>
+              <h2 className="text-xs font-semibold">Explanation</h2>
+              {rawFinding?.aiAnalysis && (
+                <span className="rounded border border-ai/30 bg-ai/10 px-1.5 py-0.5 text-[9px] text-ai">
+                  AI-GENERATED
+                </span>
+              )}
             </div>
             <div className="p-5 text-sm leading-6 text-muted-foreground">
-              <p>
-                An attacker can supply a value such as <code className="code-chip">1 OR 1=1</code>,
-                changing the query’s meaning and potentially exposing every user record.
-              </p>
-              <p className="mt-3">
-                Use a parameterized statement so the database treats the value strictly as data.
-                Also select only the columns the endpoint requires.
-              </p>
+              <p>{aiExplanation}</p>
             </div>
           </section>
-          <section className="panel overflow-hidden">
-            <div className="flex items-center border-b border-border px-4 py-3">
-              <h2 className="text-xs font-semibold">Suggested fix</h2>
-              <span className="ml-auto text-[10px] text-muted-foreground">2 lines changed</span>
-            </div>
-            <div className="h-52 bg-editor">
-              <Suspense
-                fallback={
-                  <div className="grid h-full place-items-center text-xs text-muted-foreground">
-                    Loading editor…
-                  </div>
-                }
-              >
-                <Editor
-                  height="100%"
-                  theme="vs-dark"
-                  language="typescript"
-                  value={`// BEFORE\n${before}\n\n// AFTER\n${after}`}
-                  options={{
-                    readOnly: true,
-                    minimap: { enabled: false },
-                    fontFamily: "JetBrains Mono",
-                    fontSize: 12,
-                    lineHeight: 21,
-                    lineNumbers: "off",
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                  }}
-                />
-              </Suspense>
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-border p-3">
-              <Button variant="outline" onClick={() => setStatus("False Positive")}>
-                <X />
-                Reject
-              </Button>
-              <Button onClick={() => setStatus("Accepted")}>
-                <Check />
-                Accept fix
-              </Button>
-            </div>
-          </section>
+
+          {fixDiff && (
+            <section className="panel overflow-hidden">
+              <div className="flex items-center border-b border-border px-4 py-3">
+                <h2 className="text-xs font-semibold">Suggested fix</h2>
+              </div>
+              <div className="h-52 bg-editor">
+                <Suspense
+                  fallback={
+                    <div className="grid h-full place-items-center text-xs text-muted-foreground">
+                      Loading editor…
+                    </div>
+                  }
+                >
+                  <Editor
+                    height="100%"
+                    theme="vs-dark"
+                    language="typescript"
+                    value={typeof fixDiff === "string" ? fixDiff : JSON.stringify(fixDiff, null, 2)}
+                    options={{
+                      readOnly: true,
+                      minimap: { enabled: false },
+                      fontFamily: "JetBrains Mono",
+                      fontSize: 12,
+                      lineHeight: 21,
+                      lineNumbers: "off",
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                    }}
+                  />
+                </Suspense>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-border p-3">
+                <Button variant="outline" onClick={() => setStatus("False Positive")}>
+                  <X />
+                  Reject
+                </Button>
+                <Button onClick={() => setStatus("Accepted")}>
+                  <Check />
+                  Accept fix
+                </Button>
+              </div>
+            </section>
+          )}
         </div>
+
         <aside className="space-y-4">
           <div className="panel p-4">
             <h2 className="text-xs font-semibold">Finding status</h2>
@@ -1129,6 +1284,7 @@ function FindingDetail() {
               ))}
             </div>
           </div>
+
           <button className="panel w-full p-4 text-left transition-colors hover:border-ai/50">
             <div className="flex items-center gap-2 text-xs font-semibold">
               <Mic className="size-4 text-ai" />
@@ -1138,20 +1294,29 @@ function FindingDetail() {
               Use Voxide to ask a voice question about the risk or suggested fix.
             </p>
           </button>
+
           <div className="panel p-4">
-            <h2 className="text-xs font-semibold">Evidence</h2>
+            <h2 className="text-xs font-semibold">Evidence & Rules</h2>
             <dl className="mt-3 space-y-3 text-[11px]">
               <div>
                 <dt className="text-muted-foreground">Rule</dt>
-                <dd className="mt-1 font-mono">SEC-SQL-001</dd>
+                <dd className="mt-1 font-mono">{rule}</dd>
               </div>
+              {cwe && (
+                <div>
+                  <dt className="text-muted-foreground">CWE</dt>
+                  <dd className="mt-1 font-mono text-primary">{cwe}</dd>
+                </div>
+              )}
+              {owasp && (
+                <div>
+                  <dt className="text-muted-foreground">OWASP</dt>
+                  <dd className="mt-1 font-mono">{owasp}</dd>
+                </div>
+              )}
               <div>
-                <dt className="text-muted-foreground">CWE</dt>
-                <dd className="mt-1 font-mono text-primary">CWE-89</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">OWASP</dt>
-                <dd className="mt-1 font-mono">A03:2021 Injection</dd>
+                <dt className="text-muted-foreground">Category</dt>
+                <dd className="mt-1 font-mono">{f.category}</dd>
               </div>
             </dl>
           </div>
@@ -1160,114 +1325,9 @@ function FindingDetail() {
     </>
   );
 }
-function CodeEvidence() {
-  return (
-    <section className="panel overflow-hidden">
-      <div className="border-b border-border px-4 py-3 text-xs font-semibold">Offending code</div>
-      <div className="bg-editor py-3 font-mono text-xs">
-        <div className="code-line">
-          <span>7</span>
-          <code> const userId = req.query.id;</code>
-        </div>
-        <div className="code-line code-critical">
-          <span>8</span>
-          <code> const query = `SELECT * FROM users WHERE id = ${"${userId}"}`;</code>
-        </div>
-        <div className="code-line code-critical">
-          <span>9</span>
-          <code> const [rows] = await db.promise().query(query);</code>
-        </div>
-        <div className="code-line">
-          <span>10</span>
-          <code> res.json(rows);</code>
-        </div>
-      </div>
-    </section>
-  );
-}
+
 
 /* ─────────────────────── member dashboard data ─────────────────────── */
-
-const memberReviews = [
-  {
-    id: "REV-8E21A",
-    name: "api/users.ts",
-    lang: "TypeScript",
-    langBadge: "TS",
-    score: 78,
-    date: "Today, 14:32",
-    relativeDate: "2 hours ago",
-    status: "Needs attention",
-    findings: 6,
-    severityCounts: { critical: 1, high: 2, medium: 3, low: 0 },
-  },
-  {
-    id: "REV-7C14B",
-    name: "auth/session.py",
-    lang: "Python",
-    langBadge: "PY",
-    score: 64,
-    date: "Today, 10:08",
-    relativeDate: "6 hours ago",
-    status: "Needs attention",
-    findings: 8,
-    severityCounts: { critical: 0, high: 3, medium: 4, low: 1 },
-  },
-  {
-    id: "REV-3A09F",
-    name: "billing/webhook.ts",
-    lang: "TypeScript",
-    langBadge: "TS",
-    score: 91,
-    date: "Yesterday",
-    relativeDate: "Yesterday",
-    status: "Completed",
-    findings: 2,
-    severityCounts: { critical: 0, high: 0, medium: 1, low: 1 },
-  },
-  {
-    id: "REV-2D88C",
-    name: "UserService.java",
-    lang: "Java",
-    langBadge: "JV",
-    score: 82,
-    date: "Sep 16",
-    relativeDate: "Sep 16",
-    status: "Completed",
-    findings: 3,
-    severityCounts: { critical: 0, high: 1, medium: 1, low: 1 },
-  },
-  {
-    id: "REV-1F55E",
-    name: "payments.php",
-    lang: "PHP",
-    langBadge: "PHP",
-    score: 76,
-    date: "Sep 15",
-    relativeDate: "Sep 15",
-    status: "Completed",
-    findings: 5,
-    severityCounts: { critical: 0, high: 2, medium: 2, low: 1 },
-  },
-];
-
-const scoreTrendData = [
-  { label: "Aug 21", score: 62 },
-  { label: "Aug 28", score: 68 },
-  { label: "Sep 4",  score: 74 },
-  { label: "Sep 11", score: 78 },
-  { label: "Sep 18", score: 86 },
-];
-
-const memberOpenFindings = [
-  { id: "FND-1042", title: "Unsanitized input in SQL query",          severity: "CRITICAL" as Severity, file: "api/users.ts",    category: "Security"    },
-  { id: "FND-1043", title: "Password encoded with reversible Base64", severity: "HIGH"     as Severity, file: "auth/session.py", category: "Security"    },
-  { id: "FND-1044", title: "Session cookie missing security flags",   severity: "HIGH"     as Severity, file: "auth/session.py", category: "Security"    },
-  { id: "FND-1045", title: "Database connection has no error handler",severity: "MEDIUM"   as Severity, file: "api/users.ts",    category: "Bugs"        },
-  { id: "FND-1046", title: "Unbounded query may return excess data",  severity: "LOW"      as Severity, file: "api/users.ts",    category: "Performance" },
-  { id: "FND-1047", title: "Server port is hard-coded",               severity: "INFO"     as Severity, file: "src/index.ts",    category: "Quality"     },
-  { id: "FND-1048", title: "Unchecked exception in payment handler",  severity: "MEDIUM"   as Severity, file: "payments.php",   category: "Bugs"        },
-];
 
 /** score → colour token */
 function scoreColor(s: number) {
@@ -1285,7 +1345,7 @@ function scoreBg(s: number) {
 function SeveritySummary({
   counts,
 }: {
-  counts: { critical: number; high: number; medium: number; low: number };
+  counts?: { critical: number; high: number; medium: number; low: number } | null;
 }) {
   const parts: React.ReactNode[] = [];
   if (counts.critical > 0)
@@ -1328,7 +1388,13 @@ function SeveritySummary({
 }
 
 /** Full "Recent reviews" card for the Member dashboard. */
-function RecentReviewsCard({ reviews }: { reviews: typeof memberReviews }) {
+function RecentReviewsCard({
+  reviews,
+  onSelectReview,
+}: {
+  reviews: DashboardReview[];
+  onSelectReview?: (id: string) => void;
+}) {
   const { setView } = useReviewStore();
   return (
     <section className="panel overflow-hidden">
@@ -1362,7 +1428,7 @@ function RecentReviewsCard({ reviews }: { reviews: typeof memberReviews }) {
               key={r.id}
               type="button"
               aria-label={`Open review for ${r.name}, score ${r.score}`}
-              onClick={() => setView("result")}
+              onClick={() => (onSelectReview ? onSelectReview(r.id) : setView("result"))}
               className="group flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-accent/40"
             >
               {/* Language badge */}
@@ -1405,7 +1471,9 @@ function RecentReviewsCard({ reviews }: { reviews: typeof memberReviews }) {
 }
 
 function Dashboard() {
-  const { setView, setSelectedFinding, userName } = useReviewStore();
+  const { setView, setSelectedFinding, setActiveReview, userName } = useReviewStore();
+  const { data: metricsData, isLoading } = useDashboardMetricsQuery();
+
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
     if (hour < 12) return "Good morning";
@@ -1413,17 +1481,34 @@ function Dashboard() {
     return "Good evening";
   }, []);
 
-  const criticalCount = memberOpenFindings.filter((f) => f.severity === "CRITICAL").length;
-  const highCount     = memberOpenFindings.filter((f) => f.severity === "HIGH").length;
-  const mediumCount   = memberOpenFindings.filter((f) => f.severity === "MEDIUM").length;
-  const lowCount      = memberOpenFindings.filter((f) => f.severity === "LOW").length;
-  const totalFindings = memberOpenFindings.length;
+  const handleSelectReview = async (reviewId: string) => {
+    try {
+      const full = await getReview(reviewId);
+      setActiveReview(full);
+      setView("result");
+    } catch {
+      toast.error("Failed to load review details");
+    }
+  };
+
+  const totalFindings = metricsData?.totalFindings ?? 0;
+  const criticalCount = metricsData?.criticalCount ?? 0;
+  const highCount     = metricsData?.highCount ?? 0;
+  const mediumCount   = metricsData?.mediumCount ?? 0;
+  const lowCount      = metricsData?.lowCount ?? 0;
+  const resolvedPct   = metricsData?.resolvedPercentage ?? 100;
+  const avgScore      = metricsData?.averageScore ?? 0;
+  const totalReviews  = metricsData?.totalReviews ?? 0;
+  const scoreTrendData = metricsData?.scoreTrend ?? [];
+  const catHealth     = metricsData?.categoryHealth ?? { security: 100, bugs: 100, quality: 100, performance: 100 };
+  const recentReviews = metricsData?.recentReviews ?? [];
+  const openFindings  = metricsData?.openFindings ?? [];
 
   return (
     <>
       <PageHeading
-        title={`${greeting}, ${userName.split(" ")[0] ?? userName}`}
-        subtitle="Here's your personal code health overview and latest activity."
+        title={`${greeting}, ${(userName || "there").split(" ")[0]}`}
+        subtitle="Real-time code health overview, open findings, and review analysis."
         action={
           <Button onClick={() => setView("new")}>
             <Plus />
@@ -1432,26 +1517,39 @@ function Dashboard() {
         }
       />
 
-      {/* ── Stat cards ── */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* ── KPI Grid ── */}
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5"><Gauge className="size-3.5" />Avg score</span>
-            <span className="font-mono text-[10px] text-success">↑ +4 this month</span>
+            <span className="font-mono text-[10px] text-success">
+              {avgScore > 0 ? "Overall health" : "No reviews yet"}
+            </span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">82</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
+            {avgScore > 0 ? avgScore : "--"}
+          </div>
           <div className="mt-1 h-1 overflow-hidden rounded-full bg-secondary">
-            <div className="h-full w-[82%] rounded-full bg-score" />
+            <div
+              className="h-full rounded-full bg-score transition-all duration-500"
+              style={{ width: `${Math.min(avgScore, 100)}%` }}
+            />
           </div>
         </div>
+
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5"><FileText className="size-3.5" />My reviews</span>
-            <span className="font-mono text-[10px] text-success">↑ +5 this week</span>
+            <span className="font-mono text-[10px] text-muted-foreground">Total</span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">23</div>
-          <div className="mt-1 text-[10px] text-muted-foreground">across 4 languages</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
+            {totalReviews}
+          </div>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            {totalReviews === 1 ? "1 review analyzed" : `${totalReviews} reviews analyzed`}
+          </div>
         </div>
+
         {/* Open Findings card — clickable, severity bar, empty state */}
         {totalFindings === 0 ? (
           /* Empty state — all clear */
@@ -1525,13 +1623,20 @@ function Dashboard() {
             </div>
           </button>
         )}
+
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5"><CheckCircle2 className="size-3.5" />Resolved</span>
-            <span className="font-mono text-[10px] text-success">↑ +6% this month</span>
+            <span className="font-mono text-[10px] text-success">
+              {resolvedPct !== null ? "Resolution rate" : "No findings yet"}
+            </span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">88%</div>
-          <div className="mt-1 text-[10px] text-muted-foreground">of assigned findings</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
+            {resolvedPct !== null ? `${resolvedPct}%` : "--"}
+          </div>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            {resolvedPct !== null ? "of detected findings" : "Awaiting review findings"}
+          </div>
         </div>
       </div>
 
@@ -1541,64 +1646,81 @@ function Dashboard() {
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-sm font-semibold">Score trend</h2>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">Last 5 weeks</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {scoreTrendData.length > 0 ? `Last ${scoreTrendData.length} analyzed reviews` : "Recent reviews"}
+              </p>
             </div>
             <div className="text-right">
-              <div className="font-mono text-2xl font-semibold text-foreground">86</div>
-              <div className="text-[10px] text-success">Current</div>
+              <div className="font-mono text-2xl font-semibold text-foreground">
+                {avgScore > 0 ? avgScore : "--"}
+              </div>
+              <div className="text-[10px] text-success">
+                {avgScore > 0 ? "Average" : "Awaiting reviews"}
+              </div>
             </div>
           </div>
-          <div className="mt-6 flex h-40 items-end gap-3">
-            {scoreTrendData.map((d, i) => {
-              const isLast = i === scoreTrendData.length - 1;
-              return (
-                <div key={d.label} className="group flex flex-1 flex-col items-center gap-2">
-                  <span className={cn(
-                    "font-mono text-[9px] transition-colors",
-                    isLast ? "text-primary" : "text-transparent group-hover:text-muted-foreground",
-                  )}>
-                    {d.score}
-                  </span>
-                  <div className="flex h-32 w-full items-end">
-                    <div
-                      className={cn(
-                        "w-full rounded-t-sm transition-colors",
-                        isLast ? "bg-primary" : "bg-primary/25 group-hover:bg-primary/50",
-                      )}
-                      style={{ height: `${d.score}%` }}
-                    />
+          {scoreTrendData.length === 0 ? (
+            <div className="mt-6 flex h-40 flex-col items-center justify-center text-center text-xs text-muted-foreground">
+              <FileCode2 className="mb-2 size-6 text-muted-foreground/40" />
+              <span>No score history yet.</span>
+              <span className="text-[10px]">Submit a code review to see trends here.</span>
+            </div>
+          ) : (
+            <div className="mt-6 flex h-40 items-end gap-3">
+              {scoreTrendData.map((d, i) => {
+                const isLast = i === scoreTrendData.length - 1;
+                return (
+                  <div key={`${d.label}-${i}`} className="group flex flex-1 flex-col items-center gap-2">
+                    <span className={cn(
+                      "font-mono text-[9px] transition-colors",
+                      isLast ? "text-primary" : "text-transparent group-hover:text-muted-foreground",
+                    )}>
+                      {d.score}
+                    </span>
+                    <div className="flex h-32 w-full items-end">
+                      <div
+                        className={cn(
+                          "w-full rounded-t-sm transition-colors",
+                          isLast ? "bg-primary" : "bg-primary/25 group-hover:bg-primary/50",
+                        )}
+                        style={{ height: `${Math.max(d.score, 4)}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-[9px] text-muted-foreground">{d.label}</span>
                   </div>
-                  <span className="font-mono text-[9px] text-muted-foreground">{d.label}</span>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </section>
+
         <section className="panel p-5">
           <h2 className="text-sm font-semibold">Category health</h2>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">Across all your reviews</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {catHealth ? "Across all your analyzed reviews" : "No review data yet"}
+          </p>
           <div className="mt-5 space-y-4">
-            <Metric label="Security"    value={78} icon={ShieldAlert} />
-            <Metric label="Bugs"        value={86} icon={Bug} />
-            <Metric label="Quality"     value={91} icon={Code2} />
-            <Metric label="Performance" value={74} icon={Zap} />
+            <Metric label="Security"    value={catHealth ? catHealth.security : "--"} barValue={catHealth ? catHealth.security : 0} icon={ShieldAlert} />
+            <Metric label="Bugs"        value={catHealth ? catHealth.bugs : "--"} barValue={catHealth ? catHealth.bugs : 0} icon={Bug} />
+            <Metric label="Quality"     value={catHealth ? catHealth.quality : "--"} barValue={catHealth ? catHealth.quality : 0} icon={Code2} />
+            <Metric label="Performance" value={catHealth ? catHealth.performance : "--"} barValue={catHealth ? catHealth.performance : 0} icon={Zap} />
           </div>
         </section>
       </div>
 
       {/* ── Recent Reviews card (full width, below score trend) ── */}
       <div className="mb-6">
-        <RecentReviewsCard reviews={memberReviews} />
+        <RecentReviewsCard reviews={recentReviews} onSelectReview={handleSelectReview} />
       </div>
 
-      {/* ── Open findings + Recent reviews ── */}
+      {/* ── Open findings + Recent activity ── */}
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">
               Open findings
               <span className="ml-2 font-mono text-[11px] text-muted-foreground">
-                {memberOpenFindings.length}
+                {openFindings.length}
               </span>
             </h2>
             <span className={cn(
@@ -1609,61 +1731,80 @@ function Dashboard() {
             </span>
           </div>
           <div className="divide-y divide-border">
-            {memberOpenFindings.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setSelectedFinding(f.id)}
-                className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40"
-              >
-                <SeverityBadge severity={f.severity} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium text-foreground">{f.title}</p>
-                  <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                    {f.file} · {f.category}
-                  </p>
-                </div>
-                <ChevronDown className="mt-0.5 size-3.5 shrink-0 -rotate-90 text-muted-foreground" />
-              </button>
-            ))}
+            {openFindings.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center text-xs text-muted-foreground">
+                <CheckCircle2 className="mb-2 size-6 text-success" />
+                <span>No open findings detected</span>
+              </div>
+            ) : (
+              openFindings.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => {
+                    setSelectedFinding(f.id);
+                    if (f.reviewId) {
+                      handleSelectReview(f.reviewId);
+                    }
+                  }}
+                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40"
+                >
+                  <SeverityBadge severity={f.severity} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-foreground">{f.title}</p>
+                    <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                      {f.file} · {f.category}
+                    </p>
+                  </div>
+                  <ChevronDown className="mt-0.5 size-3.5 shrink-0 -rotate-90 text-muted-foreground" />
+                </button>
+              ))
+            )}
           </div>
         </section>
 
         <section className="panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold">Recent reviews</h2>
+            <h2 className="text-sm font-semibold">Recent activity</h2>
             <Button variant="ghost" size="sm" onClick={() => setView("history")}>
               View all
             </Button>
           </div>
           <div className="divide-y divide-border">
-            {memberReviews.map((r) => (
-              <button
-                key={r.name}
-                onClick={() => setView("result")}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40"
-              >
-                <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-mono text-xs font-medium text-foreground">{r.name}</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {r.lang} · {r.date} · {r.findings} findings
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {r.status === "Needs attention" && (
-                    <span className="hidden rounded-full bg-warning/10 px-2 py-0.5 text-[9px] font-medium text-warning sm:inline">
-                      Attention
+            {recentReviews.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center text-xs text-muted-foreground">
+                <FileCode2 className="mb-2 size-6 text-muted-foreground/40" />
+                <span>No recent review activity</span>
+              </div>
+            ) : (
+              recentReviews.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => handleSelectReview(r.id)}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40"
+                >
+                  <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-mono text-xs font-medium text-foreground">{r.name}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {r.lang} · {r.date} · {r.findings} findings
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {r.status === "Needs attention" && (
+                      <span className="hidden rounded-full bg-warning/10 px-2 py-0.5 text-[9px] font-medium text-warning sm:inline">
+                        Attention
+                      </span>
+                    )}
+                    <span className={cn(
+                      "inline-flex h-6 min-w-[2.2rem] items-center justify-center rounded border font-mono text-xs font-semibold",
+                      scoreBg(r.score),
+                    )}>
+                      {r.score}
                     </span>
-                  )}
-                  <span className={cn(
-                    "inline-flex h-6 min-w-[2.2rem] items-center justify-center rounded border font-mono text-xs font-semibold",
-                    scoreBg(r.score),
-                  )}>
-                    {r.score}
-                  </span>
-                </div>
-              </button>
-            ))}
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </section>
       </div>
@@ -1695,7 +1836,19 @@ function Stat({
 }
 
 function ReviewTable() {
-  const { setView } = useReviewStore();
+  const { setView, setActiveReview } = useReviewStore();
+  const { data: reviews = [], isLoading } = useReviewsQuery(50);
+
+  const handleSelect = async (reviewId: string) => {
+    try {
+      const full = await getReview(reviewId);
+      setActiveReview(full);
+      setView("result");
+    } catch {
+      toast.error("Failed to load review details");
+    }
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="data-table">
@@ -1710,36 +1863,45 @@ function ReviewTable() {
           </tr>
         </thead>
         <tbody>
-          {memberReviews.map((r) => (
-            <tr
-              key={r.name}
-              tabIndex={0}
-              role="button"
-              aria-label={`Open review for ${r.name}`}
-              onClick={() => setView("result")}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setView("result")}
-              className="cursor-pointer"
-            >
-              <td>
-                <span className="flex items-center gap-2 font-mono text-xs">
-                  <FileCode2 className="size-3.5 text-muted-foreground" />
-                  {r.name}
-                </span>
+          {reviews.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                {isLoading ? "Loading reviews..." : "No reviews found. Submit your first code review to populate this list."}
               </td>
-              <td>{r.lang}</td>
-              <td>
-                <span className={cn("font-mono font-semibold", scoreColor(r.score))}>{r.score}</span>
-              </td>
-              <td><span className="status-dot">{r.status}</span></td>
-              <td>{r.date}</td>
-              <td><ChevronDown className="size-3.5 -rotate-90" /></td>
             </tr>
-          ))}
+          ) : (
+            reviews.map((r) => (
+              <tr
+                key={r.id}
+                tabIndex={0}
+                role="button"
+                aria-label={`Open review for ${r.name}`}
+                onClick={() => handleSelect(r.id)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && handleSelect(r.id)}
+                className="cursor-pointer hover:bg-accent/30 transition-colors"
+              >
+                <td>
+                  <span className="flex items-center gap-2 font-mono text-xs">
+                    <FileCode2 className="size-3.5 text-muted-foreground" />
+                    {r.name}
+                  </span>
+                </td>
+                <td>{r.lang}</td>
+                <td>
+                  <span className={cn("font-mono font-semibold", scoreColor(r.score))}>{r.score}</span>
+                </td>
+                <td><span className="status-dot">{r.status}</span></td>
+                <td>{r.date}</td>
+                <td><ChevronDown className="size-3.5 -rotate-90 text-muted-foreground" /></td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
   );
 }
+
 /* ─────────────── company admin dashboard data ─────────────────────── */
 
 const members = [
@@ -1754,7 +1916,7 @@ const companyOpenFindings = [
   { member: "Sam Osei",  title: "Unsafe deserialization in upload handler", severity: "CRITICAL" as Severity, file: "upload.ts"    },
   { member: "Omar Faruk", title: "Hardcoded API key in config",             severity: "HIGH"     as Severity, file: "config.php"   },
   { member: "Omar Faruk", title: "Missing rate limiting on auth endpoint",  severity: "HIGH"     as Severity, file: "auth.ts"      },
-  { member: "Alex Morgan", title: "Unsanitized input in SQL query",         severity: "CRITICAL" as Severity, file: "api/users.ts" },
+  { member: "Alex Morgan", title: "Unsanitized input in SQL query",         severity: "CRITICAL" as Severity, file: "src/auth.ts" },
   { member: "Sam Osei",  title: "Unhandled promise rejection",              severity: "MEDIUM"   as Severity, file: "worker.ts"    },
 ];
 
@@ -2496,7 +2658,16 @@ function Profile() {
             <Field label="Role" value={roleLabel} />
             <Field label="Default language" value="TypeScript" />
           </div>
-          <div className="mt-6 flex justify-end">
+          <div className="mt-6 flex items-center justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border-red-500/20"
+              onClick={() => useAuthStore.getState().logout()}
+            >
+              <LogOut className="mr-1.5 size-3.5" />
+              Sign out
+            </Button>
             <Button>Save changes</Button>
           </div>
         </div>

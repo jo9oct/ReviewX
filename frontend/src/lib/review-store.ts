@@ -26,7 +26,7 @@ interface ReviewState {
   progress: number;
   step: number;
   theme: "dark" | "light";
-  selectedFinding: string;
+  selectedFinding: string | null;
   /** Persisted status per finding id, survives view navigation. */
   findingStatuses: Record<string, string>;
   severity: string;
@@ -37,8 +37,10 @@ interface ReviewState {
   /** Active backend review result, if available. */
   activeReview: ReviewResult | null;
   activeReviewId: string | null;
+  activeReviewStatus: string | null;
   setActiveReview: (review: ReviewResult | null) => void;
   setActiveReviewId: (id: string | null) => void;
+  setActiveReviewStatus: (status: string | null) => void;
   setView: (view: View) => void;
   setRole: (role: Role) => void;
   setAnalyzing: (value: boolean) => void;
@@ -60,36 +62,77 @@ function readTheme(): "dark" | "light" {
   return stored === "light" ? "light" : "dark";
 }
 
+function readActiveReviewId(): string | null {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(STORAGE_KEYS.ACTIVE_REVIEW_ID) || null;
+}
+
+function readActiveReviewStatus(): string | null {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS) || null;
+}
+
+const initialReviewId = readActiveReviewId();
+const initialStatus = readActiveReviewStatus();
+const isInitialAnalyzing = Boolean(initialReviewId && initialStatus && !["completed", "failed"].includes(initialStatus));
+
 export const useReviewStore = create<ReviewState>((set) => ({
-  view: "dashboard",
+  view: isInitialAnalyzing ? "new" : "dashboard",
   role: "member",
-  analyzing: false,
+  analyzing: isInitialAnalyzing,
   progress: 0,
   step: 0,
   theme: readTheme(),
-  selectedFinding: "FND-1042",
+  selectedFinding: null,
   findingStatuses: {},
   severity: "All",
   userName: "ReviewX member",
   userEmail: "",
   activeReview: null,
-  activeReviewId: null,
+  activeReviewId: initialReviewId,
+  activeReviewStatus: initialStatus,
 
-  setActiveReview: (activeReview) =>
+  setActiveReview: (activeReview) => {
+    if (typeof window !== "undefined") {
+      if (activeReview?.status === "completed" || activeReview?.status === "failed") {
+        sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_ID);
+        sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS);
+      }
+    }
     set({
       activeReview,
       activeReviewId: activeReview ? activeReview.reviewId : null,
-      selectedFinding: activeReview?.findings?.[0]?._id || activeReview?.findings?.[0]?.id || "FND-1042",
-    }),
+      activeReviewStatus: activeReview ? activeReview.status : null,
+      selectedFinding: activeReview?.findings?.[0]?._id || activeReview?.findings?.[0]?.id || null,
+    });
+  },
 
-  setActiveReviewId: (activeReviewId) => set({ activeReviewId }),
+  setActiveReviewId: (activeReviewId) => {
+    if (typeof window !== "undefined") {
+      if (activeReviewId) {
+        sessionStorage.setItem(STORAGE_KEYS.ACTIVE_REVIEW_ID, activeReviewId);
+      } else {
+        sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_ID);
+      }
+    }
+    set({ activeReviewId });
+  },
+
+  setActiveReviewStatus: (activeReviewStatus) => {
+    if (typeof window !== "undefined") {
+      if (activeReviewStatus && !["completed", "failed"].includes(activeReviewStatus)) {
+        sessionStorage.setItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS, activeReviewStatus);
+      } else {
+        sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS);
+      }
+    }
+    set({ activeReviewStatus });
+  },
 
   setView: (view) => set({ view }),
   setRole: (role) => set({ role, view: role === "platform" ? "admin" : "dashboard" }),
   setAnalyzing: (analyzing) => set({ analyzing }),
 
-  // Accepts both a plain value and a functional updater so callers can use
-  // `setProgress(p => Math.min(p + 4, 100))` to avoid stale-closure bugs.
   setProgress: (updater) =>
     set((state) => ({
       progress: typeof updater === "function" ? updater(state.progress) : updater,
@@ -115,7 +158,11 @@ export const useReviewStore = create<ReviewState>((set) => ({
   setUserName: (userName) => set({ userName }),
   setUserEmail: (userEmail) => set({ userEmail }),
 
-  resetSession: () =>
+  resetSession: () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_ID);
+      sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS);
+    }
     set({
       view: "dashboard",
       analyzing: false,
@@ -125,5 +172,7 @@ export const useReviewStore = create<ReviewState>((set) => ({
       findingStatuses: {},
       activeReview: null,
       activeReviewId: null,
-    }),
+      activeReviewStatus: null,
+    });
+  },
 }));

@@ -32,16 +32,25 @@ import {
 
 export async function runReview(
   context,
-  access = null
+  access = null,
+  onStage = null
 ) {
   validateContext(
     context
   );
 
+  if (typeof onStage === "function") {
+    await onStage("analyzing", 35);
+  }
+
   const analyzerFindings =
     await analyzeAll(
       context
     );
+
+  if (typeof onStage === "function") {
+    await onStage("applying_rules", 55);
+  }
 
   const companyRuleFindings =
     await evaluateCompanyRules(
@@ -69,12 +78,20 @@ export async function runReview(
       context.code
     );
 
+  if (typeof onStage === "function") {
+    await onStage("generating_ai", 75);
+  }
+
   const aiAnalysis =
     await analyzeWithAI({
       context,
       findings: findingsWithEvidence,
       access
     });
+
+  if (typeof onStage === "function") {
+    await onStage("scoring", 90);
+  }
 
   const score =
     calculateScore(
