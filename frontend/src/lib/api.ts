@@ -549,6 +549,54 @@ export function useDeleteCompanyRuleMutation() {
   });
 }
 
+// ── Company Members API ────────────────────────────────────────────────────
+
+export interface CompanyMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  rawRole?: string;
+  reviews: number;
+  avg: number;
+  open: number;
+  trend: "up" | "down" | "neutral";
+  createdAt: string;
+}
+
+export async function getCompanyMembers(): Promise<CompanyMember[]> {
+  return request<CompanyMember[]>("/api/company/members");
+}
+
+export function useCompanyMembersQuery(userId?: string) {
+  return useQuery({
+    queryKey: ["company-members", userId ?? "anonymous"],
+    queryFn: getCompanyMembers,
+    refetchInterval: 5000,
+  });
+}
+
+export async function inviteCompanyMember(data: {
+  name: string;
+  email: string;
+  role?: string;
+}): Promise<CompanyMember> {
+  return request<CompanyMember>("/api/company/members", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function useInviteCompanyMemberMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: inviteCompanyMember,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["company-members"] });
+    },
+  });
+}
+
 // ── Platform Admin API ─────────────────────────────────────────────────────
 
 export interface AdminStatsKpis {

@@ -24,6 +24,9 @@ import {
   type AdminSystemEvent,
   useAdminCompaniesQuery,
   type AdminCompanyItem,
+  useCompanyMembersQuery,
+  useInviteCompanyMemberMutation,
+  type CompanyMember,
 } from "@/lib/api";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
@@ -1940,35 +1943,33 @@ function ReviewTable() {
   );
 }
 
-/* ─────────────── company admin dashboard data ─────────────────────── */
-
-const members = [
-  { name: "Alex Morgan",  email: "alex@reviewx.dev",  role: "Member",        reviews: 23, avg: 82, open: 7,  trend: "up"   },
-  { name: "Dana Kim",     email: "dana@reviewx.dev",  role: "Company admin", reviews: 11, avg: 88, open: 2,  trend: "up"   },
-  { name: "Sam Osei",     email: "sam@acme.dev",   role: "Member",        reviews: 31, avg: 76, open: 12, trend: "down" },
-  { name: "Lena Park",    email: "lena@acme.dev",  role: "Member",        reviews: 18, avg: 91, open: 3,  trend: "up"   },
-  { name: "Omar Faruk",   email: "omar@acme.dev",  role: "Member",        reviews: 9,  avg: 69, open: 10, trend: "down" },
-];
-
-const companyOpenFindings = [
-  { member: "Sam Osei",  title: "Unsafe deserialization in upload handler", severity: "CRITICAL" as Severity, file: "upload.ts"    },
-  { member: "Omar Faruk", title: "Hardcoded API key in config",             severity: "HIGH"     as Severity, file: "config.php"   },
-  { member: "Omar Faruk", title: "Missing rate limiting on auth endpoint",  severity: "HIGH"     as Severity, file: "auth.ts"      },
-  { member: "Alex Morgan", title: "Unsanitized input in SQL query",         severity: "CRITICAL" as Severity, file: "src/auth.ts" },
-  { member: "Sam Osei",  title: "Unhandled promise rejection",              severity: "MEDIUM"   as Severity, file: "worker.ts"    },
-];
-
-const companyReviews = [
-  { name: "billing/webhook.ts",  member: "Dana Kim",    lang: "TypeScript", score: 91, date: "Today, 14:32" },
-  { name: "auth/session.py",     member: "Alex Morgan", lang: "Python",     score: 64, date: "Today, 10:08" },
-  { name: "UserService.java",    member: "Lena Park",   lang: "Java",       score: 82, date: "Yesterday"    },
-  { name: "upload.ts",           member: "Sam Osei",    lang: "TypeScript", score: 71, date: "Sep 16"       },
-  { name: "config.php",          member: "Omar Faruk",  lang: "PHP",        score: 58, date: "Sep 15"       },
-];
+/* ─────────────── company admin dashboard (Live Backend Data) ────────── */
 
 function CompanyDashboard() {
-  const { setView } = useReviewStore();
-  const critCount = companyOpenFindings.filter((f) => f.severity === "CRITICAL").length;
+  const { setView, setActiveReview } = useReviewStore();
+  const user = useAuthStore((s) => s.user);
+  const { data: metricsData } = useDashboardMetricsQuery(user?.id);
+  const { data: rules = [] } = useCompanyRulesQuery();
+  const { data: members = [], isLoading: membersLoading } = useCompanyMembersQuery(user?.id);
+
+  const teamAvg = metricsData?.averageScore ?? 0;
+  const teamReviews = metricsData?.totalReviews ?? 0;
+  const totalFindings = metricsData?.totalFindings ?? 0;
+  const critCount = metricsData?.criticalCount ?? 0;
+  const activeRulesCount = rules.filter((r) => r.enabled).length;
+  const catHealth = metricsData?.categoryHealth ?? { security: 100, bugs: 100, quality: 100, performance: 100 };
+  const recentReviews = metricsData?.recentReviews ?? [];
+  const openFindings = metricsData?.openFindings ?? [];
+
+  const handleSelectReview = async (reviewId: string) => {
+    try {
+      const full = await getReview(reviewId);
+      setActiveReview(full);
+      setView("result");
+    } catch {
+      toast.error("Failed to load review details");
+    }
+  };
 
   return (
     <>
@@ -1988,35 +1989,44 @@ function CompanyDashboard() {
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5"><Gauge className="size-3.5" />Team avg score</span>
-            <span className="font-mono text-[10px] text-success">↑ +3 this month</span>
+            <span className="font-mono text-[10px] text-success">
+              {teamAvg > 0 ? "Overall health" : "No team reviews yet"}
+            </span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">80</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
+            {teamAvg > 0 ? teamAvg : "--"}
+          </div>
           <div className="mt-1 h-1 overflow-hidden rounded-full bg-secondary">
-            <div className="h-full w-[80%] rounded-full bg-score" />
+            <div
+              className="h-full rounded-full bg-score transition-all duration-500"
+              style={{ width: `${Math.min(teamAvg, 100)}%` }}
+            />
           </div>
         </div>
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5"><FileText className="size-3.5" />Team reviews</span>
-            <span className="font-mono text-[10px] text-success">↑ 14 this week</span>
+            <span className="font-mono text-[10px] text-muted-foreground">Total</span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">92</div>
-          <div className="mt-1 text-[10px] text-muted-foreground">{members.length} active members</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">{teamReviews}</div>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            {members.length === 1 ? "1 active member" : `${members.length} active members`}
+          </div>
         </div>
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5"><AlertTriangle className="size-3.5" />Open findings</span>
             <span className="font-mono text-[10px] text-critical">{critCount} critical</span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">34</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">{totalFindings}</div>
           <div className="mt-1 text-[10px] text-muted-foreground">across all members</div>
         </div>
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5"><ShieldCheck className="size-3.5" />Active rules</span>
-            <span className="font-mono text-[10px] text-muted-foreground">2 custom</span>
+            <span className="font-mono text-[10px] text-muted-foreground">{rules.length} custom</span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">4</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">{activeRulesCount}</div>
           <div className="mt-1 text-[10px] text-muted-foreground">enforced on every review</div>
         </div>
       </div>
@@ -2042,34 +2052,44 @@ function CompanyDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {members.map((m) => (
-                  <tr key={m.email}>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <div className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-[9px] font-semibold text-primary-foreground">
-                          {m.name.split(" ").map((n) => n[0]).join("")}
-                        </div>
-                        <div>
-                          <div className="text-xs font-medium text-foreground">{m.name}</div>
-                          <div className="font-mono text-[10px] text-muted-foreground">{m.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>{m.role}</td>
-                    <td className="font-mono">{m.reviews}</td>
-                    <td>
-                      <span className={cn("font-mono font-semibold", scoreColor(m.avg))}>{m.avg}</span>
-                    </td>
-                    <td>
-                      <span className={cn(
-                        "font-mono text-xs font-semibold",
-                        m.open >= 10 ? "text-critical" : m.open >= 5 ? "text-warning" : "text-success",
-                      )}>
-                        {m.open}
-                      </span>
+                {members.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      {membersLoading ? "Loading members..." : "No members found in this workspace."}
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  members.map((m) => (
+                    <tr key={m.id || m.email}>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <div className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-[9px] font-semibold text-primary-foreground">
+                            {m.name.split(" ").map((n) => n[0]).join("")}
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-foreground">{m.name}</div>
+                            <div className="font-mono text-[10px] text-muted-foreground">{m.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>{m.role}</td>
+                      <td className="font-mono">{m.reviews}</td>
+                      <td>
+                        <span className={cn("font-mono font-semibold", m.avg > 0 ? scoreColor(m.avg) : "text-muted-foreground")}>
+                          {m.avg > 0 ? m.avg : "--"}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={cn(
+                          "font-mono text-xs font-semibold",
+                          m.open >= 10 ? "text-critical" : m.open >= 5 ? "text-warning" : "text-success",
+                        )}>
+                          {m.open}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -2079,10 +2099,10 @@ function CompanyDashboard() {
           <h2 className="text-sm font-semibold">Rule compliance</h2>
           <p className="mt-0.5 text-[11px] text-muted-foreground">Pass rate across team reviews</p>
           <div className="mt-5 space-y-4">
-            <Metric label="Security"    value={92} icon={ShieldAlert} />
-            <Metric label="Bugs"        value={84} icon={Bug} />
-            <Metric label="Quality"     value={88} icon={Code2} />
-            <Metric label="Performance" value={71} icon={Zap} />
+            <Metric label="Security"    value={catHealth.security} icon={ShieldAlert} />
+            <Metric label="Bugs"        value={catHealth.bugs} icon={Bug} />
+            <Metric label="Quality"     value={catHealth.quality} icon={Code2} />
+            <Metric label="Performance" value={catHealth.performance} icon={Zap} />
           </div>
           <Button variant="outline" size="sm" className="mt-5 w-full" onClick={() => setView("rules")}>
             <ShieldCheck />
@@ -2098,28 +2118,38 @@ function CompanyDashboard() {
             <h2 className="text-sm font-semibold">
               Top open findings
               <span className="ml-2 font-mono text-[11px] text-muted-foreground">
-                {companyOpenFindings.length}
+                {openFindings.length}
               </span>
             </h2>
-            <span className={cn(
-              "inline-flex h-5 items-center rounded-sm border px-1.5 font-mono text-[9px] font-semibold",
-              "severity-critical",
-            )}>
-              {critCount} CRITICAL
-            </span>
+            {critCount > 0 && (
+              <span className={cn(
+                "inline-flex h-5 items-center rounded-sm border px-1.5 font-mono text-[9px] font-semibold",
+                "severity-critical",
+              )}>
+                {critCount} CRITICAL
+              </span>
+            )}
           </div>
           <div className="divide-y divide-border">
-            {companyOpenFindings.map((f, i) => (
-              <div key={i} className="flex items-start gap-3 px-4 py-3">
-                <SeverityBadge severity={f.severity} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium text-foreground">{f.title}</p>
-                  <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                    {f.file} · {f.member}
-                  </p>
-                </div>
+            {openFindings.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
+                <CheckCircle2 className="size-6 text-success" />
+                <p className="text-xs font-medium text-foreground">All clear</p>
+                <p className="text-[10px]">No open findings across team reviews.</p>
               </div>
-            ))}
+            ) : (
+              openFindings.map((f, i) => (
+                <div key={f.id || i} className="flex items-start gap-3 px-4 py-3">
+                  <SeverityBadge severity={f.severity as Severity} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-foreground">{f.title}</p>
+                    <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                      {f.file} · {f.category}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </section>
 
@@ -2129,27 +2159,35 @@ function CompanyDashboard() {
             <Button variant="ghost" size="sm" onClick={() => setView("history")}>View all</Button>
           </div>
           <div className="divide-y divide-border">
-            {companyReviews.map((r) => (
-              <button
-                key={r.name}
-                onClick={() => setView("result")}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40"
-              >
-                <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-mono text-xs font-medium text-foreground">{r.name}</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {r.member} · {r.lang} · {r.date}
-                  </p>
-                </div>
-                <span className={cn(
-                  "inline-flex h-6 min-w-[2.2rem] items-center justify-center rounded border font-mono text-xs font-semibold",
-                  scoreBg(r.score),
-                )}>
-                  {r.score}
-                </span>
-              </button>
-            ))}
+            {recentReviews.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
+                <FileCode2 className="size-6 text-muted-foreground/60" />
+                <p className="text-xs font-medium text-foreground">No reviews yet</p>
+                <p className="text-[10px]">Team reviews will appear here once submitted.</p>
+              </div>
+            ) : (
+              recentReviews.map((r) => (
+                <button
+                  key={r.reviewId || r.id}
+                  onClick={() => handleSelectReview(r.reviewId || r.id)}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40"
+                >
+                  <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-mono text-xs font-medium text-foreground">{r.fileName || r.name}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {r.language || r.lang} · {r.date || r.relativeDate}
+                    </p>
+                  </div>
+                  <span className={cn(
+                    "inline-flex h-6 min-w-[2.2rem] items-center justify-center rounded border font-mono text-xs font-semibold",
+                    scoreBg(r.score),
+                  )}>
+                    {r.score}
+                  </span>
+                </button>
+              ))
+            )}
           </div>
         </section>
       </div>
@@ -2998,47 +3036,141 @@ function RuleModal({
     </div>
   );
 }
+function InviteMemberModal({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("member");
+  const inviteMutation = useInviteCompanyMemberMutation();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) {
+      toast.error("Please enter a name and email.");
+      return;
+    }
+    try {
+      await inviteMutation.mutateAsync({
+        name: name.trim(),
+        email: email.trim(),
+        role,
+      });
+      toast.success(`Invited ${name.trim()} successfully!`);
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to invite member");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="panel w-full max-w-md p-6 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <h2 className="text-base font-semibold">Invite team member</h2>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
+        </div>
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-foreground">Full name</label>
+            <Input
+              required
+              placeholder="e.g. Alex Morgan"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-foreground">Email address</label>
+            <Input
+              required
+              type="email"
+              placeholder="e.g. alex@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-foreground">Role</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="mt-1 w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="member">Member (can submit reviews and view team dashboard)</option>
+              <option value="company_admin">Company admin (can manage team and rules)</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" type="button" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={inviteMutation.isPending}>
+              {inviteMutation.isPending ? "Inviting..." : "Send invite"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function Company() {
+  const user = useAuthStore((s) => s.user);
+  const { data: members = [], isLoading: membersLoading } = useCompanyMembersQuery(user?.id);
+  const { data: metricsData } = useDashboardMetricsQuery(user?.id);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+
   return (
     <>
       <PageHeading
         title="Team & Members"
         subtitle="Organization-wide review activity and member access."
         action={
-          <Button>
+          <Button onClick={() => setInviteModalOpen(true)}>
             <User />
             Invite member
           </Button>
         }
       />
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Active members" value="18" delta="2 seats available" icon={Users} />
-        <Stat label="Reviews this month" value="342" delta="+18% vs last month" icon={Activity} />
-        <Stat label="Critical open" value="7" delta="Across 4 repositories" icon={ShieldAlert} />
+        <Stat label="Active members" value={members.length} delta="Workspace seats" icon={Users} />
+        <Stat label="Reviews total" value={metricsData?.totalReviews ?? 0} delta="Across all members" icon={Activity} />
+        <Stat label="Critical open" value={metricsData?.criticalCount ?? 0} delta="Requires attention" icon={ShieldAlert} />
       </div>
       <section className="panel mt-4 overflow-hidden">
-        <div className="border-b border-border p-4 text-sm font-semibold">Members</div>
-        {["Alex Morgan", "Maya Chen", "Theo James", "Nina Patel"].map((n, i) => (
-          <div className="flex items-center gap-3 border-b border-border p-4 last:border-0" key={n}>
-            <div className="grid size-8 place-items-center rounded-full bg-accent text-xs font-semibold">
-              {n
-                .split(" ")
-                .map((x) => x[0])
-                .join("")}
-            </div>
-            <div className="flex-1">
-              <p className="text-xs font-medium">{n}</p>
-              <p className="text-[10px] text-muted-foreground">
-                {n.toLowerCase().replace(" ", ".")}@acme.dev
-              </p>
-            </div>
-            <span className="rounded border border-border px-2 py-1 text-[10px]">
-              {i === 0 ? "Owner" : i === 1 ? "Admin" : "Member"}
-            </span>
-            <span className="status-dot">Active</span>
+        <div className="border-b border-border p-4 text-sm font-semibold">Members ({members.length})</div>
+        {members.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            {membersLoading ? "Loading members..." : "No members found in this workspace."}
           </div>
-        ))}
+        ) : (
+          members.map((m) => (
+            <div className="flex items-center gap-3 border-b border-border p-4 last:border-0" key={m.id || m.email}>
+              <div className="grid size-8 place-items-center rounded-full bg-accent text-xs font-semibold">
+                {m.name
+                  .split(" ")
+                  .map((x) => x[0])
+                  .join("")}
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-medium">{m.name}</p>
+                <p className="text-[10px] text-muted-foreground">{m.email}</p>
+              </div>
+              <span className="rounded border border-border px-2 py-1 text-[10px]">
+                {m.role}
+              </span>
+              <span className="status-dot">Active</span>
+            </div>
+          ))
+        )}
       </section>
+
+      {inviteModalOpen && (
+        <InviteMemberModal onClose={() => setInviteModalOpen(false)} />
+      )}
     </>
   );
 }
