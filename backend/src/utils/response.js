@@ -1,4 +1,29 @@
-﻿export function successResponse({
+export function createResponse({
+  success,
+  data = undefined,
+  error = undefined,
+  meta = undefined
+}) {
+  const response = {
+    success
+  };
+
+  if (data !== undefined) {
+    response.data = data;
+  }
+
+  if (error !== undefined) {
+    response.error = error;
+  }
+
+  if (meta !== undefined) {
+    response.meta = meta;
+  }
+
+  return response;
+}
+
+export function successResponse({
   data = null,
   message = "Request successful.",
   requestId = null,
@@ -59,3 +84,10 @@ export function sendSuccess(
       })
     );
 }
+
+export default {
+  createResponse,
+  successResponse,
+  errorResponse,
+  sendSuccess
+};

@@ -1,36 +1,39 @@
-﻿
-export function buildFindingAnalysisPrompt(
-  finding
-) {
-  return `
-Analyze the following static-analysis finding.
-
-You are assisting a professional code review platform.
-
-IMPORTANT:
-- Do not invent evidence.
-- Do not change the finding severity.
-- Do not claim that a vulnerability was verified if it was only statically detected.
-- Use only the supplied source and evidence.
-- Explain uncertainty when the static evidence is incomplete.
-- Return valid JSON only.
-
-Finding:
-${JSON.stringify(
+const findingAnalysisPrompt = ({
   finding,
-  null,
-  2
-)}
+  source
+}) => {
+  return `
+You are assisting a static code review system.
 
-Return:
+Analyze the supplied finding using ONLY the provided source
+and deterministic finding information.
+
+Do not invent:
+- vulnerabilities
+- CVEs
+- dependencies
+- versions
+- exploit results
+- test results
+- source locations
+- evidence
+
+Determine whether the finding appears technically justified.
+
+Return JSON only:
 
 {
-  "findingFingerprint": "...",
-  "explanation": "...",
-  "impact": "...",
-  "fix": "...",
-  "improvedCode": "...",
-  "securityExplanation": "..."
+  "assessment": "confirmed|likely|uncertain|not_supported",
+  "explanation": "short explanation",
+  "remediation": "practical remediation guidance"
 }
-`;
-}
+
+Finding:
+${JSON.stringify(finding, null, 2)}
+
+Source:
+${source}
+`.trim();
+};
+
+export default findingAnalysisPrompt;

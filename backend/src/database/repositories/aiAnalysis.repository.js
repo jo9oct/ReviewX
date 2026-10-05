@@ -1,93 +1,87 @@
-﻿import {
-  AiAnalysis
-} from "../models/aiAnalysis.model.js";
+import AiAnalysis from '../models/aiAnalysis.model.js';
 
+const create = async (data) => {
+  return AiAnalysis.create(data);
+};
 
-export async function create(
-  data,
-  options = {}
-) {
-  if (
-    Object.keys(options).length ===
-    0
-  ) {
-    return AiAnalysis.create(data);
-  }
+const findById = async (analysisId) => {
+  return AiAnalysis.findById(analysisId).lean();
+};
 
+const findByReviewId = async (reviewId) => {
+  return AiAnalysis.find({
+    reviewId,
+  })
+    .sort({
+      createdAt: 1,
+    })
+    .lean();
+};
 
-  const [
-    aiAnalysis
-  ] =
-    await AiAnalysis.create(
-      [data],
-      options
-    );
-
-
-  return aiAnalysis;
-}
-
-
-export async function findByReviewId(
-  reviewId
-) {
-  return AiAnalysis.findOne({
-    reviewId
-  }).lean();
-}
-
-
-export async function upsertByReviewId(
+const findByReviewAndType = async (
   reviewId,
-  data,
-  options = {}
-) {
+  analysisType,
+) => {
+  return AiAnalysis.findOne({
+    reviewId,
+    analysisType,
+  }).lean();
+};
+
+const updateById = async (
+  analysisId,
+  updates,
+) => {
+  return AiAnalysis.findByIdAndUpdate(
+    analysisId,
+    {
+      $set: updates,
+    },
+    {
+      new: true,
+      runValidators: true,
+      lean: true,
+    },
+  );
+};
+
+const updateByReviewId = async (
+  reviewId,
+  updates,
+) => {
   return AiAnalysis.findOneAndUpdate(
     {
-      reviewId
+      reviewId,
     },
-
     {
-      $set:
-        data,
-
-      $setOnInsert: {
-        reviewId
-      }
+      $set: updates,
     },
-
     {
-      new:
-        true,
+      new: true,
+      upsert: true,
+      runValidators: true,
+      lean: true,
+    },
+  );
+};
 
-      upsert:
-        true,
+const aiAnalysisRepository = Object.freeze({
+  create,
+  findById,
+  findByReviewId,
+  findByReviewAndType,
+  updateById,
+  updateByReviewId,
+});
 
-      runValidators:
-        true,
+export {
+  create,
+  findById,
+  findByReviewId,
+  findByReviewAndType,
+  updateById,
+  updateByReviewId,
+  aiAnalysisRepository,
+};
 
-      ...options
-    }
-  ).lean();
-}
-
-
-export async function deleteByReviewId(
-  reviewId
-) {
-  return AiAnalysis.findOneAndDelete({
-    reviewId
-  }).lean();
-}
-
-
-export const aiAnalysisRepository =
-  Object.freeze({
-    create,
-
-    findByReviewId,
-
-    upsertByReviewId,
-
-    deleteByReviewId
-  });
+export default aiAnalysisRepository;

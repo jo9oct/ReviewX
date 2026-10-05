@@ -1,190 +1,97 @@
-﻿
-import path from "node:path";
+import path from 'node:path';
 
-import { parserConfig } from "../config/parser.js";
-import { BadRequestError } from "../utils/errors.js";
+import { AppError } from '../utils/errors.js';
 
-const extensionMap =
-  parserConfig.extensionMap;
+const EXTENSION_LANGUAGE_MAP = Object.freeze({
+  '.js': 'javascript',
+  '.jsx': 'javascript',
+  '.ts': 'typescript',
+  '.tsx': 'typescript',
+  '.py': 'python',
+  '.java': 'java',
+  '.c': 'c',
+  '.h': 'c',
+  '.cc': 'cpp',
+  '.cpp': 'cpp',
+  '.cxx': 'cpp',
+  '.hpp': 'cpp',
+  '.go': 'go',
+  '.php': 'php',
+  '.cs': 'csharp',
+});
 
-export function detectLanguage({
-  code,
-  fileName = null,
-  language = null
-}) {
+const detectLanguageFromPath = (
+  filePath,
+) => {
   if (
-    typeof code !== "string" ||
-    code.trim().length === 0
+    typeof filePath !== 'string' ||
+    !filePath.trim()
   ) {
-    throw new BadRequestError(
-      "Source code is required for language detection."
-    );
+    throw new AppError({
+      code: 'INVALID_FILE_PATH',
+      message:
+        'A valid file path is required for language detection.',
+      statusCode: 400,
+    });
   }
 
-  if (language) {
-    const normalizedLanguage =
-      normalizeLanguage(language);
+  const extension = path
+    .extname(filePath)
+    .toLowerCase();
 
-    if (
-      parserConfig.supportedLanguages.includes(
-        normalizedLanguage
-      )
-    ) {
-      return normalizedLanguage;
-    }
-
-    throw new BadRequestError(
-      `Unsupported language: ${language}.`
-    );
-  }
-
-  if (fileName) {
-    const extension =
-      path.extname(fileName).toLowerCase();
-
-    const detected =
-      extensionMap[extension];
-
-    if (detected) {
-      return detected;
-    }
-
-    throw new BadRequestError(
-      `Unable to detect language from extension: ${extension || "none"}.`
-    );
-  }
-
-  const detected =
-    detectFromContent(code);
-
-  if (detected) {
-    return detected;
-  }
-
-  throw new BadRequestError(
-    "Unable to detect the source-code language."
+  return (
+    EXTENSION_LANGUAGE_MAP[extension] ||
+    'text'
   );
-}
+};
 
-export function normalizeLanguage(
-  language
-) {
-  const normalized =
-    String(language)
-      .trim()
-      .toLowerCase();
-
-  const aliases = {
-    js: "javascript",
-    jsx: "javascript",
-    node: "javascript",
-    nodejs: "javascript",
-
-    ts: "typescript",
-    tsx: "typescript",
-
-    py: "python",
-
-    cs: "csharp",
-    "c#": "csharp",
-
-    c: "c",
-    "c++": "cpp",
-
-    html: "html",
-
-    css: "css",
-
-    sql: "sql"
-  };
-
-  return aliases[normalized] || normalized;
-}
-
-function detectFromContent(code) {
-  const sample =
-    code.slice(0, 12000);
-
+const detectLanguage = (file) => {
   if (
-    /<(!DOCTYPE|html|head|body|div|script)\b/i.test(
-      sample
-    )
+    typeof file === 'string'
   ) {
-    return "html";
+    return detectLanguageFromPath(file);
   }
 
   if (
-    /^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\b/im.test(
-      sample
-    )
+    !file ||
+    typeof file !== 'object' ||
+    typeof file.path !== 'string'
   ) {
-    return "sql";
+    throw new AppError({
+      code: 'INVALID_LANGUAGE_INPUT',
+      message:
+        'A valid file or file path is required for language detection.',
+      statusCode: 400,
+    });
   }
 
-  if (
-    /^\s*(def|class)\s+\w+/m.test(sample) ||
-    /^\s*import\s+\w+/m.test(sample) &&
-      /:\s*$/m.test(sample)
-  ) {
-    return "python";
+  return detectLanguageFromPath(
+    file.path,
+  );
+};
+
+const detectLanguages = (files) => {
+  if (!Array.isArray(files)) {
+    throw new AppError({
+      code: 'INVALID_FILE_COLLECTION',
+      message:
+        'The source file collection is invalid.',
+      statusCode: 400,
+    });
   }
 
-  if (
-    /\b(interface|type|enum)\s+\w+/m.test(
-      sample
-    )
-  ) {
-    return "typescript";
-  }
+  return files.map((file) => ({
+    path: file.path,
+    language:
+      detectLanguageFromPath(file.path),
+  }));
+};
 
-  if (
-    /\b(public|private|protected)\s+(class|interface)\s+\w+/m.test(
-      sample
-    )
-  ) {
-    return "java";
-  }
+export {
+  EXTENSION_LANGUAGE_MAP,
+  detectLanguage,
+  detectLanguageFromPath,
+  detectLanguages,
+};
 
-  if (
-    /\bnamespace\s+\w+/m.test(sample) &&
-    /\busing\s+\w+/m.test(sample)
-  ) {
-    return "csharp";
-  }
-
-  if (
-    /#include\s*<[^>]+>/.test(sample)
-  ) {
-    if (
-      /\b(std::|template\s*<)/.test(sample)
-    ) {
-      return "cpp";
-    }
-
-    return "c";
-  }
-
-  if (
-    /<\?php\b/i.test(sample)
-  ) {
-    return "php";
-  }
-
-  if (
-    /(^|\n)\s*[.#]?[a-zA-Z][\w-]*\s*\{[^}]*:[^}]*\}/s.test(
-      sample
-    )
-  ) {
-    return "css";
-  }
-
-  if (
-    /\b(const|let|var|function|=>)\b/.test(
-      sample
-    )
-  ) {
-    return "javascript";
-  }
-
-  return null;
-}
+export default detectLanguage;

@@ -1,114 +1,70 @@
-﻿import {
-  Evidence
-} from "../models/evidence.model.js";
+import Evidence from '../models/evidence.model.js';
 
+const create = async (data) => {
+  return Evidence.create(data);
+};
 
-export async function create(
-  data,
-  options = {}
-) {
+const createMany = async (documents) => {
   if (
-    Object.keys(options).length ===
-    0
-  ) {
-    return Evidence.create(data);
-  }
-
-
-  const [
-    evidence
-  ] =
-    await Evidence.create(
-      [data],
-      options
-    );
-
-
-  return evidence;
-}
-
-
-export async function createMany(
-  evidence,
-  options = {}
-) {
-  if (
-    !Array.isArray(evidence) ||
-    evidence.length === 0
+    !Array.isArray(documents) ||
+    documents.length === 0
   ) {
     return [];
   }
 
-
   return Evidence.insertMany(
-    evidence,
+    documents,
     {
-      ordered:
-        true,
-
-      ...options
-    }
+      ordered: true,
+    },
   );
-}
+};
 
-
-export async function findById(
-  evidenceId
-) {
+const findById = async (evidenceId) => {
   return Evidence.findById(
-    evidenceId
+    evidenceId,
   ).lean();
-}
+};
 
-
-export async function findByFindingId(
-  findingId
-) {
+const findByFindingId = async (
+  findingId,
+) => {
   return Evidence.find({
-    findingId
+    findingId,
   })
     .sort({
-      createdAt:
-        1
+      lineStart: 1,
     })
     .lean();
-}
+};
 
-
-export async function findByReviewId(
-  reviewId
-) {
+const findByReviewId = async (
+  reviewId,
+) => {
   return Evidence.find({
-    reviewId
+    reviewId,
   })
     .sort({
-      createdAt:
-        1
+      createdAt: 1,
     })
     .lean();
-}
+};
 
+const evidenceRepository = Object.freeze({
+  create,
+  createMany,
+  findById,
+  findByFindingId,
+  findByReviewId,
+});
 
-export async function deleteByReviewId(
-  reviewId
-) {
-  return Evidence.deleteMany({
-    reviewId
-  });
-}
+export {
+  create,
+  createMany,
+  findById,
+  findByFindingId,
+  findByReviewId,
+  evidenceRepository,
+};
 
-
-export const evidenceRepository =
-  Object.freeze({
-    create,
-
-    createMany,
-
-    findById,
-
-    findByFindingId,
-
-    findByReviewId,
-
-    deleteByReviewId
-  });
+export default evidenceRepository;

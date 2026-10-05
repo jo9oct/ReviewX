@@ -1,15 +1,19 @@
-﻿import {
-  NotFoundError
-} from "../utils/errors.js";
+import { AppError } from '../utils/errors.js';
 
-export function notFound(
-  req,
-  _res,
-  next
-) {
-  next(
-    new NotFoundError(
-      `Route ${req.method} ${req.originalUrl} was not found.`
-    )
+const notFoundMiddleware = (req, res, next) => {
+  return next(
+    new AppError({
+      code: 'ROUTE_NOT_FOUND',
+      message: 'The requested resource was not found.',
+      statusCode: 404,
+      details: {
+        method: req.method,
+        path: req.originalUrl
+      }
+    })
   );
-}
+};
+
+export {
+  notFoundMiddleware
+};

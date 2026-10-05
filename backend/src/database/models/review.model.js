@@ -1,4 +1,4 @@
-﻿import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
 const { Schema } = mongoose;
 
@@ -9,31 +9,26 @@ const reviewSummarySchema = new Schema(
       min: 0,
       default: 0
     },
-
     critical: {
       type: Number,
       min: 0,
       default: 0
     },
-
     high: {
       type: Number,
       min: 0,
       default: 0
     },
-
     medium: {
       type: Number,
       min: 0,
       default: 0
     },
-
     low: {
       type: Number,
       min: 0,
       default: 0
     },
-
     info: {
       type: Number,
       min: 0,
@@ -48,26 +43,50 @@ const reviewSummarySchema = new Schema(
 
 const reviewSchema = new Schema(
   {
+    reviewId: {
+      type: Schema.Types.ObjectId,
+      default: () => new mongoose.Types.ObjectId()
+    },
+
     user: {
       type: Schema.Types.ObjectId,
-      ref: "User",
+      ref: 'User',
       default: null,
       index: true
     },
 
     company: {
       type: Schema.Types.ObjectId,
-      ref: "Company",
+      ref: 'Company',
       default: null,
       index: true
     },
+
+    ownerId: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true
+    },
+
+    projectId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Project',
+      default: null
+    },
+
+    sourceType: {
+      type: String,
+      enum: ['paste', 'upload', 'archive', 'github'],
+      default: 'paste'
+    },
+
     source: {
       type: String,
-      enum: [
-        "paste",
-        "upload"
-      ],
-      required: true
+      enum: ['paste', 'upload', 'archive', 'github'],
+      default: function () {
+        return this.sourceType || 'paste';
+      }
     },
 
     fileName: {
@@ -81,7 +100,12 @@ const reviewSchema = new Schema(
       type: String,
       trim: true,
       maxlength: 50,
-      required: true
+      default: 'unknown'
+    },
+
+    languages: {
+      type: [String],
+      default: []
     },
 
     fileExtension: {
@@ -95,25 +119,39 @@ const reviewSchema = new Schema(
     sourceSize: {
       type: Number,
       min: 0,
-      required: true
+      default: 0
+    },
+
+    totalFiles: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+
+    totalLines: {
+      type: Number,
+      min: 0,
+      default: 0
     },
 
     status: {
       type: String,
       enum: [
-        "pending",
-        "parsing",
-        "analyzing",
-        "applying_rules",
-        "generating_ai",
-        "scoring",
-        "running",
-        "completed",
-        "failed",
-        "cancelled"
+        'pending',
+        'queued',
+        'parsing',
+        'analyzing',
+        'applying_rules',
+        'generating_ai',
+        'scoring',
+        'running',
+        'completed',
+        'failed',
+        'cancelled'
       ],
-      default: "pending",
-      required: true
+      default: 'pending',
+      required: true,
+      index: true
     },
 
     progress: {
@@ -121,6 +159,14 @@ const reviewSchema = new Schema(
       min: 0,
       max: 100,
       default: 0
+    },
+
+    findingCounts: {
+      critical: { type: Number, min: 0, default: 0 },
+      high: { type: Number, min: 0, default: 0 },
+      medium: { type: Number, min: 0, default: 0 },
+      low: { type: Number, min: 0, default: 0 },
+      info: { type: Number, min: 0, default: 0 }
     },
 
     summary: {
@@ -132,6 +178,13 @@ const reviewSchema = new Schema(
       type: Number,
       min: 0,
       default: 0
+    },
+
+    score: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: null
     },
 
     startedAt: {
@@ -165,31 +218,15 @@ const reviewSchema = new Schema(
   },
   {
     timestamps: true,
-    strict: true,
     versionKey: false
   }
 );
 
-reviewSchema.index({
-  user: 1,
-  createdAt: -1
-});
+reviewSchema.index({ user: 1, createdAt: -1 });
+reviewSchema.index({ company: 1, createdAt: -1 });
+reviewSchema.index({ ownerId: 1, createdAt: -1 });
+reviewSchema.index({ createdAt: -1 });
+reviewSchema.index({ status: 1, createdAt: -1 });
 
-reviewSchema.index({
-  company: 1,
-  createdAt: -1
-});
-
-reviewSchema.index({
-  createdAt: -1
-});
-
-reviewSchema.index({
-  status: 1,
-  createdAt: -1
-});
-
-export const Review = mongoose.model(
-  "Review",
-  reviewSchema
-);
+export const Review = mongoose.model('Review', reviewSchema);
+export default Review;

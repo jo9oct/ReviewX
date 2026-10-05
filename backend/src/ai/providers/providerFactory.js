@@ -1,28 +1,25 @@
-﻿import {
+import aiConfig from '../../config/ai.config.js';
+import {
   GroqProvider
-} from "./groq.provider.js";
+} from './groq.provider.js';
 
 import {
   OpenAIProvider
-} from "./openai.provider.js";
+} from './openai.provider.js';
 
-import {
-  aiConfig
-} from "../../config/ai.js";
-
-export function createProvider(
+const createProvider = (
   providerName =
     aiConfig.provider
-) {
+) => {
   switch (
     providerName
       .trim()
       .toLowerCase()
   ) {
-    case "groq":
+    case 'groq':
       return new GroqProvider();
 
-    case "openai":
+    case 'openai':
       return new OpenAIProvider();
 
     default:
@@ -30,4 +27,8 @@ export function createProvider(
         `Unsupported AI provider: ${providerName}`
       );
   }
-}
+};
+
+export {
+  createProvider
+};

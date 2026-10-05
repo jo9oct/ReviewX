@@ -1,120 +1,91 @@
-﻿import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
-const { Schema } = mongoose;
-
-const aiAnalysisSchema = new Schema(
+const aiAnalysisSchema = new mongoose.Schema(
   {
     reviewId: {
-      type: Schema.Types.ObjectId,
-      ref: "Review",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Review',
       required: true,
-      unique: true,
       index: true
     },
 
     provider: {
       type: String,
-      trim: true,
-      maxlength: 100,
-      default: null
+      enum: ['groq', 'openai'],
+      required: true
     },
 
     model: {
       type: String,
-      trim: true,
-      maxlength: 200,
-      default: null
+      required: true
     },
 
     status: {
       type: String,
       enum: [
-        "completed",
-        "failed",
-        "skipped",
-        "not_available",
-        "limit_reached"
+        'pending',
+        'running',
+        'completed',
+        'failed',
+        'skipped'
+      ],
+      required: true,
+      index: true
+    },
+
+    analysisType: {
+      type: String,
+      enum: [
+        'finding_analysis',
+        'security_review',
+        'code_improvement',
+        'summary'
       ],
       required: true
     },
 
-    summary: {
-      type: String,
-      trim: true,
-      maxlength: 20000,
+    result: {
+      type: mongoose.Schema.Types.Mixed,
       default: null
     },
 
-    findings: {
-      type: [
-        {
-          findingId: {
-            type: Schema.Types.ObjectId,
-            ref: "Finding",
-            required: true
-          },
-
-          explanation: {
-            type: String,
-            trim: true,
-            maxlength: 10000,
-            default: null
-          },
-
-          impact: {
-            type: String,
-            trim: true,
-            maxlength: 10000,
-            default: null
-          },
-
-          fix: {
-            type: String,
-            trim: true,
-            maxlength: 10000,
-            default: null
-          },
-
-          improvedCode: {
-            type: String,
-            maxlength: 20000,
-            default: null
-          },
-
-          securityExplanation: {
-            type: String,
-            trim: true,
-            maxlength: 10000,
-            default: null
-          }
-        }
-      ],
-      default: []
+    usage: {
+      promptTokens: {
+        type: Number,
+        default: null,
+        min: 0
+      },
+      completionTokens: {
+        type: Number,
+        default: null,
+        min: 0
+      },
+      totalTokens: {
+        type: Number,
+        default: null,
+        min: 0
+      }
     },
 
     errorCode: {
       type: String,
-      trim: true,
-      maxlength: 100,
-      default: null
-    },
-
-    errorMessage: {
-      type: String,
-      trim: true,
-      maxlength: 1000,
       default: null
     }
   },
   {
     timestamps: true,
-    strict: true,
     versionKey: false
   }
 );
 
-export const AiAnalysis =
-  mongoose.model(
-    "AiAnalysis",
-    aiAnalysisSchema
-  );
+aiAnalysisSchema.index({
+  reviewId: 1,
+  analysisType: 1
+});
+
+const AiAnalysis = mongoose.model(
+  'AiAnalysis',
+  aiAnalysisSchema
+);
+
+export default AiAnalysis;

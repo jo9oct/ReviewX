@@ -1,138 +1,78 @@
-﻿import mongoose from "mongoose";
-
-import {
-  databaseConfig
-} from "../config/database.js";
-
-import {
-  logger
-} from "../utils/logger.js";
-
+import mongoose from 'mongoose';
+import environment from '../config/environment.js';
+import { logger } from '../utils/logger.js';
 
 let connectionPromise = null;
 
-
-export async function connectDatabase() {
-  if (!databaseConfig.uri) {
-    throw new Error(
-      "MONGODB_URI is not configured."
-    );
-  }
-
-
-  if (
-    mongoose.connection.readyState === 1 ||
-    mongoose.connection.readyState === 2
-  ) {
+const connectDatabase = async () => {
+  if (mongoose.connection.readyState === 1) {
     return mongoose.connection;
   }
-
 
   if (connectionPromise) {
     return connectionPromise;
   }
 
+  connectionPromise = mongoose.connect(environment.database.uri, {
+    serverSelectionTimeoutMS: environment.database.serverSelectionTimeoutMs,
+    maxPoolSize: environment.database.maxPoolSize,
+    minPoolSize: environment.database.minPoolSize,
+    autoIndex: environment.database.autoIndex
+  });
 
-  connectionPromise =
-    mongoose
-      .connect(
-        databaseConfig.uri,
-        {
-          dbName:
-            databaseConfig.databaseName,
-
-          ...databaseConfig.options
-        }
-      )
-      .then(
-        (connection) => {
-          logger.info(
-            "MongoDB connection established",
-            {
-              database:
-                connection.connection.name,
-
-              host:
-                connection.connection.host
-            }
-          );
-
-
-          return connection;
-        }
-      )
-      .catch(
-        (error) => {
-          connectionPromise =
-            null;
-
-
-          logger.error(
-            "MongoDB connection failed",
-            {
-              error:
-                error.message
-            }
-          );
-
-
-          throw error;
-        }
-      );
-
-
-  return connectionPromise;
-}
-
-
-export async function disconnectDatabase() {
-  connectionPromise =
-    null;
-
-
-  if (
-    mongoose.connection.readyState ===
-    0
-  ) {
-    return;
+  try {
+    const connection = await connectionPromise;
+    if (logger && typeof logger.info === 'function') {
+      logger.info('MongoDB connection established', {
+        database: connection.connection.name,
+        host: connection.connection.host
+      });
+    }
+    return mongoose.connection;
+  } catch (error) {
+    connectionPromise = null;
+    if (logger && typeof logger.error === 'function') {
+      logger.error('MongoDB connection failed', {
+        error: error.message
+      });
+    }
+    throw error;
   }
+};
 
+const disconnectDatabase = async () => {
+  connectionPromise = null;
 
-  await mongoose.disconnect();
-
-
-  logger.info(
-    "MongoDB connection closed"
-  );
-}
-
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+    if (logger && typeof logger.info === 'function') {
+      logger.info('MongoDB connection closed');
+    }
+  }
+};
 
 /**
- * Executes database operations inside
- * one MongoDB transaction.
- *
- * If the callback throws an error,
- * the transaction is aborted automatically.
+ * Executes database operations inside one MongoDB transaction.
+ * If the callback throws an error, the transaction is aborted automatically.
+ * Supports fallback for standalone MongoDB instances without replica sets.
  */
-export async function withDatabaseTransaction(
-  work
-) {
-  if (typeof work !== "function") {
-    throw new TypeError("Transaction callback must be a function.");
+const withDatabaseTransaction = async (work) => {
+  if (typeof work !== 'function') {
+    throw new TypeError('Transaction callback must be a function.');
   }
 
   await connectDatabase();
 
-  // Check if connected to a replica set or sharded cluster
   const topologyType = mongoose.connection.client?.topology?.description?.type;
   const isReplicaSetOrSharded =
-    topologyType === "ReplicaSetWithPrimary" ||
-    topologyType === "Sharded";
+    topologyType === 'ReplicaSetWithPrimary' || topologyType === 'Sharded';
 
   if (!isReplicaSetOrSharded) {
-    logger.warn(
-      "Running against standalone MongoDB (no replica set) — bypassing transaction wrapper."
-    );
+    if (logger && typeof logger.warn === 'function') {
+      logger.warn(
+        'Running against standalone MongoDB (no replica set) — bypassing transaction wrapper.'
+      );
+    }
     return await work(null);
   }
 
@@ -140,10 +80,12 @@ export async function withDatabaseTransaction(
   try {
     session = await mongoose.connection.startSession();
   } catch (err) {
-    logger.warn(
-      "Failed to start MongoDB session — proceeding without transaction",
-      { error: err.message }
-    );
+    if (logger && typeof logger.warn === 'function') {
+      logger.warn(
+        'Failed to start MongoDB session — proceeding without transaction',
+        { error: err.message }
+      );
+    }
     return await work(null);
   }
 
@@ -151,9 +93,9 @@ export async function withDatabaseTransaction(
     return await session.withTransaction(
       () => work(session),
       {
-        readPreference: "primary",
+        readPreference: 'primary',
         writeConcern: {
-          w: "majority"
+          w: 'majority'
         }
       }
     );
@@ -161,12 +103,14 @@ export async function withDatabaseTransaction(
     if (
       err.message &&
       err.message.includes(
-        "Transaction numbers are only allowed on a replica set member or mongos"
+        'Transaction numbers are only allowed on a replica set member or mongos'
       )
     ) {
-      logger.warn(
-        "MongoDB instance rejected transaction — executing without transaction."
-      );
+      if (logger && typeof logger.warn === 'function') {
+        logger.warn(
+          'MongoDB instance rejected transaction — executing without transaction.'
+        );
+      }
       return await work(null);
     }
     throw err;
@@ -175,26 +119,27 @@ export async function withDatabaseTransaction(
       await session.endSession().catch(() => {});
     }
   }
-}
+};
 
-export function getDatabaseState() {
+const getDatabaseState = () => {
   return {
-    readyState:
-      mongoose.connection
-        .readyState,
-
-    connected:
-      mongoose.connection
-        .readyState === 1,
-
-    database:
-      mongoose.connection
-        .name ||
-      null,
-
-    host:
-      mongoose.connection
-        .host ||
-      null
+    readyState: mongoose.connection.readyState,
+    connected: mongoose.connection.readyState === 1,
+    name: mongoose.connection.name || null,
+    host: mongoose.connection.host || null
   };
-}
+};
+
+export {
+  connectDatabase,
+  disconnectDatabase,
+  withDatabaseTransaction,
+  getDatabaseState
+};
+
+export default {
+  connectDatabase,
+  disconnectDatabase,
+  withDatabaseTransaction,
+  getDatabaseState
+};

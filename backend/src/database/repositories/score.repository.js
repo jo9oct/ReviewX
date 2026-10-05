@@ -1,4 +1,4 @@
-import { Score } from "../models/score.model.js";
+import Score from '../models/score.model.js';
 
 export async function create(data, options = {}) {
   if (Object.keys(options).length === 0) {
@@ -49,3 +49,5 @@ export const scoreRepository = Object.freeze({
   upsertByReviewId,
   deleteByReviewId
 });
+
+export default scoreRepository;

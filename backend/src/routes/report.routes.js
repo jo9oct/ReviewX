@@ -1,41 +1,26 @@
-﻿
-import {
-  Router
-} from "express";
+import { Router } from 'express';
 
 import {
-  create,
-  getById,
-  getByReviewId
-} from "../controllers/report.controller.js";
+  createReport,
+  getReport,
+  listReports,
+} from '../controllers/report.controller.js';
 
-import {
-  validateBody
-} from "../middleware/validation.middleware.js";
-
-import {
-  createReportSchema
-} from "../validators/report.validator.js";
-
-const router =
-  Router();
+const router = Router();
 
 router.post(
-  "/",
-  validateBody(
-    createReportSchema
-  ),
-  create
+  '/reviews/:reviewId/reports',
+  createReport,
 );
 
 router.get(
-  "/review/:reviewId",
-  getByReviewId
+  '/reviews/:reviewId/reports',
+  listReports,
 );
 
 router.get(
-  "/:reportId",
-  getById
+  '/reports/:reportId',
+  getReport,
 );
 
 export default router;

@@ -1,4 +1,4 @@
-import { Finding } from "../models/finding.model.js";
+import Finding from '../models/finding.model.js';
 
 export async function create(data, options = {}) {
   if (Object.keys(options).length === 0) {
@@ -8,11 +8,11 @@ export async function create(data, options = {}) {
   return finding;
 }
 
-export async function createMany(findings, options = {}) {
-  if (!Array.isArray(findings) || findings.length === 0) {
+export async function createMany(documents, options = {}) {
+  if (!Array.isArray(documents) || documents.length === 0) {
     return [];
   }
-  return Finding.insertMany(findings, {
+  return Finding.insertMany(documents, {
     ordered: true,
     ...options
   });
@@ -27,7 +27,7 @@ export async function findByReviewId(reviewId) {
 }
 
 export async function findOpenFindings(limit = 20, reviewIds = null) {
-  const query = { status: { $ne: "resolved" } };
+  const query = { status: { $ne: 'resolved' } };
   if (Array.isArray(reviewIds)) {
     query.reviewId = { $in: reviewIds };
   }
@@ -43,7 +43,7 @@ export async function countFindings(reviewIds = null) {
     baseQuery.reviewId = { $in: reviewIds };
   }
   const total = await Finding.countDocuments(baseQuery);
-  const resolved = await Finding.countDocuments({ ...baseQuery, status: "resolved" });
+  const resolved = await Finding.countDocuments({ ...baseQuery, status: 'resolved' });
   return { total, resolved };
 }
 
@@ -54,7 +54,9 @@ export async function findByFingerprint(reviewId, fingerprint) {
 export async function updateById(findingId, update, options = {}) {
   return Finding.findByIdAndUpdate(
     findingId,
-    update,
+    {
+      $set: update
+    },
     {
       new: true,
       runValidators: true,
@@ -68,7 +70,7 @@ export async function deleteById(findingId) {
 }
 
 export async function deleteByReviewId(reviewId) {
-  return Finding.deleteMany({ reviewId });
+  return Finding.deleteMany({ reviewId }).lean();
 }
 
 export const findingRepository = Object.freeze({
@@ -83,3 +85,5 @@ export const findingRepository = Object.freeze({
   deleteById,
   deleteByReviewId
 });
+
+export default findingRepository;

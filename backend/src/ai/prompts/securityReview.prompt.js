@@ -1,37 +1,37 @@
-﻿
-export function buildSecurityReviewPrompt(
-  context
-) {
+const securityReviewPrompt = ({
+  findings,
+  files
+}) => {
   return `
-Provide a security explanation for the supplied static-analysis findings.
+You are an AI assistant supporting a deterministic security
+code-review engine.
 
-The deterministic analyzer is the source of truth for detected findings.
+Review only the supplied findings and source.
 
-Do not:
-- invent vulnerabilities
-- invent evidence
-- change severity
-- mark findings as verified
-- claim runtime exploitation
-
-Use the supplied evidence only.
+Do not claim that code was executed or exploited.
+Do not invent CVEs, dependencies, versions, locations,
+credentials, or test results.
 
 Return JSON only:
 
 {
-  "recommendations": [
-    "..."
+  "summary": "short security summary",
+  "findings": [
+    {
+      "ruleId": "existing rule id",
+      "assessment": "confirmed|likely|uncertain|not_supported",
+      "explanation": "short explanation",
+      "remediation": "practical remediation"
+    }
   ]
 }
 
-Language:
-${context.language || "unknown"}
+Existing findings:
+${JSON.stringify(findings, null, 2)}
 
-Findings:
-${JSON.stringify(
-  context.findings,
-  null,
-  2
-)}
-`;
-}
+Source:
+${JSON.stringify(files, null, 2)}
+`.trim();
+};
+
+export default securityReviewPrompt;

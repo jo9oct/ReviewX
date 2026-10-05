@@ -1,13 +1,10 @@
-﻿
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
-const { Schema } = mongoose;
-
-const scoreSchema = new Schema(
+const scoreSchema = new mongoose.Schema(
   {
     reviewId: {
-      type: Schema.Types.ObjectId,
-      ref: "Review",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Review',
       required: true,
       unique: true,
       index: true
@@ -15,79 +12,50 @@ const scoreSchema = new Schema(
 
     overall: {
       type: Number,
+      required: true,
       min: 0,
-      max: 100,
-      required: true
+      max: 100
     },
 
     security: {
       type: Number,
+      required: true,
       min: 0,
-      max: 100,
-      required: true
+      max: 100
     },
 
     bugs: {
       type: Number,
+      required: true,
       min: 0,
-      max: 100,
-      required: true
+      max: 100
     },
 
     quality: {
       type: Number,
+      required: true,
       min: 0,
-      max: 100,
-      required: true
+      max: 100
     },
 
     performance: {
       type: Number,
+      required: true,
       min: 0,
-      max: 100,
-      required: true
+      max: 100
     },
 
-    findingCounts: {
-      critical: {
-        type: Number,
-        min: 0,
-        default: 0
-      },
-
-      high: {
-        type: Number,
-        min: 0,
-        default: 0
-      },
-
-      medium: {
-        type: Number,
-        min: 0,
-        default: 0
-      },
-
-      low: {
-        type: Number,
-        min: 0,
-        default: 0
-      },
-
-      info: {
-        type: Number,
-        min: 0,
-        default: 0
-      }
+    calculatedAt: {
+      type: Date,
+      default: Date.now
     }
   },
   {
     timestamps: true,
-    strict: true,
     versionKey: false
   }
 );
 
-export const Score = mongoose.model(
-  "Score",
-  scoreSchema
-);
+const Score = mongoose.model('Score', scoreSchema);
+
+export default Score;

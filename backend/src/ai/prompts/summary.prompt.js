@@ -1,33 +1,34 @@
-﻿
-export function buildSummaryPrompt(
-  context
-) {
+const summaryPrompt = ({
+  findings,
+  score
+}) => {
   return `
-Create a concise professional code-review summary.
+Summarize the supplied static code review.
 
-Base the summary only on the supplied findings.
+Use only the provided findings and score.
 
-Do not:
-- invent findings
-- invent evidence
-- change severity
-- claim vulnerabilities were verified
-- execute or assume execution of the source code
+Do not introduce new vulnerabilities,
+dependencies, versions, CVEs, tests,
+execution results, or unsupported facts.
 
 Return JSON only:
 
 {
-  "summary": "..."
+  "summary": "concise review summary",
+  "riskAreas": [
+    "existing risk area"
+  ],
+  "priorities": [
+    "existing finding that should be reviewed"
+  ]
 }
 
-Language:
-${context.language || "unknown"}
+Score:
+${JSON.stringify(score, null, 2)}
 
 Findings:
-${JSON.stringify(
-  context.findings,
-  null,
-  2
-)}
-`;
-}
+${JSON.stringify(findings, null, 2)}
+`.trim();
+};
+
+export default summaryPrompt;

@@ -1,19 +1,7 @@
-﻿
-export function generateJSONReport(
-  report
-) {
-  if (
-    !report ||
-    typeof report !== "object"
-  ) {
-    throw new TypeError(
-      "Report data is required."
-    );
+export const generateJsonReport = (report) => {
+  if (!report || typeof report !== "object") {
+    throw new TypeError("A valid report object is required.");
   }
 
-  return JSON.stringify(
-    report,
-    null,
-    2
-  );
-}
+  return JSON.stringify(report, null, 2);
+};
