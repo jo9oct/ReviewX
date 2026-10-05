@@ -1,151 +1,232 @@
 import mongoose from 'mongoose';
 
-const reviewItemSchema =
-  new mongoose.Schema(
-    {
-      reviewId: {
-        type: mongoose.Schema.Types.ObjectId,
-        default: () =>
-          new mongoose.Types.ObjectId(),
-        required: true,
-      },
+const { Schema } = mongoose;
 
-      projectId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Project',
-        default: null,
-      },
-
-      sourceType: {
-        type: String,
-        enum: [
-          'paste',
-          'upload',
-          'archive',
-          'github',
-        ],
-        required: true,
-      },
-
-      status: {
-        type: String,
-        enum: [
-          'pending',
-          'queued',
-          'running',
-          'completed',
-          'failed',
-          'cancelled',
-        ],
-        default: 'pending',
-        required: true,
-      },
-
-      languages: {
-        type: [String],
-        default: [],
-      },
-
-      totalFiles: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
-
-      totalLines: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
-
-      findingCounts: {
-        critical: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
-
-        high: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
-
-        medium: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
-
-        low: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
-
-        info: {
-          type: Number,
-          default: 0,
-          min: 0,
-        },
-      },
-
-      score: {
-        type: Number,
-        default: null,
-        min: 0,
-        max: 100,
-      },
-
-      startedAt: {
-        type: Date,
-        default: null,
-      },
-
-      completedAt: {
-        type: Date,
-        default: null,
-      },
-
-      errorCode: {
-        type: String,
-        default: null,
-      },
+const reviewSummarySchema = new Schema(
+  {
+    totalFindings: {
+      type: Number,
+      min: 0,
+      default: 0
     },
-    {
-      _id: false,
-      timestamps: true,
+    critical: {
+      type: Number,
+      min: 0,
+      default: 0
     },
-  );
-
-const reviewSchema =
-  new mongoose.Schema(
-    {
-      ownerId: {
-        type: String,
-        required: true,
-        trim: true,
-      },
-
-      reviews: {
-        type: [reviewItemSchema],
-        default: [],
-      },
+    high: {
+      type: Number,
+      min: 0,
+      default: 0
     },
-    {
-      timestamps: true,
-      versionKey: false,
+    medium: {
+      type: Number,
+      min: 0,
+      default: 0
     },
-  );
+    low: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+    info: {
+      type: Number,
+      min: 0,
+      default: 0
+    }
+  },
+  {
+    _id: false,
+    strict: true
+  }
+);
 
-reviewSchema.index({
-  ownerId: 1,
-});
+const reviewSchema = new Schema(
+  {
+    reviewId: {
+      type: Schema.Types.ObjectId,
+      default: () => new mongoose.Types.ObjectId()
+    },
 
-const Review =
-  mongoose.model(
-    'Review',
-    reviewSchema,
-  );
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true
+    },
 
+    company: {
+      type: Schema.Types.ObjectId,
+      ref: 'Company',
+      default: null,
+      index: true
+    },
+
+    ownerId: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true
+    },
+
+    projectId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Project',
+      default: null
+    },
+
+    sourceType: {
+      type: String,
+      enum: ['paste', 'upload', 'archive', 'github'],
+      default: 'paste'
+    },
+
+    source: {
+      type: String,
+      enum: ['paste', 'upload', 'archive', 'github'],
+      default: function () {
+        return this.sourceType || 'paste';
+      }
+    },
+
+    fileName: {
+      type: String,
+      trim: true,
+      maxlength: 255,
+      default: null
+    },
+
+    language: {
+      type: String,
+      trim: true,
+      maxlength: 50,
+      default: 'unknown'
+    },
+
+    languages: {
+      type: [String],
+      default: []
+    },
+
+    fileExtension: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      maxlength: 20,
+      default: null
+    },
+
+    sourceSize: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+
+    totalFiles: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+
+    totalLines: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+
+    status: {
+      type: String,
+      enum: [
+        'pending',
+        'queued',
+        'parsing',
+        'analyzing',
+        'applying_rules',
+        'generating_ai',
+        'scoring',
+        'running',
+        'completed',
+        'failed',
+        'cancelled'
+      ],
+      default: 'pending',
+      required: true,
+      index: true
+    },
+
+    progress: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0
+    },
+
+    findingCounts: {
+      critical: { type: Number, min: 0, default: 0 },
+      high: { type: Number, min: 0, default: 0 },
+      medium: { type: Number, min: 0, default: 0 },
+      low: { type: Number, min: 0, default: 0 },
+      info: { type: Number, min: 0, default: 0 }
+    },
+
+    summary: {
+      type: reviewSummarySchema,
+      default: null
+    },
+
+    findingCount: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+
+    score: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: null
+    },
+
+    startedAt: {
+      type: Date,
+      default: null
+    },
+
+    completedAt: {
+      type: Date,
+      default: null
+    },
+
+    failedAt: {
+      type: Date,
+      default: null
+    },
+
+    errorCode: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: null
+    },
+
+    errorMessage: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: null
+    }
+  },
+  {
+    timestamps: true,
+    versionKey: false
+  }
+);
+
+reviewSchema.index({ user: 1, createdAt: -1 });
+reviewSchema.index({ company: 1, createdAt: -1 });
+reviewSchema.index({ ownerId: 1, createdAt: -1 });
+reviewSchema.index({ createdAt: -1 });
+reviewSchema.index({ status: 1, createdAt: -1 });
+
+export const Review = mongoose.model('Review', reviewSchema);
 export default Review;

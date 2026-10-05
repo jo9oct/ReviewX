@@ -1,97 +1,89 @@
 import Finding from '../models/finding.model.js';
 
-const create = async (data) => {
-  return Finding.create(data);
-};
+export async function create(data, options = {}) {
+  if (Object.keys(options).length === 0) {
+    return Finding.create(data);
+  }
+  const [finding] = await Finding.create([data], options);
+  return finding;
+}
 
-const createMany = async (documents) => {
-  if (
-    !Array.isArray(documents) ||
-    documents.length === 0
-  ) {
+export async function createMany(documents, options = {}) {
+  if (!Array.isArray(documents) || documents.length === 0) {
     return [];
   }
+  return Finding.insertMany(documents, {
+    ordered: true,
+    ...options
+  });
+}
 
-  return Finding.insertMany(
-    documents,
-    {
-      ordered: true,
-    },
-  );
-};
+export async function findById(findingId) {
+  return Finding.findById(findingId).lean();
+}
 
-const findById = async (findingId) => {
-  return Finding.findById(
-    findingId,
-  ).lean();
-};
+export async function findByReviewId(reviewId) {
+  return Finding.find({ reviewId }).sort({ createdAt: 1 }).lean();
+}
 
-const findByReviewId = async (
-  reviewId,
-) => {
-  return Finding.find({
-    reviewId,
-  })
-    .sort({
-      createdAt: 1,
-    })
+export async function findOpenFindings(limit = 20, reviewIds = null) {
+  const query = { status: { $ne: 'resolved' } };
+  if (Array.isArray(reviewIds)) {
+    query.reviewId = { $in: reviewIds };
+  }
+  return Finding.find(query)
+    .sort({ createdAt: -1 })
+    .limit(limit)
     .lean();
-};
+}
 
-const updateById = async (
-  findingId,
-  update,
-) => {
+export async function countFindings(reviewIds = null) {
+  const baseQuery = {};
+  if (Array.isArray(reviewIds)) {
+    baseQuery.reviewId = { $in: reviewIds };
+  }
+  const total = await Finding.countDocuments(baseQuery);
+  const resolved = await Finding.countDocuments({ ...baseQuery, status: 'resolved' });
+  return { total, resolved };
+}
+
+export async function findByFingerprint(reviewId, fingerprint) {
+  return Finding.findOne({ reviewId, fingerprint }).lean();
+}
+
+export async function updateById(findingId, update, options = {}) {
   return Finding.findByIdAndUpdate(
     findingId,
     {
-      $set: update,
+      $set: update
     },
     {
       new: true,
       runValidators: true,
-      lean: true,
-    },
-  );
-};
+      ...options
+    }
+  ).lean();
+}
 
-const countBySeverity = async (
-  reviewId,
-) => {
-  return Finding.aggregate([
-    {
-      $match: {
-        reviewId,
-      },
-    },
-    {
-      $group: {
-        _id: '$severity',
-        count: {
-          $sum: 1,
-        },
-      },
-    },
-  ]);
-};
+export async function deleteById(findingId) {
+  return Finding.findByIdAndDelete(findingId).lean();
+}
 
-const findingRepository = Object.freeze({
+export async function deleteByReviewId(reviewId) {
+  return Finding.deleteMany({ reviewId }).lean();
+}
+
+export const findingRepository = Object.freeze({
   create,
   createMany,
   findById,
   findByReviewId,
+  findOpenFindings,
+  countFindings,
+  findByFingerprint,
   updateById,
-  countBySeverity,
+  deleteById,
+  deleteByReviewId
 });
-
-export {
-  create,
-  createMany,
-  findById,
-  findByReviewId,
-  updateById,
-  countBySeverity,
-  findingRepository,
-};
 
 export default findingRepository;

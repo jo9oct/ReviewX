@@ -1,0 +1,1 @@
+export * from "../database/repositories/companyRules.repository.js";\n

@@ -1,52 +1,49 @@
-import {
-  Router,
-} from 'express';
+import { Router } from 'express';
 
 import {
-  createReview,
-  getReview,
+  create,
+  getById,
+  list,
+  getMetrics,
 } from '../controllers/review.controller.js';
 
 import {
-  accessMiddleware,
-  enforceReviewLimits,
-} from '../middleware/access.middleware.js';
-
-import {
-  validationMiddleware,
-} from '../middleware/validation.middleware.js';
-
-import {
-  reviewSchema,
-} from '../validators/review.validator.js';
-
-import {
   parseMultipartReview,
-  normalizeMultipartReview,
   handleMultipartError,
+  normalizeMultipartReview,
 } from '../input/upload/multipart.js';
 
-const router =
-  Router();
+import {
+  optionalAuthenticate,
+} from '../middleware/authenticate.js';
+
+const router = Router();
+
+router.use(optionalAuthenticate);
+
+const adaptSourceBody = (req, res, next) => {
+  if (req.body && !req.body.source && req.body.code) {
+    req.body.source = {
+      type: 'paste',
+      content: req.body.code,
+      fileName: req.body.fileName || 'source.ts',
+      language: req.body.language || 'typescript',
+    };
+  }
+  next();
+};
 
 router.post(
   '/',
   parseMultipartReview,
   handleMultipartError,
   normalizeMultipartReview,
-  validationMiddleware(
-    reviewSchema,
-    'body',
-  ),
-  accessMiddleware(),
-  enforceReviewLimits,
-  createReview,
+  adaptSourceBody,
+  create,
 );
 
-router.get(
-  '/:reviewId',
-  accessMiddleware(),
-  getReview,
-);
+router.get('/metrics', getMetrics);
+router.get('/', list);
+router.get('/:reviewId', getById);
 
 export default router;

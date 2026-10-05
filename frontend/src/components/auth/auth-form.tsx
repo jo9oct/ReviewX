@@ -1,12 +1,18 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Eye, EyeOff, LoaderCircle } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { AuthShell } from "./auth-shell";
 import { Button, Input } from "@/components/primitives";
-import { demoAccounts, findDemoAccount, registerRuntimeAccount } from "@/lib/demo-accounts";
-import { ensureProfile, safeNext } from "@/lib/auth";
-import { STORAGE_KEYS } from "@/lib/constants";
+import { AuthShell } from "./auth-shell";
+import { safeNext } from "@/lib/auth";
+import {
+  loginUser,
+  registerUser,
+  getCurrentUser,
+  setAuthToken,
+  ApiClientError,
+} from "@/lib/api";
+import { useAuthStore } from "@/lib/auth-store";
 
 export function AuthForm({
   mode,
@@ -21,86 +27,88 @@ export function AuthForm({
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [confirmationSent, setConfirmationSent] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const destination = safeNext(next);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setFormError(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = fullName.trim();
+
+    if (!cleanEmail || !password || (mode === "register" && !cleanName)) {
+      setFormError("Please complete all required fields.");
+      return;
+    }
+
+    if (password.length < 8) {
+      setFormError("Password must be at least 8 characters.");
+      return;
+    }
+
     setBusy(true);
     try {
-      if (!email || !password || (mode === "register" && !fullName)) {
-        throw new Error("Please complete all required fields.");
-      }
-
       if (mode === "register") {
-        // Register the account into the runtime registry so the user can log
-        // in with these credentials immediately after confirming their email.
-        registerRuntimeAccount({
-          id: `local-${Date.now()}`,
-          name: fullName,
-          email: email.trim().toLowerCase(),
+        const payload = await registerUser({
+          name: cleanName,
+          email: cleanEmail,
           password,
-          role: "member",
-          label: "Member",
-          context: "Personal reviews and assigned findings",
         });
-        await ensureProfile(
-          { id: "mock-user", email, user_metadata: { full_name: fullName } },
-          fullName,
-        );
-        setConfirmationSent(true);
+
+        if (payload.token) {
+          setAuthToken(payload.token);
+        }
+
+        const user = await getCurrentUser();
+        useAuthStore.getState().setAuth(user, payload.token);
+
+        toast.success("Account created successfully!");
+        await navigate({ to: destination });
         return;
       }
 
-      const account = findDemoAccount(email, password);
-      if (!account) {
-        throw new Error("Use one of the demo accounts below to enter the workspace.");
-      }
-      // setActiveDemoAccount is called inside registerRuntimeAccount for new
-      // accounts; for demo accounts we call it here via findDemoAccount's result.
-      const { setActiveDemoAccount } = await import("@/lib/demo-accounts");
-      setActiveDemoAccount(account);
-      await ensureProfile({
-        id: account.id,
-        email: account.email,
-        user_metadata: { full_name: account.name },
+      // Login flow
+      const payload = await loginUser({
+        email: cleanEmail,
+        password,
       });
+
+      if (payload.token) {
+        setAuthToken(payload.token);
+      }
+
+      const user = await getCurrentUser();
+      useAuthStore.getState().setAuth(user, payload.token);
+
+      toast.success("Signed in successfully!");
       await navigate({ to: destination });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to continue");
+      let message = "Unable to complete request. Please try again.";
+
+      if (error instanceof ApiClientError) {
+        if (error.statusCode === 401) {
+          message = "Invalid email or password. Please verify your credentials.";
+        } else if (error.statusCode === 409) {
+          message = "An account with that email already exists. Please sign in instead.";
+        } else if (error.statusCode === 429) {
+          message = "Too many attempts. Please try again in 15 minutes.";
+        } else {
+          message = error.message || message;
+        }
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+
+      setFormError(message);
+      toast.error(message);
     } finally {
       setBusy(false);
     }
   }
 
-  async function continueWithGoogle() {
-    setBusy(true);
-    sessionStorage.setItem(STORAGE_KEYS.AUTH_NEXT, destination);
-    try {
-      await ensureProfile(
-        { id: "mock-user", email: "alex@acme.dev", user_metadata: { full_name: "Alex Morgan" } },
-        "Alex Morgan",
-      );
-      await navigate({ to: "/auth/callback" });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to continue");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (confirmationSent) {
-    return (
-      <AuthShell
-        eyebrow="Confirm your account"
-        title="Check your inbox"
-        description={`We sent a confirmation link to ${email}. Open it to finish creating your account.`}
-      >
-        <Button asChild className="w-full">
-          <Link to="/auth">Return to sign in</Link>
-        </Button>
-      </AuthShell>
-    );
+  function continueWithGoogle() {
+    toast.info("Google OAuth is coming soon. Please sign in with email and password.");
   }
 
   const isRegister = mode === "register";
@@ -122,14 +130,25 @@ export function AuthForm({
         or use email
         <span className="h-px flex-1 bg-border" />
       </div>
-      <form className="space-y-4" onSubmit={submit}>
+
+      <form className="space-y-4" onSubmit={submit} autoComplete="off">
+        {formError && (
+          <div className="flex items-start gap-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-400">
+            <AlertCircle className="size-4 shrink-0 mt-0.5" />
+            <span>{formError}</span>
+          </div>
+        )}
+
         {isRegister && (
           <Field label="Full name">
             <Input
               required
               autoComplete="name"
               value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
+              onChange={(e) => {
+                setFormError(null);
+                setFullName(e.target.value);
+              }}
               placeholder="Alex Morgan"
             />
           </Field>
@@ -138,9 +157,12 @@ export function AuthForm({
           <Input
             required
             type="email"
-            autoComplete="email"
+            autoComplete="off"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setFormError(null);
+              setEmail(e.target.value);
+            }}
             placeholder="you@company.com"
           />
         </Field>
@@ -159,9 +181,12 @@ export function AuthForm({
               required
               minLength={8}
               type={showPassword ? "text" : "password"}
-              autoComplete={isRegister ? "new-password" : "current-password"}
+              autoComplete="new-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setFormError(null);
+                setPassword(e.target.value);
+              }}
               placeholder="At least 8 characters"
               className="pr-10"
             />
@@ -180,35 +205,7 @@ export function AuthForm({
           {isRegister ? "Create account" : "Sign in"}
         </Button>
       </form>
-      {!isRegister && (
-        <div className="mt-6 border border-border bg-surface p-3">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs font-medium text-foreground">Demo accounts</p>
-            <span className="font-mono text-[10px] text-muted-foreground">
-              password: reviewx123
-            </span>
-          </div>
-          <div className="space-y-2">
-            {demoAccounts.map((account) => (
-              <button
-                key={account.id}
-                type="button"
-                className="flex w-full items-center justify-between border border-border px-3 py-2 text-left transition-colors hover:border-primary hover:bg-accent"
-                onClick={() => {
-                  setEmail(account.email);
-                  setPassword(account.password);
-                }}
-              >
-                <span>
-                  <span className="block text-xs font-medium text-foreground">{account.name}</span>
-                  <span className="block text-[11px] text-muted-foreground">{account.context}</span>
-                </span>
-                <span className="font-mono text-[10px] text-primary">{account.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+
       <p className="mt-6 text-center text-xs text-muted-foreground">
         {isRegister ? "Already have an account?" : "New to ReviewX?"}{" "}
         <Link

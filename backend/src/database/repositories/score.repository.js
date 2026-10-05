@@ -1,48 +1,53 @@
 import Score from '../models/score.model.js';
 
-const create = async (data) => {
-  return Score.create(data);
-};
+export async function create(data, options = {}) {
+  if (Object.keys(options).length === 0) {
+    return Score.create(data);
+  }
+  const [score] = await Score.create([data], options);
+  return score;
+}
 
-const findByReviewId = async (
-  reviewId,
-) => {
-  return Score.findOne({
-    reviewId,
-  }).lean();
-};
+export async function findByReviewId(reviewId) {
+  return Score.findOne({ reviewId }).lean();
+}
 
-const upsertByReviewId = async (
-  reviewId,
-  data,
-) => {
+export async function findByReviewIds(reviewIds) {
+  return Score.find({ reviewId: { $in: reviewIds } }).lean();
+}
+
+export async function findRecent(limit = 20, reviewIds = null) {
+  const query = {};
+  if (Array.isArray(reviewIds)) {
+    query.reviewId = { $in: reviewIds };
+  }
+  return Score.find(query).sort({ createdAt: -1 }).limit(limit).lean();
+}
+
+export async function upsertByReviewId(reviewId, data, options = {}) {
   return Score.findOneAndUpdate(
-    {
-      reviewId,
-    },
-    {
-      $set: data,
-    },
+    { reviewId },
+    { $set: data, $setOnInsert: { reviewId } },
     {
       new: true,
       upsert: true,
       runValidators: true,
-      lean: true,
-    },
-  );
-};
+      ...options
+    }
+  ).lean();
+}
 
-const scoreRepository = Object.freeze({
+export async function deleteByReviewId(reviewId) {
+  return Score.findOneAndDelete({ reviewId }).lean();
+}
+
+export const scoreRepository = Object.freeze({
   create,
   findByReviewId,
+  findByReviewIds,
+  findRecent,
   upsertByReviewId,
+  deleteByReviewId
 });
-
-export {
-  create,
-  findByReviewId,
-  upsertByReviewId,
-  scoreRepository,
-};
 
 export default scoreRepository;
