@@ -142,4 +142,5 @@ const Finding = mongoose.model(
   findingSchema,
 );
 
+export { Finding };
 export default Finding;

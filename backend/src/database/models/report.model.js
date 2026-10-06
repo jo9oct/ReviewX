@@ -126,4 +126,5 @@ const Report =
     reportSchema,
   );
 
+export { Report };
 export default Report;

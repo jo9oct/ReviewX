@@ -159,7 +159,9 @@ const environment = Object.freeze({
     uri: normalizeString(
       process.env.MONGODB_URI ||
         process.env.DATABASE_URL,
-      '',
+      process.env.NODE_ENV === 'production'
+        ? ''
+        : 'mongodb://127.0.0.1:27017/reviewx',
     ),
 
     name: normalizeString(
