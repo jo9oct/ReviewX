@@ -58,4 +58,5 @@ const scoreSchema = new mongoose.Schema(
 
 const Score = mongoose.model('Score', scoreSchema);
 
+export { Score };
 export default Score;

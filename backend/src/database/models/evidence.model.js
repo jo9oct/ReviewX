@@ -56,4 +56,5 @@ evidenceSchema.index({
 
 const Evidence = mongoose.model('Evidence', evidenceSchema);
 
+export { Evidence };
 export default Evidence;
