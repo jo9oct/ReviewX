@@ -147,4 +147,5 @@ const AuditLog =
     auditLogSchema
   );
 
+export { AuditLog };
 export default AuditLog;

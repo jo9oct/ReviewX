@@ -88,4 +88,5 @@ const AiAnalysis = mongoose.model(
   aiAnalysisSchema
 );
 
+export { AiAnalysis };
 export default AiAnalysis;

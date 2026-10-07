@@ -84,4 +84,5 @@ const ScheduledReview =
     scheduledReviewSchema,
   );
 
+export { ScheduledReview };
 export default ScheduledReview;

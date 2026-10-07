@@ -1,9 +1,7 @@
 import { useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ReviewPlatform } from "@/components/review-platform";
-import { ensureProfile } from "@/lib/auth";
-import { getActiveDemoAccount } from "@/lib/demo-accounts";
-import { STORAGE_KEYS } from "@/lib/constants";
+import { useAuthStore, normalizeRole } from "@/lib/auth-store";
 import { useReviewStore } from "@/lib/review-store";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -25,34 +23,16 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function DashboardRoute() {
   const { user } = Route.useRouteContext();
+  const authUser = useAuthStore((s) => s.user) || user;
   const { setRole, setUserName, setUserEmail } = useReviewStore();
 
   useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const profileName = await ensureProfile(user);
-        if (active && profileName) setUserName(profileName);
-      } catch {
-        // Frontend-only mock profile flow; no backend required.
-      }
-
-      if (!active) return;
-
-      // Re-read from sessionStorage in case ensureProfile or a login flow
-      // wrote the name there after the initial render.
-      const storedName = window.sessionStorage.getItem(STORAGE_KEYS.PROFILE_NAME);
-      if (storedName) setUserName(storedName);
-
-      const account = getActiveDemoAccount();
-      setRole(account.role);
-      setUserEmail(account.email);
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [user, setRole, setUserName, setUserEmail]);
+    if (authUser) {
+      if (authUser.name) setUserName(authUser.name);
+      if (authUser.email) setUserEmail(authUser.email);
+      if (authUser.role) setRole(normalizeRole(authUser.role));
+    }
+  }, [authUser, setRole, setUserName, setUserEmail]);
 
   return <ReviewPlatform />;
 }

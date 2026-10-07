@@ -4,8 +4,6 @@
  */
 
 export const STORAGE_KEYS = {
-  /** The active demo account id, written to sessionStorage on login. */
-  ACTIVE_ACCOUNT: "reviewx-active-account",
   /** The resolved display name for the current session. */
   PROFILE_NAME: "reviewx-profile-name",
   /** The redirect destination stored before an OAuth hand-off. */
@@ -16,4 +14,10 @@ export const STORAGE_KEYS = {
   GITHUB_CONNECTION_ID: "reviewx-github-connection-id",
   /** Local display/access preview selected by the user. The backend tier remains authoritative. */
   SUBSCRIPTION_TIER: "reviewx-subscription-tier",
+  /** Active review ID if a review is currently in flight. */
+  ACTIVE_REVIEW_ID: "reviewx-active-review-id",
+  /** Active review status if in flight (pending/parsing/analyzing/etc). */
+  ACTIVE_REVIEW_STATUS: "reviewx-active-review-status",
+  /** JWT access token key in localStorage. */
+  AUTH_TOKEN: "reviewx_token",
 } as const;

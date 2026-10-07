@@ -1,33 +1,65 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { getActiveDemoAccount } from "@/lib/demo-accounts";
-import { STORAGE_KEYS } from "@/lib/constants";
+import { createFileRoute, Outlet, redirect, isRedirect } from "@tanstack/react-router";
+import { LoaderCircle } from "lucide-react";
+import { getAuthToken } from "@/lib/api";
+import { useAuthStore, normalizeRole } from "@/lib/auth-store";
+
+function AuthLoadingScreen() {
+  return (
+    <div className="flex h-screen w-screen flex-col items-center justify-center bg-background">
+      <LoaderCircle className="size-8 animate-spin text-primary" />
+      <p className="mt-3 text-xs text-muted-foreground">Authenticating session…</p>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
-  beforeLoad: ({ location }) => {
-    // Guard: if no active account is stored in the session the user has not
-    // logged in yet. Redirect to /auth with the intended destination as `next`.
-    if (
-      typeof window !== "undefined" &&
-      !window.sessionStorage.getItem(STORAGE_KEYS.ACTIVE_ACCOUNT)
-    ) {
+  beforeLoad: async ({ location }) => {
+    // 1. Must have an auth token in storage
+    const token = getAuthToken();
+    if (!token) {
       throw redirect({
         to: "/auth",
         search: { next: location.href },
       });
     }
 
-    const account = getActiveDemoAccount();
+    // 2. Ensure user is loaded in Zustand auth store
+    let user = useAuthStore.getState().user;
+    if (!user) {
+      try {
+        user = await useAuthStore.getState().initialize();
+      } catch (err) {
+        if (isRedirect(err)) throw err;
+        throw redirect({
+          to: "/auth",
+          search: { next: location.href },
+        });
+      }
+    }
+
+    if (!user) {
+      throw redirect({
+        to: "/auth",
+        search: { next: location.href },
+      });
+    }
+
     return {
-      user: {
-        id: account.id,
-        email: account.email,
-        user_metadata: {
-          full_name: account.name,
-        },
-      },
-      role: account.role,
+      user,
+      role: normalizeRole(user.role),
     };
   },
-  component: () => <Outlet />,
+  pendingComponent: AuthLoadingScreen,
+  component: AuthenticatedLayout,
 });
+
+function AuthenticatedLayout() {
+  const { status, user } = useAuthStore();
+
+  if (status === "loading" || (!user && status !== "unauthenticated")) {
+    return <AuthLoadingScreen />;
+  }
+
+  return <Outlet />;
+}

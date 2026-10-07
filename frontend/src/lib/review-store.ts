@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { ProjectRecord, ReviewDetails, ReviewReport, ScheduledReview, SubscriptionTier } from "./review-api";
+import type { ReviewResult } from "./api";
+import type { ProjectRecord, ScheduledReview, SubscriptionTier } from "./review-api";
 import { STORAGE_KEYS } from "./constants";
 
 export type View =
@@ -28,23 +29,17 @@ interface ReviewState {
   progress: number;
   step: number;
   theme: "dark" | "light";
-  selectedFinding: string;
-  /** Persisted status per finding id, survives view navigation. */
+  selectedFinding: string | null;
   findingStatuses: Record<string, string>;
   severity: string;
   subscriptionTier: SubscriptionTier;
   projects: ProjectRecord[];
   activeReviewId: string | null;
-  activeReview: ReviewDetails | null;
-  reviews: ReviewDetails[];
-  activeReport: ReviewReport | null;
-  reportList: ReviewReport[];
+  activeReview: ReviewResult | null;
+  activeReviewStatus: string | null;
   scheduledReviews: ScheduledReview[];
-  githubRepository: { owner: string; name: string; ref?: string } | null;
   apiResponses: Record<string, { request?: unknown; response?: unknown; error?: string; errorResponse?: unknown; receivedAt: string }>;
-  /** Display name for the authenticated user shown in sidebar / profile. */
   userName: string;
-  /** Email for the authenticated user shown in sidebar / profile. */
   userEmail: string;
   setView: (view: View) => void;
   setRole: (role: Role) => void;
@@ -58,26 +53,21 @@ interface ReviewState {
   setSubscriptionTier: (tier: SubscriptionTier) => void;
   setProjects: (projects: ProjectRecord[]) => void;
   setActiveReviewId: (reviewId: string | null) => void;
-  setActiveReview: (review: ReviewDetails | null) => void;
-  setReviews: (updater: ReviewDetails[] | ((prev: ReviewDetails[]) => ReviewDetails[])) => void;
-  setActiveReport: (report: ReviewReport | null) => void;
-  setReportList: (updater: ReviewReport[] | ((prev: ReviewReport[]) => ReviewReport[])) => void;
+  setActiveReview: (review: ReviewResult | null) => void;
+  setActiveReviewStatus: (status: string | null) => void;
   setScheduledReviews: (updater: ScheduledReview[] | ((prev: ScheduledReview[]) => ScheduledReview[])) => void;
-  setGithubRepository: (repository: { owner: string; name: string; ref?: string } | null) => void;
   setApiResponse: (
     key: string,
     value: { request?: unknown; response?: unknown; error?: string; errorResponse?: unknown },
   ) => void;
   setUserName: (name: string) => void;
   setUserEmail: (email: string) => void;
-  /** Resets transient UI state (view, analysis, severity) without touching user identity. */
   resetSession: () => void;
 }
 
 function readTheme(): "dark" | "light" {
   if (typeof window === "undefined") return "dark";
-  const stored = localStorage.getItem(STORAGE_KEYS.THEME);
-  return stored === "light" ? "light" : "dark";
+  return localStorage.getItem(STORAGE_KEYS.THEME) === "light" ? "light" : "dark";
 }
 
 function readSubscriptionTier(): SubscriptionTier {
@@ -86,25 +76,36 @@ function readSubscriptionTier(): SubscriptionTier {
   return stored === "pro" || stored === "enterprise" ? stored : "free";
 }
 
+function readActiveReviewSession() {
+  if (typeof window === "undefined") return { reviewId: null, status: null };
+  const reviewId = sessionStorage.getItem(STORAGE_KEYS.ACTIVE_REVIEW_ID);
+  const status = sessionStorage.getItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS);
+  if (!reviewId || status === "completed" || status === "failed") {
+    sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_ID);
+    sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS);
+    return { reviewId: null, status: null };
+  }
+  return { reviewId, status };
+}
+
+const initialReviewSession = readActiveReviewSession();
+
 export const useReviewStore = create<ReviewState>((set) => ({
-  view: "dashboard",
+  view: initialReviewSession.reviewId ? "new" : "dashboard",
   role: "member",
-  analyzing: false,
+  analyzing: Boolean(initialReviewSession.reviewId),
   progress: 0,
   step: 0,
   theme: readTheme(),
-  selectedFinding: "",
+  selectedFinding: null,
   findingStatuses: {},
   severity: "All",
   subscriptionTier: readSubscriptionTier(),
   projects: [],
-  activeReviewId: null,
+  activeReviewId: initialReviewSession.reviewId,
   activeReview: null,
-  reviews: [],
-  activeReport: null,
-  reportList: [],
+  activeReviewStatus: initialReviewSession.status,
   scheduledReviews: [],
-  githubRepository: null,
   apiResponses: {},
   userName: "ReviewX member",
   userEmail: "",
@@ -112,52 +113,58 @@ export const useReviewStore = create<ReviewState>((set) => ({
   setView: (view) => set({ view }),
   setRole: (role) => set({ role, view: role === "platform" ? "admin" : "dashboard" }),
   setAnalyzing: (analyzing) => set({ analyzing }),
-
-  // Accepts both a plain value and a functional updater so callers can use
-  // `setProgress(p => Math.min(p + 4, 100))` to avoid stale-closure bugs.
   setProgress: (updater) =>
     set((state) => ({
       progress: typeof updater === "function" ? updater(state.progress) : updater,
     })),
-
   setStep: (step) => set({ step }),
-
   setTheme: (theme) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEYS.THEME, theme);
-    }
+    if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEYS.THEME, theme);
     set({ theme });
   },
-
   setSelectedFinding: (selectedFinding) => set({ selectedFinding, view: "finding" }),
-
   setFindingStatus: (id, status) =>
-    set((state) => ({
-      findingStatuses: { ...state.findingStatuses, [id]: status },
-    })),
-
+    set((state) => ({ findingStatuses: { ...state.findingStatuses, [id]: status } })),
   setSeverity: (severity) => set({ severity }),
   setSubscriptionTier: (subscriptionTier) => {
     if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEYS.SUBSCRIPTION_TIER, subscriptionTier);
     set({ subscriptionTier });
   },
   setProjects: (projects) => set({ projects }),
-  setActiveReviewId: (activeReviewId) => set({ activeReviewId }),
-  setActiveReview: (activeReview) => set({ activeReview }),
-  setReviews: (updater) =>
-    set((state) => ({
-      reviews: typeof updater === "function" ? updater(state.reviews) : updater,
-    })),
-  setActiveReport: (activeReport) => set({ activeReport }),
-  setReportList: (updater) =>
-    set((state) => ({
-      reportList: typeof updater === "function" ? updater(state.reportList) : updater,
-    })),
+  setActiveReviewId: (activeReviewId) => {
+    if (typeof window !== "undefined") {
+      if (activeReviewId) sessionStorage.setItem(STORAGE_KEYS.ACTIVE_REVIEW_ID, activeReviewId);
+      else sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_ID);
+    }
+    set({ activeReviewId });
+  },
+  setActiveReview: (activeReview) => {
+    const status = activeReview?.status ?? null;
+    if (typeof window !== "undefined" && (status === "completed" || status === "failed")) {
+      sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_ID);
+      sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS);
+    }
+    set({
+      activeReview,
+      activeReviewId: activeReview?.reviewId ?? null,
+      activeReviewStatus: status,
+      selectedFinding: activeReview?.findings[0]?._id ?? activeReview?.findings[0]?.id ?? null,
+    });
+  },
+  setActiveReviewStatus: (activeReviewStatus) => {
+    if (typeof window !== "undefined") {
+      if (activeReviewStatus && !["completed", "failed"].includes(activeReviewStatus)) {
+        sessionStorage.setItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS, activeReviewStatus);
+      } else {
+        sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS);
+      }
+    }
+    set({ activeReviewStatus });
+  },
   setScheduledReviews: (updater) =>
     set((state) => ({
       scheduledReviews: typeof updater === "function" ? updater(state.scheduledReviews) : updater,
     })),
-  setGithubRepository: (githubRepository) => set({ githubRepository }),
   setApiResponse: (key, value) =>
     set((state) => ({
       apiResponses: {
@@ -167,8 +174,11 @@ export const useReviewStore = create<ReviewState>((set) => ({
     })),
   setUserName: (userName) => set({ userName }),
   setUserEmail: (userEmail) => set({ userEmail }),
-
-  resetSession: () =>
+  resetSession: () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_ID);
+      sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_REVIEW_STATUS);
+    }
     set({
       view: "dashboard",
       analyzing: false,
@@ -179,10 +189,10 @@ export const useReviewStore = create<ReviewState>((set) => ({
       findingStatuses: {},
       activeReviewId: null,
       activeReview: null,
-      activeReport: null,
-      reportList: [],
+      activeReviewStatus: null,
       scheduledReviews: [],
-      githubRepository: null,
       apiResponses: {},
-    }),
+      selectedFinding: null,
+    });
+  },
 }));
