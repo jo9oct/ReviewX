@@ -274,6 +274,9 @@ const reviewEngine = {
         analysisByFile,
         companyRules:
           combinedCompanyRules,
+
+        options:
+          reviewOptions,
       });
 
     const findings =

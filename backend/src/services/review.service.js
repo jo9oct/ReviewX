@@ -140,14 +140,63 @@ const normalizeReviewOptions = (
   }
 
   return {
+    securityAnalysis:
+      options.securityAnalysis === true,
+
+    bugDetection:
+      options.bugDetection === true,
+
+    codeQuality:
+      options.codeQuality === true,
+
+    performance:
+      options.performance === true,
+  };
+};
+
+/*
+ * User-selected analysis options are kept
+ * separate from subscription-controlled
+ * capabilities.
+ *
+ * The frontend controls only:
+ *
+ * - securityAnalysis
+ * - bugDetection
+ * - codeQuality
+ * - performance
+ *
+ * The backend controls:
+ *
+ * - aiAnalysis
+ * - aiRemediation
+ * - advancedAnalysis
+ *
+ * using the current subscription policy.
+ */
+const buildEffectiveReviewOptions = (
+  selectedOptions,
+  access,
+) => {
+  const options =
+    normalizeReviewOptions(
+      selectedOptions,
+    );
+
+  const policy =
+    access?.policy || {};
+
+  return {
+    ...options,
+
     aiAnalysis:
-      options.aiAnalysis === true,
+      policy.aiAnalysis === true,
 
     aiRemediation:
-      options.aiRemediation === true,
+      policy.aiRemediation === true,
 
     advancedAnalysis:
-      options.advancedAnalysis === true,
+      policy.advancedAnalysis === true,
   };
 };
 
@@ -932,7 +981,15 @@ const getReviewIdFromDocument = (
   );
 };
 
+/*
+ * Creates or reuses a project for
+ * the current owner.
+ *
+ * ownerId is now stored directly on
+ * the Project document.
+ */
 const createProjectForReview = async ({
+  ownerId,
   project,
   source,
 }) => {
@@ -940,6 +997,7 @@ const createProjectForReview = async ({
     await projectRepository.findByNormalizedName(
       project.normalizedName,
       source.type,
+      ownerId,
     );
 
   if (existing) {
@@ -947,6 +1005,8 @@ const createProjectForReview = async ({
   }
 
   return projectRepository.create({
+    ownerId,
+
     name:
       project.name,
 
@@ -994,13 +1054,13 @@ const createReviewRecord = async ({
    *
    * The same identifier is used by:
    *
-   * MongoDB
-   * Redis
-   * BullMQ
-   * findings
-   * evidence
-   * score
-   * AI analysis
+   * - MongoDB
+   * - Redis
+   * - BullMQ
+   * - findings
+   * - evidence
+   * - score
+   * - AI analysis
    */
   const reviewId =
     new mongoose.Types.ObjectId();
@@ -1318,7 +1378,8 @@ const executeReview = async ({
 
     const {
       source,
-      options,
+      options:
+        storedOptions,
     } =
       executionData;
 
@@ -1341,6 +1402,20 @@ const executeReview = async ({
 
     const access =
       getAccessContext();
+
+    const options =
+      buildEffectiveReviewOptions(
+        storedOptions,
+        access,
+      );
+
+    assertRequestedFeatures(
+      options,
+    );
+
+    assertSourceFeatureAccess(
+      source,
+    );
 
     const result =
       await reviewEngine.run({
@@ -1557,7 +1632,7 @@ const queueReviewExecution = async ({
 
   if (
     review.status !==
-      'pending'
+    'pending'
   ) {
     throw new AppError({
       code:
@@ -1789,15 +1864,42 @@ const createReviewResponse =
       });
     }
 
-    const options =
+    /*
+     * The frontend controls only the four
+     * analysis selections.
+     */
+    const selectedOptions =
       normalizeReviewOptions(
         payload.options,
       );
 
+    /*
+     * The backend determines the user's
+     * subscription tier and capabilities.
+     *
+     * No tier is accepted from the client.
+     */
+    const access =
+      getAccessContext();
+
+    const options =
+      buildEffectiveReviewOptions(
+        selectedOptions,
+        access,
+      );
+
+    /*
+     * These capabilities are now derived
+     * from the subscription policy.
+     */
     assertRequestedFeatures(
       options,
     );
 
+    /*
+     * GitHub and archive access are also
+     * controlled by the backend policy.
+     */
     assertSourceFeatureAccess(
       payload.source,
     );
@@ -1838,8 +1940,26 @@ const createReviewResponse =
       totalFiles,
     });
 
+    /*
+     * Temporary owner ID.
+     *
+     * This will later come from the
+     * authenticated user/session.
+     */
+    const ownerId =
+      DEFAULT_OWNER_ID;
+
+    /*
+     * The project is now created/reused
+     * within the current owner's scope.
+     *
+     * ownerId is also persisted directly
+     * on the Project document.
+     */
     const project =
       await createProjectForReview({
+        ownerId,
+
         project:
           projectIdentity,
 
@@ -1862,15 +1982,6 @@ const createReviewResponse =
         statusCode: 500,
       });
     }
-
-    /*
-     * Temporary owner ID.
-     *
-     * This will later come from the
-     * authenticated user/session.
-     */
-    const ownerId =
-      DEFAULT_OWNER_ID;
 
     const review =
       await createReviewRecord({

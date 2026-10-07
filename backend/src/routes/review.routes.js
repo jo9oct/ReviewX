@@ -5,6 +5,7 @@ import {
 import {
   createReview,
   getReview,
+  getAllReviews,
 } from '../controllers/review.controller.js';
 
 import {
@@ -41,6 +42,18 @@ router.post(
   accessMiddleware(),
   enforceReviewLimits,
   createReview,
+);
+
+/*
+ * Get all reviews.
+ *
+ * Must be declared BEFORE /:reviewId
+ * so "all" is not interpreted as a review ID.
+ */
+router.get(
+  '/all',
+  accessMiddleware(),
+  getAllReviews,
 );
 
 router.get(

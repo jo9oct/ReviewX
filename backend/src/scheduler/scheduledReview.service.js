@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import {
   assertFeatureAccess,
 } from "../access/access.service.js";
@@ -12,20 +14,14 @@ const SCHEDULED_REVIEW_FEATURE =
 const MIN_INTERVAL_SECONDS =
   60;
 
-const normalizeOwnerId = (
-  ownerId,
-) => {
-  if (
-    typeof ownerId !== "string" ||
-    !ownerId.trim()
-  ) {
-    throw new TypeError(
-      "Owner ID is required.",
-    );
-  }
-
-  return ownerId.trim();
-};
+/*
+ * Temporary mock owner ID.
+ *
+ * This will be replaced with the
+ * authenticated user's ID later.
+ */
+const DEFAULT_OWNER_ID =
+  "user-test-001";
 
 const normalizeReviewId = (
   reviewId,
@@ -115,7 +111,6 @@ const createScheduledReviewService =
 
     return {
       async createSchedule({
-        ownerId,
         reviewId,
         intervalSeconds,
       }) {
@@ -126,10 +121,13 @@ const createScheduledReviewService =
           SCHEDULED_REVIEW_FEATURE,
         );
 
+        /*
+         * Use the temporary mock owner ID.
+         * The owner ID is not accepted
+         * from user input.
+         */
         const normalizedOwnerId =
-          normalizeOwnerId(
-            ownerId,
-          );
+          DEFAULT_OWNER_ID;
 
         const normalizedReviewId =
           normalizeReviewId(
@@ -253,7 +251,6 @@ const createScheduledReviewService =
       },
 
       async getSchedule({
-        ownerId,
         scheduleId,
       }) {
         assertFeatureAccess(
@@ -261,9 +258,7 @@ const createScheduledReviewService =
         );
 
         const normalizedOwnerId =
-          normalizeOwnerId(
-            ownerId,
-          );
+          DEFAULT_OWNER_ID;
 
         const schedule =
           await scheduledReviewRepository.findById(
@@ -335,17 +330,13 @@ const createScheduledReviewService =
         };
       },
 
-      async listSchedules({
-        ownerId,
-      }) {
+      async listSchedules() {
         assertFeatureAccess(
           SCHEDULED_REVIEW_FEATURE,
         );
 
         const normalizedOwnerId =
-          normalizeOwnerId(
-            ownerId,
-          );
+          DEFAULT_OWNER_ID;
 
         const schedules =
           await scheduledReviewRepository.findByOwnerId(
@@ -385,7 +376,6 @@ const createScheduledReviewService =
       },
 
       async cancelSchedule({
-        ownerId,
         scheduleId,
       }) {
         assertFeatureAccess(
@@ -393,9 +383,7 @@ const createScheduledReviewService =
         );
 
         const normalizedOwnerId =
-          normalizeOwnerId(
-            ownerId,
-          );
+          DEFAULT_OWNER_ID;
 
         const schedule =
           await scheduledReviewRepository.findById(
@@ -421,7 +409,7 @@ const createScheduledReviewService =
           String(
             schedule.ownerId,
           ) !==
-          normalizedOwnerId
+            normalizedOwnerId
         ) {
           const error =
             new Error(

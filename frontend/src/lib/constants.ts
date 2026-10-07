@@ -12,4 +12,8 @@ export const STORAGE_KEYS = {
   AUTH_NEXT: "reviewx-auth-next",
   /** The user's preferred colour theme, persisted across sessions. */
   THEME: "reviewx-theme",
+  /** Short-lived backend GitHub connection id; never contains the OAuth token. */
+  GITHUB_CONNECTION_ID: "reviewx-github-connection-id",
+  /** Local display/access preview selected by the user. The backend tier remains authoritative. */
+  SUBSCRIPTION_TIER: "reviewx-subscription-tier",
 } as const;

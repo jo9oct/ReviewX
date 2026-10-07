@@ -396,20 +396,76 @@ const buildAnalysisArtifacts = (
   };
 };
 
+const normalizeAnalysisSelections = (
+  options = {},
+) => {
+  if (
+    !options ||
+    typeof options !== 'object' ||
+    Array.isArray(options)
+  ) {
+    return [];
+  }
+
+  const categories = [];
+
+  if (
+    options.securityAnalysis === true
+  ) {
+    categories.push(
+      'security'
+    );
+  }
+
+  if (
+    options.bugDetection === true
+  ) {
+    categories.push(
+      'bug'
+    );
+  }
+
+  if (
+    options.codeQuality === true
+  ) {
+    categories.push(
+      'quality'
+    );
+  }
+
+  if (
+    options.performance === true
+  ) {
+    categories.push(
+      'performance'
+    );
+  }
+
+  return categories;
+};
+
 const runStaticAnalyzers = ({
   files,
   analysisByFile,
   companyRules = [],
+  options = {},
 }) => {
   const ruleEngine =
     new RuleEngine(
       ruleRegistry
     );
 
+  const selectedCategories =
+    normalizeAnalysisSelections(
+      options,
+    );
+
   const allViolations =
     ruleEngine.evaluate({
       files,
       analysisByFile,
+      categories:
+        selectedCategories,
     });
 
   const bugs =

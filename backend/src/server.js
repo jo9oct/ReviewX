@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import http from 'node:http';
 import express from 'express';
+import cors from 'cors';
 
 import environment from './config/environment.js';
 
@@ -13,6 +14,7 @@ import reviewRoutes from './routes/review.routes.js';
 import reportRoutes from './routes/report.routes.js';
 import githubRoutes from './routes/github.routes.js';
 import scheduledReviewRoutes from './routes/scheduledReview.routes.js';
+import projectRoutes from './routes/project.routes.js';
 
 import {
   notFoundMiddleware,
@@ -43,6 +45,14 @@ app.disable(
 
 app.use(
   securityMiddleware,
+);
+
+app.use(
+  cors({
+    origin:
+      process.env.CORS_ORIGIN,
+    credentials: true,
+  }),
 );
 
 app.use(
@@ -104,6 +114,11 @@ app.use(
 app.use(
   '/api/v1/scheduled-reviews',
   scheduledReviewRoutes,
+);
+
+app.use(
+  '/api/v1/projects',
+  projectRoutes,
 );
 
 app.use(

@@ -181,17 +181,21 @@ const reviewSchema =
 
     options:
       Joi.object({
-        aiAnalysis:
+        securityAnalysis:
           Joi.boolean()
-            .default(false),
+            .default(true),
 
-        aiRemediation:
+        bugDetection:
           Joi.boolean()
-            .default(false),
+            .default(true),
 
-        advancedAnalysis:
+        codeQuality:
           Joi.boolean()
-            .default(false),
+            .default(true),
+
+        performance:
+          Joi.boolean()
+            .default(true),
       })
         .default({})
         .unknown(false),

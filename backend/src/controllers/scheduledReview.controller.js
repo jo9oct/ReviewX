@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import {
   createScheduledReviewService,
 } from '../scheduler/scheduledReview.service.js';
@@ -23,14 +25,12 @@ const createScheduledReview = async (
 ) => {
   try {
     const {
-      ownerId,
       reviewId,
       intervalSeconds,
     } = req.body;
 
     const result =
       await scheduledReviewService.createSchedule({
-        ownerId,
         reviewId,
         intervalSeconds,
       });
@@ -58,14 +58,8 @@ const getScheduledReviews = async (
   next,
 ) => {
   try {
-    const {
-      ownerId,
-    } = req.query;
-
     const result =
-      await scheduledReviewService.listSchedules({
-        ownerId,
-      });
+      await scheduledReviewService.listSchedules();
 
     return res.status(200).json(
       createResponse({
@@ -90,13 +84,8 @@ const getScheduledReview = async (
   next,
 ) => {
   try {
-    const {
-      ownerId,
-    } = req.query;
-
     const result =
       await scheduledReviewService.getSchedule({
-        ownerId,
         scheduleId:
           req.params.scheduleId,
       });
@@ -124,13 +113,8 @@ const cancelScheduledReview = async (
   next,
 ) => {
   try {
-    const {
-      ownerId,
-    } = req.body;
-
     const result =
       await scheduledReviewService.cancelSchedule({
-        ownerId,
         scheduleId:
           req.params.scheduleId,
       });

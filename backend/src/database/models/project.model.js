@@ -2,6 +2,13 @@ import mongoose from 'mongoose';
 
 const projectSchema = new mongoose.Schema(
   {
+    ownerId: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true
+    },
+
     name: {
       type: String,
       required: true,
@@ -60,6 +67,11 @@ const projectSchema = new mongoose.Schema(
 projectSchema.index({
   normalizedName: 1,
   sourceType: 1
+});
+
+projectSchema.index({
+  ownerId: 1,
+  createdAt: -1
 });
 
 const Project = mongoose.model('Project', projectSchema);

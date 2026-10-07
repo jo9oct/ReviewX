@@ -39,8 +39,8 @@ const TIER_POLICIES = Object.freeze({
     aiRemediation: true,
     advancedAnalysis: true,
 
-    githubIntegration: true,
-    companyRules: true,
+    githubIntegration: false,
+    companyRules: false,
     scheduledReviews: false,
 
     htmlReport: true,
