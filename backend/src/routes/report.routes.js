@@ -1,6 +1,10 @@
 import { Router } from 'express';
 
 import {
+  authenticate,
+} from '../middleware/authenticate.js';
+
+import {
   createReport,
   getReport,
   listReports,
@@ -10,16 +14,19 @@ const router = Router();
 
 router.post(
   '/reviews/:reviewId/reports',
+  authenticate,
   createReport,
 );
 
 router.get(
   '/reviews/:reviewId/reports',
+  authenticate,
   listReports,
 );
 
 router.get(
   '/reports/:reportId',
+  authenticate,
   getReport,
 );
 

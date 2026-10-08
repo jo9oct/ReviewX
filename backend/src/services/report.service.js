@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import {
   buildReport,
 } from "../reports/reportBuilder.js";
@@ -43,8 +45,28 @@ import {
   AppError,
 } from "../utils/errors.js";
 
-const DEFAULT_OWNER_ID =
-  "user-test-001";
+const normalizeOwnerId = (
+  ownerId,
+) => {
+  if (
+    !ownerId ||
+    typeof ownerId !==
+      "string" ||
+    !ownerId.trim()
+  ) {
+    throw new AppError({
+      code:
+        "AUTHENTICATED_OWNER_REQUIRED",
+
+      message:
+        "An authenticated user is required.",
+
+      statusCode: 401,
+    });
+  }
+
+  return ownerId.trim();
+};
 
 const getReportId = (
   report,
@@ -260,6 +282,7 @@ const normalizeReportContent =
 const createReport = async ({
   reviewId,
   format = "json",
+  ownerId,
 }) => {
   if (
     typeof reviewId !==
@@ -276,6 +299,11 @@ const createReport = async ({
       statusCode: 400,
     });
   }
+
+  const normalizedOwnerId =
+    normalizeOwnerId(
+      ownerId,
+    );
 
   const normalizedReviewId =
     reviewId.trim();
@@ -308,6 +336,29 @@ const createReport = async ({
         "Review not found.",
 
       statusCode: 404,
+    });
+  }
+
+  /*
+   * The review must belong to the
+   * authenticated user requesting
+   * the report.
+   */
+  if (
+    !review.ownerId ||
+    String(
+      review.ownerId,
+    ) !==
+      normalizedOwnerId
+  ) {
+    throw new AppError({
+      code:
+        "REVIEW_OWNER_MISMATCH",
+
+      message:
+        "Review does not belong to the authenticated user.",
+
+      statusCode: 403,
     });
   }
 
@@ -344,8 +395,7 @@ const createReport = async ({
     report =
       await createReportRecord({
         ownerId:
-          review.ownerId ||
-          DEFAULT_OWNER_ID,
+          normalizedOwnerId,
 
         reviewId:
           normalizedReviewId,
@@ -382,6 +432,28 @@ const createReport = async ({
         "The report could not be created.",
 
       statusCode: 500,
+    });
+  }
+
+  /*
+   * Verify that an existing report
+   * belongs to the authenticated user.
+   */
+  if (
+    report.ownerId &&
+    String(
+      report.ownerId,
+    ) !==
+      normalizedOwnerId
+  ) {
+    throw new AppError({
+      code:
+        "REPORT_OWNER_MISMATCH",
+
+      message:
+        "Report does not belong to the authenticated user.",
+
+      statusCode: 403,
     });
   }
 
@@ -446,8 +518,7 @@ const createReport = async ({
     report =
       await createReportRecord({
         ownerId:
-          review.ownerId ||
-          DEFAULT_OWNER_ID,
+          normalizedOwnerId,
 
         reviewId:
           normalizedReviewId,
@@ -519,7 +590,13 @@ const createReport = async ({
 const generateReport =
   async ({
     reportId,
+    ownerId,
   }) => {
+    const normalizedOwnerId =
+      normalizeOwnerId(
+        ownerId,
+      );
+
     const normalizedReportId =
       normalizeReportId(
         reportId,
@@ -539,6 +616,28 @@ const generateReport =
           "Report not found.",
 
         statusCode: 404,
+      });
+    }
+
+    /*
+     * Verify report ownership before
+     * generating or accessing the report.
+     */
+    if (
+      !report.ownerId ||
+      String(
+        report.ownerId,
+      ) !==
+        normalizedOwnerId
+    ) {
+      throw new AppError({
+        code:
+          "REPORT_OWNER_MISMATCH",
+
+        message:
+          "Report does not belong to the authenticated user.",
+
+        statusCode: 403,
       });
     }
 
@@ -575,6 +674,28 @@ const generateReport =
           "The review associated with the report was not found.",
 
         statusCode: 404,
+      });
+    }
+
+    /*
+     * The associated review must also
+     * belong to the authenticated user.
+     */
+    if (
+      !review.ownerId ||
+      String(
+        review.ownerId,
+      ) !==
+        normalizedOwnerId
+    ) {
+      throw new AppError({
+        code:
+          "REVIEW_OWNER_MISMATCH",
+
+        message:
+          "The review associated with the report does not belong to the authenticated user.",
+
+        statusCode: 403,
       });
     }
 

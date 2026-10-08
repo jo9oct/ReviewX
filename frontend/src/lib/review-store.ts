@@ -70,12 +70,6 @@ function readTheme(): "dark" | "light" {
   return localStorage.getItem(STORAGE_KEYS.THEME) === "light" ? "light" : "dark";
 }
 
-function readSubscriptionTier(): SubscriptionTier {
-  if (typeof window === "undefined") return "free";
-  const stored = window.localStorage.getItem(STORAGE_KEYS.SUBSCRIPTION_TIER);
-  return stored === "pro" || stored === "enterprise" ? stored : "free";
-}
-
 function readActiveReviewSession() {
   if (typeof window === "undefined") return { reviewId: null, status: null };
   const reviewId = sessionStorage.getItem(STORAGE_KEYS.ACTIVE_REVIEW_ID);
@@ -100,7 +94,7 @@ export const useReviewStore = create<ReviewState>((set) => ({
   selectedFinding: null,
   findingStatuses: {},
   severity: "All",
-  subscriptionTier: readSubscriptionTier(),
+  subscriptionTier: "free",
   projects: [],
   activeReviewId: initialReviewSession.reviewId,
   activeReview: null,
@@ -127,7 +121,6 @@ export const useReviewStore = create<ReviewState>((set) => ({
     set((state) => ({ findingStatuses: { ...state.findingStatuses, [id]: status } })),
   setSeverity: (severity) => set({ severity }),
   setSubscriptionTier: (subscriptionTier) => {
-    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEYS.SUBSCRIPTION_TIER, subscriptionTier);
     set({ subscriptionTier });
   },
   setProjects: (projects) => set({ projects }),
@@ -181,6 +174,7 @@ export const useReviewStore = create<ReviewState>((set) => ({
     }
     set({
       view: "dashboard",
+      subscriptionTier: "free",
       analyzing: false,
       progress: 0,
       step: 0,

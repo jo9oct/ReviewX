@@ -27,6 +27,7 @@ const createReport = async (
 
     const result =
       await createReportService({
+        ownerId: req.user.id,
         reviewId,
         format,
       });

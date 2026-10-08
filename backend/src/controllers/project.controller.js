@@ -14,6 +14,7 @@ const getProjects = async (
   try {
     const result =
       await getProjectsResponse({
+        ownerId: req.user.id,
         limit:
           req.query.limit,
 

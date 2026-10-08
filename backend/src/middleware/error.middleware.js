@@ -24,8 +24,13 @@ const errorMiddleware = (
       ? error.code
       : 'INTERNAL_SERVER_ERROR';
 
-  const message =
-    statusCode >= 500
+  const canExposeMessage =
+    error?.exposeMessage === true &&
+    statusCode === 502 &&
+    typeof error.message === 'string';
+  const message = canExposeMessage
+    ? error.message
+    : statusCode >= 500
       ? 'An internal server error occurred.'
       : error.message ||
         'The request could not be processed.';

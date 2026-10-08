@@ -1,15 +1,9 @@
 import { toast } from "sonner";
 import {
-  useSubmitReviewMutation,
-  useReviewQuery,
-  useGenerateReportMutation,
-  useDashboardMetricsQuery,
-  useReviewsQuery,
-  getReview,
   ApiClientError,
+  type ReviewResult,
   type ReviewFinding,
   type DashboardReview,
-  type DashboardFinding,
   useCompanyRulesQuery,
   useCreateCompanyRuleMutation,
   useUpdateCompanyRuleMutation,
@@ -97,7 +91,6 @@ import {
   createReport,
   getApiErrorResponse,
   getApiHealth,
-  getGithubConnectUrl,
   getGithubConnectionUser,
   getGithubRepository,
   getReport,
@@ -106,15 +99,21 @@ import {
   formatFindingLine,
   listProjects,
   listAllReviews,
-  listReviewReports,
+  getReview as getReviewDetails,
+  useDashboardMetricsQuery,
+  useReviewsQuery,
+  useSubscriptionQuery,
   listScheduledReviews,
   getScheduledReview,
   createScheduledReview,
   cancelScheduledReview,
+  startGithubConnect,
+  initiateSubscriptionPayment,
   type CreateReviewPayload,
   type ScheduledReview,
   type ProjectRecord,
   type ReviewIndexRecord,
+  type ReviewDetails,
   TIER_POLICIES,
   type SubscriptionTier,
 } from "@/lib/review-api";
@@ -127,10 +126,6 @@ import { cn } from "@/lib/utils";
 const Editor = lazy(() => import("@monaco-editor/react").then((m) => ({ default: m.Editor })));
 
 type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
-
-function getEffectiveTier(role: Role, selectedTier: SubscriptionTier): SubscriptionTier {
-  return role === "member" ? selectedTier : "enterprise";
-}
 
 function apiFailure(error: unknown, fallback: string) {
   const details = error instanceof ApiClientError ? error.details : getApiErrorResponse(error);
@@ -175,6 +170,88 @@ function mapBackendFindingToUi(bf: ReviewFinding, index: number): Finding {
     confidence: confMap[bf.confidence?.toLowerCase()] || 90,
     status: bf.status ? bf.status.charAt(0).toUpperCase() + bf.status.slice(1) : "Detected",
     description: bf.description || bf.title,
+  };
+}
+
+function toUiReviewResult(details: ReviewDetails): ReviewResult {
+  const reviewId = details.review.id;
+  const score = details.score as
+    | (NonNullable<ReviewDetails["score"]> & {
+        overall?: number | null;
+        security?: number | null;
+        bugs?: number | null;
+        quality?: number | null;
+        performance?: number | null;
+      })
+    | null;
+  const findings: ReviewFinding[] = details.findings.map((finding) => {
+    const category = String(finding.category ?? "quality").toLowerCase();
+    const confidence = String(finding.confidence ?? "medium").toLowerCase();
+    const status = String(finding.status ?? "detected").toLowerCase();
+    const severity = String(finding.severity ?? "info").toLowerCase();
+    return {
+      ...(finding._id ? { _id: finding._id } : {}),
+      ...(finding.id ? { id: finding.id } : {}),
+      category:
+        category === "security" || category === "bug" || category === "quality" || category === "performance"
+          ? category
+          : "quality",
+      type: finding.ruleId ?? category,
+      ruleId: finding.ruleId ?? "review-finding",
+      title: finding.title ?? finding.ruleId ?? "Review finding",
+      description: finding.description ?? "",
+      severity: ["critical", "high", "medium", "low", "info"].includes(severity)
+        ? (severity as ReviewFinding["severity"])
+        : "info",
+      confidence: confidence === "high" || confidence === "low" ? confidence : "medium",
+      status: ["detected", "verified", "false_positive", "accepted", "resolved"].includes(status)
+        ? (status as ReviewFinding["status"])
+        : "detected",
+      file: finding.filePath ?? null,
+      line: finding.lineStart ?? null,
+      column: null,
+      code: null,
+      recommendation: finding.remediation ?? null,
+      analyzer: "backend",
+      fingerprint: String(finding._id ?? finding.id ?? `${reviewId}-${finding.ruleId ?? "finding"}`),
+    };
+  });
+  const countSeverity = (severity: string) =>
+    findings.filter((finding) => finding.severity === severity).length;
+  const aiAnalysis = details.aiAnalysis?.find((analysis) => analysis.status === "completed");
+
+  return {
+    reviewId,
+    status: details.review.status === "failed" ? "failed" : "completed",
+    summary: {
+      totalFindings: findings.length,
+      critical: countSeverity("critical"),
+      high: countSeverity("high"),
+      medium: countSeverity("medium"),
+      low: countSeverity("low"),
+      info: countSeverity("info"),
+    },
+    score: {
+      score: score?.overall ?? details.review.score ?? 0,
+      breakdown: {
+        security: score?.security ?? 0,
+        bugs: score?.bugs ?? 0,
+        quality: score?.quality ?? 0,
+        performance: score?.performance ?? 0,
+      },
+    },
+    findings,
+    aiAnalysis: aiAnalysis
+      ? {
+          status: aiAnalysis.status ?? "completed",
+          provider: aiAnalysis.provider ?? null,
+          model: aiAnalysis.model ?? null,
+          summary: aiAnalysis.result?.summary?.summary ?? null,
+          recommendations:
+            aiAnalysis.result?.improvements?.map((item) => item.suggestion ?? "").filter(Boolean) ?? [],
+        }
+      : null,
+    errorMessage: details.review.errorCode ?? null,
   };
 }
 
@@ -239,6 +316,7 @@ const roleNav: Record<Role, NavGroup[]> = {
         { view: "history", label: "My reviews", icon: History },
         { view: "integrations", label: "Integrations", icon: Github },
         { view: "schedules", label: "Schedules", icon: Clock3 },
+        { view: "billing", label: "Upgrade plan", icon: CreditCard },
       ],
     },
   ],
@@ -286,19 +364,78 @@ const roleNav: Record<Role, NavGroup[]> = {
 };
 
 export function ReviewPlatform() {
-  const { view, setView, theme, setTheme, role, userName, userEmail, subscriptionTier, setSubscriptionTier } = useReviewStore();
+  const { view, setView, theme, setTheme, role, userName, userEmail } = useReviewStore();
   const [mobileNav, setMobileNav] = useState(false);
+  const { user } = useAuthStore();
+  const subscriptionQuery = useSubscriptionQuery(user?.id);
+  const subscriptionTier = subscriptionQuery.data?.plan ?? "free";
+  const setSubscriptionTier = useReviewStore((state) => state.setSubscriptionTier);
+  const activeReviewId = useReviewStore((state) => state.activeReviewId);
+  const setActiveReview = useReviewStore((state) => state.setActiveReview);
+  const setActiveReviewStatus = useReviewStore((state) => state.setActiveReviewStatus);
+  const setAnalyzing = useReviewStore((state) => state.setAnalyzing);
+  const setApiResponse = useReviewStore((state) => state.setApiResponse);
+
   useEffect(() => {
     document.documentElement.classList.toggle("light", theme === "light");
   }, [theme]);
+
+  useEffect(() => {
+    if (subscriptionQuery.data) {
+      setSubscriptionTier(subscriptionQuery.data.plan);
+    }
+  }, [setSubscriptionTier, subscriptionQuery.data]);
+
+  useEffect(() => {
+    if (!activeReviewId) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    let errorReported = false;
+
+    const refreshReview = async () => {
+      try {
+        const details = await getReviewDetails(activeReviewId);
+        if (cancelled) return;
+        setApiResponse("GET /reviews/:reviewId", {
+          request: { reviewId: activeReviewId },
+          response: details,
+        });
+        const status = String(details.review.status ?? "pending").toLowerCase();
+        if (status === "completed" || status === "failed") {
+          setActiveReview(toUiReviewResult(details));
+          setAnalyzing(false);
+          return;
+        }
+        setActiveReviewStatus(status);
+        timer = window.setTimeout(() => void refreshReview(), 1500);
+      } catch (reviewError) {
+        if (cancelled) return;
+        const message = reviewError instanceof Error ? reviewError.message : "Unable to load review status";
+        setApiResponse("GET /reviews/:reviewId", {
+          request: { reviewId: activeReviewId },
+          ...apiFailure(reviewError, message),
+        });
+        setActiveReviewStatus(`Retrying: ${message}`);
+        if (!errorReported) {
+          toast.error(message);
+          errorReported = true;
+        }
+        timer = window.setTimeout(() => void refreshReview(), 5000);
+      }
+    };
+
+    void refreshReview();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [activeReviewId, setActiveReview, setActiveReviewStatus, setAnalyzing, setApiResponse]);
 
   // Derive context label and org name from role — no static personas map needed
   const roleBadge =
     role === "platform" ? "Platform admin"
     : role === "company" ? "Company admin"
     : "Member";
-
-  const { user } = useAuthStore();
 
   const orgName =
     role === "platform"
@@ -333,7 +470,7 @@ export function ReviewPlatform() {
     history: role === "member" ? "My reviews" : "Review history",
     rules: "Company rules",
     company: "Members",
-    billing: "Plans & billing",
+    billing: role === "member" ? "Upgrade plan" : "Plans & billing",
     profile: "Profile",
     admin: "Platform overview",
     users: "Users",
@@ -453,23 +590,21 @@ export function ReviewPlatform() {
             <p className="hidden text-[10px] text-muted-foreground sm:block">{headerSubtitle}</p>
           </div>
           <div className="ml-auto flex items-center gap-1.5">
-            {role === "member" ? (
-              <label className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                <span className="hidden sm:inline">Plan</span>
-                <select
-                  aria-label="Plan"
-                  value={subscriptionTier}
-                  onChange={(event) => setSubscriptionTier(event.target.value as SubscriptionTier)}
-                  className="h-8 rounded border border-border bg-surface px-2 text-xs capitalize text-foreground"
-                >
-                  <option value="free">Free</option>
-                  <option value="pro">Pro</option>
-                  <option value="enterprise">Enterprise</option>
-                </select>
-              </label>
-            ) : (
-              <span className="rounded border border-border px-2 py-1 text-[10px] text-muted-foreground">Enterprise access</span>
-            )}
+            <span
+              className="rounded border border-border px-2 py-1 text-[10px] capitalize text-muted-foreground"
+              aria-label="Subscription plan"
+              title={
+                subscriptionQuery.isError
+                  ? "Unable to retrieve your subscription from the backend"
+                  : subscriptionQuery.data?.status ?? "Loading subscription"
+              }
+            >
+              {subscriptionQuery.isLoading
+                ? "Loading plan…"
+                : subscriptionQuery.isError
+                  ? "Plan unavailable"
+                  : `${subscriptionTier} plan`}
+            </span>
             <button className="hidden h-8 w-56 items-center gap-2 rounded border border-border bg-surface px-2 text-xs text-muted-foreground md:flex">
               <Search className="size-3.5" />
               Search findings…
@@ -734,8 +869,8 @@ function GitHubIntegrationWorkspace() {
       };
       const result = await createReview(payload);
       setApiResponse("POST /reviews (GitHub source)", { request: payload, response: result });
-      setActiveReviewId(result.review.id);
       setActiveReview(null);
+      setActiveReviewId(result.review.id);
       setView("result");
     } catch (reviewError) {
       const message = reviewError instanceof Error ? reviewError.message : "Unable to start a GitHub review";
@@ -761,14 +896,12 @@ function GitHubIntegrationWorkspace() {
               </p>
             </div>
           </div>
-          <a
-            href={getGithubConnectUrl()}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
-          >
+          <Button onClick={() => void startGithubConnect().catch((connectError) => {
+            const message = connectError instanceof Error ? connectError.message : "Unable to start GitHub authorization";
+            setError(message);
+          })}>
             <Github className="size-4" /> Connect GitHub
-          </a>
+          </Button>
         </div>
         <p className="text-xs leading-5 text-muted-foreground">
           The backend callback returns connection JSON in the authorization tab. Paste that response here to load its repositories.
@@ -878,8 +1011,8 @@ function GitHubIntegrationWorkspace() {
 }
 
 function Integrations() {
-  const { role, subscriptionTier } = useReviewStore();
-  const githubAllowed = TIER_POLICIES[getEffectiveTier(role, subscriptionTier)].githubIntegration;
+  const { subscriptionTier } = useReviewStore();
+  const githubAllowed = TIER_POLICIES[subscriptionTier].githubIntegration;
   return (
     <section className="panel flex min-h-16 items-center justify-between gap-4 p-5">
       <div className="flex items-center gap-3">
@@ -890,14 +1023,11 @@ function Integrations() {
         </div>
       </div>
       {githubAllowed ? (
-        <a
-          href={getGithubConnectUrl()}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
-        >
+        <Button onClick={() => void startGithubConnect().catch((error) => {
+          toast.error(error instanceof Error ? error.message : "Unable to start GitHub authorization");
+        })}>
           <Github className="size-4" /> Connect GitHub
-        </a>
+        </Button>
       ) : (
         <span className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border px-3 text-xs text-muted-foreground" aria-label="Enterprise plan required for GitHub">
           <Github className="size-4" /> Enterprise plan required
@@ -908,14 +1038,14 @@ function Integrations() {
 }
 
 function Schedules() {
-  const { scheduledReviews, setScheduledReviews, projects, setProjects, role, subscriptionTier, setApiResponse } = useReviewStore();
+  const { scheduledReviews, setScheduledReviews, projects, setProjects, subscriptionTier, setApiResponse } = useReviewStore();
   const [reviewIndex, setReviewIndex] = useState<ReviewIndexRecord[]>([]);
   const [reviewId, setReviewId] = useState("");
   const [intervalSeconds, setIntervalSeconds] = useState("3600");
   const [selectedSchedule, setSelectedSchedule] = useState<ScheduledReview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const policy = TIER_POLICIES[getEffectiveTier(role, subscriptionTier)];
+  const policy = TIER_POLICIES[subscriptionTier];
   const schedulesAllowed = policy.scheduledReviews;
 
   useEffect(() => {
@@ -948,15 +1078,27 @@ function Schedules() {
     void Promise.allSettled([listAllReviews(), listProjects()])
       .then(([reviewsResult, projectsResult]) => {
         if (!active) return;
-        if (reviewsResult.status === "fulfilled") setReviewIndex(reviewsResult.value.reviews);
-        else setError(reviewsResult.reason instanceof Error ? reviewsResult.reason.message : "Unable to load reviews");
-        if (projectsResult.status === "fulfilled") setProjects(projectsResult.value);
-        else setError(projectsResult.reason instanceof Error ? projectsResult.reason.message : "Unable to load projects");
+        if (reviewsResult.status === "fulfilled") {
+          setReviewIndex(reviewsResult.value.reviews);
+          setApiResponse("GET /reviews/all", { response: reviewsResult.value });
+        } else {
+          const message = reviewsResult.reason instanceof Error ? reviewsResult.reason.message : "Unable to load reviews";
+          setError(message);
+          setApiResponse("GET /reviews/all", { ...apiFailure(reviewsResult.reason, message) });
+        }
+        if (projectsResult.status === "fulfilled") {
+          setProjects(projectsResult.value);
+          setApiResponse("GET /projects", { response: projectsResult.value });
+        } else {
+          const message = projectsResult.reason instanceof Error ? projectsResult.reason.message : "Unable to load projects";
+          setError(message);
+          setApiResponse("GET /projects", { ...apiFailure(projectsResult.reason, message) });
+        }
       });
     return () => {
       active = false;
     };
-  }, [setProjects]);
+  }, [setProjects, setApiResponse]);
 
   const createSchedule = async () => {
     if (!reviewId) {
@@ -1024,7 +1166,9 @@ function Schedules() {
       {!schedulesAllowed ? (
         <section className="panel p-5">
           <h2 className="text-sm font-semibold">Enterprise feature</h2>
-          <p className="mt-2 text-xs text-muted-foreground">Scheduled reviews are not included in the selected plan. Select Enterprise from the plan menu to preview this interface. The backend still enforces your account's actual plan.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Scheduled reviews are not enabled for the {subscriptionTier} subscription assigned to this account. The backend remains authoritative for feature access.
+          </p>
         </section>
       ) : (
       <>
@@ -1099,7 +1243,7 @@ function NewReview() {
     role,
     subscriptionTier,
   } = useReviewStore();
-  const tier = getEffectiveTier(role, subscriptionTier);
+  const tier = subscriptionTier;
   const policy = TIER_POLICIES[tier];
   const [language, setLanguage] = useState("typescript");
   const [code, setCode] = useState(defaultSource);
@@ -1279,13 +1423,15 @@ function NewReview() {
       }
 
       const result = await createReview(payload);
-      setActiveReviewId(result.review.id);
+      setApiResponse("POST /reviews", { request: payload, response: result });
       setActiveReview(null);
+      setActiveReviewId(result.review.id);
       setAnalyzing(false);
       setView("result");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to start review";
       setError(message);
+      setApiResponse("POST /reviews", { request: { projectName, sourceMode }, ...apiFailure(err, message) });
       setAnalyzing(false);
     }
   };
@@ -1384,7 +1530,14 @@ function NewReview() {
               {!githubConnectionId ? (
                 <div className="space-y-3 rounded border border-border p-4">
                   <p className="text-xs text-muted-foreground">Authorize GitHub, then paste the callback response to load your repositories.</p>
-                  <a href={getGithubConnectUrl()} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground"><Github className="size-4" /> Connect GitHub</a>
+                  <Button
+                    onClick={() => void startGithubConnect().catch((connectError) => {
+                      const message = connectError instanceof Error ? connectError.message : "Unable to start GitHub authorization";
+                      setError(message);
+                    })}
+                  >
+                    <Github className="size-4" /> Connect GitHub
+                  </Button>
                   <textarea value={githubCallbackResponse} onChange={(event) => setGithubCallbackResponse(event.target.value)} placeholder="Paste GitHub callback response" aria-label="GitHub callback response" className="min-h-20 w-full rounded-md border border-input bg-background p-3 font-mono text-xs" />
                   <Button variant="outline" onClick={importGithubConnection} disabled={!githubCallbackResponse.trim()}>Use connection</Button>
                 </div>
@@ -1630,8 +1783,7 @@ function ScoreRing({ score = 78, size = "large" }: { score?: number; size?: "lar
 }
 
 function ReviewResult() {
-  const { severity, setSeverity, setSelectedFinding, setView, activeReview } = useReviewStore();
-  const generateReportMutation = useGenerateReportMutation();
+  const { severity, setSeverity, setSelectedFinding, setView, activeReview, activeReviewId, activeReviewStatus, setApiResponse } = useReviewStore();
 
   const allFindings = useMemo(() => {
     if (activeReview?.findings && activeReview.findings.length > 0) {
@@ -1644,31 +1796,34 @@ function ReviewResult() {
 
   const handleDownloadReport = async (type: "json" | "pdf") => {
     if (!activeReview?.reviewId) {
-      toast.info(`Generating ${type.toUpperCase()} report...`);
-      const blob = new Blob([JSON.stringify(allFindings, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `review-report.${type}`;
-      a.click();
+      toast.error("The backend review result is not available yet.");
       return;
     }
 
     try {
       toast.info(`Generating ${type.toUpperCase()} report...`);
-      const report = await generateReportMutation.mutateAsync({
-        reviewId: activeReview.reviewId,
-        type,
-      });
+      const request = { reviewId: activeReview.reviewId, format: type };
+      let report = await createReport(activeReview.reviewId, type);
+      setApiResponse(`POST /reviews/${activeReview.reviewId}/reports`, { request, response: report });
 
-      if (report.storageUrl) {
-        window.open(report.storageUrl, "_blank");
+      for (let attempt = 0; report.status !== "completed" && report.status !== "failed" && report.reportId && attempt < 30; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        report = await getReport(report.reportId);
+      }
+
+      if (report.status === "failed") {
+        throw new Error(report.errorCode ?? "The backend could not generate this report.");
+      }
+      if (report.secureUrl) {
+        window.open(report.secureUrl, "_blank", "noopener,noreferrer");
         toast.success(`${type.toUpperCase()} report ready!`);
+      } else if (report.status === "completed") {
+        throw new Error("The backend completed the report but did not return a download URL.");
       } else {
-        toast.success(`Report generated`);
+        toast.info("The report is still being generated. Check again shortly.");
       }
     } catch (err: unknown) {
-      const msg = err instanceof ApiClientError ? err.message : "Failed to generate report";
+      const msg = err instanceof Error ? err.message : "Failed to generate report";
       toast.error(msg);
     }
   };
@@ -1679,8 +1834,26 @@ function ReviewResult() {
   const reviewId = activeReview?.reviewId ? activeReview.reviewId.slice(-8).toUpperCase() : "REV";
   const scoreBreakdown = activeReview?.score?.breakdown;
 
+  if (!activeReview) {
+    return (
+      <section className="panel mx-auto max-w-3xl p-8 text-center">
+        <LoaderCircle className="mx-auto size-6 animate-spin text-primary" />
+        <h1 className="mt-4 text-lg font-semibold">Loading backend review result</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {activeReviewStatus ? `Current status: ${activeReviewStatus}` : "Waiting for the review status response."}
+        </p>
+        {activeReviewId && <p className="mt-2 font-mono text-xs text-muted-foreground">{activeReviewId}</p>}
+      </section>
+    );
+  }
+
   return (
     <>
+      {activeReview.status === "failed" && (
+        <div role="alert" className="mb-4 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          Review failed: {activeReview.errorMessage ?? "The backend could not complete this review."}
+        </div>
+      )}
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div>
           <button
@@ -1692,7 +1865,7 @@ function ReviewResult() {
           </button>
           <h1 className="text-xl font-semibold">{fileName}</h1>
           <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-            {reviewId} · {language} · completed · {allFindings.length} {allFindings.length === 1 ? "finding" : "findings"}
+            {reviewId} · {language} · {activeReview.status} · {allFindings.length} {allFindings.length === 1 ? "finding" : "findings"}
           </p>
         </div>
         <div className="flex gap-2">
@@ -1731,7 +1904,12 @@ function ReviewResult() {
             <SummaryCount n={String((activeReview?.summary?.medium ?? 0) + (activeReview?.summary?.low ?? 0))} label="Other" s="LOW" />
           </div>
           <p className="mt-4 text-[11px] leading-5 text-muted-foreground">
-            {activeReview?.aiAnalysis?.summary || (allFindings.length > 0 ? `${allFindings.length} findings detected across ${new Set(allFindings.map((f) => f.category)).size} categories.` : "Clean analysis. No findings detected.")}
+            {activeReview.status === "failed"
+              ? activeReview.errorMessage ?? "The backend could not complete this review."
+              : activeReview.aiAnalysis?.summary ||
+                (allFindings.length > 0
+                  ? `${allFindings.length} findings detected across ${new Set(allFindings.map((f) => f.category)).size} categories.`
+                  : "Clean analysis. No findings detected.")}
           </p>
         </div>
       </section>
@@ -2212,7 +2390,8 @@ function RecentReviewsCard({
 function Dashboard() {
   const { setView, setSelectedFinding, setActiveReview, userName } = useReviewStore();
   const user = useAuthStore((s) => s.user);
-  const { data: metricsData, isLoading } = useDashboardMetricsQuery(user?.id);
+  const metricsQuery = useDashboardMetricsQuery(user?.id);
+  const { data: metricsData } = metricsQuery;
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -2223,11 +2402,18 @@ function Dashboard() {
 
   const handleSelectReview = async (reviewId: string) => {
     try {
-      const full = await getReview(reviewId);
-      setActiveReview(full);
+      const full = await getReviewDetails(reviewId);
+      if (full.review.status === "completed" || full.review.status === "failed") {
+        setActiveReview(toUiReviewResult(full));
+      } else {
+        const store = useReviewStore.getState();
+        store.setActiveReview(null);
+        store.setActiveReviewStatus(full.review.status ?? "pending");
+        store.setActiveReviewId(reviewId);
+      }
       setView("result");
-    } catch {
-      toast.error("Failed to load review details");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load review details");
     }
   };
 
@@ -2236,11 +2422,11 @@ function Dashboard() {
   const highCount     = metricsData?.highCount ?? 0;
   const mediumCount   = metricsData?.mediumCount ?? 0;
   const lowCount      = metricsData?.lowCount ?? 0;
-  const resolvedPct   = metricsData?.resolvedPercentage ?? 100;
+  const resolvedPct   = metricsData?.resolvedPercentage ?? null;
   const avgScore      = metricsData?.averageScore ?? 0;
   const totalReviews  = metricsData?.totalReviews ?? 0;
   const scoreTrendData = metricsData?.scoreTrend ?? [];
-  const catHealth     = metricsData?.categoryHealth ?? { security: 100, bugs: 100, quality: 100, performance: 100 };
+  const catHealth     = metricsData?.categoryHealth;
   const recentReviews = metricsData?.recentReviews ?? [];
   const openFindings  = metricsData?.openFindings ?? [];
 
@@ -2248,7 +2434,7 @@ function Dashboard() {
     <>
       <PageHeading
         title={`${greeting}, ${(userName || "there").split(" ")[0]}`}
-        subtitle="Real-time code health overview, open findings, and review analysis."
+        subtitle="Backend review scores, finding summaries, and recent activity."
         action={
           <Button onClick={() => setView("new")}>
             <Plus />
@@ -2256,6 +2442,12 @@ function Dashboard() {
           </Button>
         }
       />
+      {metricsQuery.isError && (
+        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <span>{metricsQuery.error instanceof Error ? metricsQuery.error.message : "Unable to load dashboard data."}</span>
+          <Button variant="outline" size="sm" onClick={() => void metricsQuery.refetch()}>Retry</Button>
+        </div>
+      )}
 
       {/* ── KPI Grid ── */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -2296,7 +2488,7 @@ function Dashboard() {
           <div className="panel flex flex-col items-center justify-center gap-2 p-4 text-center">
             <CheckCircle2 className="size-6 text-success" aria-hidden="true" />
             <span className="text-sm font-semibold text-foreground">All clear</span>
-            <span className="text-[10px] text-muted-foreground">No open findings</span>
+            <span className="text-[10px] text-muted-foreground">No findings detected</span>
           </div>
         ) : (
           <button
@@ -2308,7 +2500,7 @@ function Dashboard() {
             <div className="flex items-center justify-between text-[11px] text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <AlertTriangle className="size-3.5" />
-                Open findings
+                Findings
               </span>
               <span className="font-mono text-[10px] text-critical">{criticalCount} critical</span>
             </div>
@@ -2368,14 +2560,18 @@ function Dashboard() {
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5"><CheckCircle2 className="size-3.5" />Resolved</span>
             <span className="font-mono text-[10px] text-success">
-              {resolvedPct !== null ? "Resolution rate" : "No findings yet"}
+              {resolvedPct !== null ? "Resolution rate" : totalFindings === 0 ? "No findings yet" : "Rate unavailable"}
             </span>
           </div>
           <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
             {resolvedPct !== null ? `${resolvedPct}%` : "--"}
           </div>
           <div className="mt-1 text-[10px] text-muted-foreground">
-            {resolvedPct !== null ? "of detected findings" : "Awaiting review findings"}
+            {resolvedPct !== null
+              ? "of detected findings"
+              : totalFindings === 0
+                ? "Awaiting review findings"
+                : "The API does not expose aggregate resolved counts"}
           </div>
         </div>
       </div>
@@ -2453,12 +2649,12 @@ function Dashboard() {
         <RecentReviewsCard reviews={recentReviews} onSelectReview={handleSelectReview} />
       </div>
 
-      {/* ── Open findings + Recent activity ── */}
+      {/* ── Recent open findings + Recent activity ── */}
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">
-              Open findings
+              Recent open findings
               <span className="ml-2 font-mono text-[11px] text-muted-foreground">
                 {openFindings.length}
               </span>
@@ -2474,7 +2670,7 @@ function Dashboard() {
             {openFindings.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-8 text-center text-xs text-muted-foreground">
                 <CheckCircle2 className="mb-2 size-6 text-success" />
-                <span>No open findings detected</span>
+                <span>No open findings in the latest reviews</span>
               </div>
             ) : (
               openFindings.map((f) => (
@@ -2578,15 +2774,23 @@ function Stat({
 function ReviewTable() {
   const { setView, setActiveReview } = useReviewStore();
   const user = useAuthStore((s) => s.user);
-  const { data: reviews = [], isLoading } = useReviewsQuery(50, user?.id);
+  const reviewsQuery = useReviewsQuery(50, user?.id);
+  const { data: reviews = [], isLoading } = reviewsQuery;
 
   const handleSelect = async (reviewId: string) => {
     try {
-      const full = await getReview(reviewId);
-      setActiveReview(full);
+      const full = await getReviewDetails(reviewId);
+      if (full.review.status === "completed" || full.review.status === "failed") {
+        setActiveReview(toUiReviewResult(full));
+      } else {
+        const store = useReviewStore.getState();
+        store.setActiveReview(null);
+        store.setActiveReviewStatus(full.review.status ?? "pending");
+        store.setActiveReviewId(reviewId);
+      }
       setView("result");
-    } catch {
-      toast.error("Failed to load review details");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load review details");
     }
   };
 
@@ -2607,7 +2811,13 @@ function ReviewTable() {
           {reviews.length === 0 ? (
             <tr>
               <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                {isLoading ? "Loading reviews..." : "No reviews found. Submit your first code review to populate this list."}
+                {isLoading
+                  ? "Loading reviews..."
+                  : reviewsQuery.isError
+                    ? reviewsQuery.error instanceof Error
+                      ? reviewsQuery.error.message
+                      : "Unable to load reviews."
+                    : "No reviews found. Submit your first code review to populate this list."}
               </td>
             </tr>
           ) : (
@@ -2648,7 +2858,8 @@ function ReviewTable() {
 function CompanyDashboard() {
   const { setView, setActiveReview } = useReviewStore();
   const user = useAuthStore((s) => s.user);
-  const { data: metricsData } = useDashboardMetricsQuery(user?.id);
+  const metricsQuery = useDashboardMetricsQuery(user?.id);
+  const { data: metricsData } = metricsQuery;
   const { data: rules = [] } = useCompanyRulesQuery();
   const { data: members = [], isLoading: membersLoading } = useCompanyMembersQuery(user?.id);
 
@@ -2657,17 +2868,24 @@ function CompanyDashboard() {
   const totalFindings = metricsData?.totalFindings ?? 0;
   const critCount = metricsData?.criticalCount ?? 0;
   const activeRulesCount = rules.filter((r) => r.enabled).length;
-  const catHealth = metricsData?.categoryHealth ?? { security: 100, bugs: 100, quality: 100, performance: 100 };
+  const catHealth = metricsData?.categoryHealth;
   const recentReviews = metricsData?.recentReviews ?? [];
   const openFindings = metricsData?.openFindings ?? [];
 
   const handleSelectReview = async (reviewId: string) => {
     try {
-      const full = await getReview(reviewId);
-      setActiveReview(full);
+      const full = await getReviewDetails(reviewId);
+      if (full.review.status === "completed" || full.review.status === "failed") {
+        setActiveReview(toUiReviewResult(full));
+      } else {
+        const store = useReviewStore.getState();
+        store.setActiveReview(null);
+        store.setActiveReviewStatus(full.review.status ?? "pending");
+        store.setActiveReviewId(reviewId);
+      }
       setView("result");
-    } catch {
-      toast.error("Failed to load review details");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load review details");
     }
   };
 
@@ -2683,6 +2901,12 @@ function CompanyDashboard() {
           </Button>
         }
       />
+      {metricsQuery.isError && (
+        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <span>{metricsQuery.error instanceof Error ? metricsQuery.error.message : "Unable to load team review data."}</span>
+          <Button variant="outline" size="sm" onClick={() => void metricsQuery.refetch()}>Retry</Button>
+        </div>
+      )}
 
       {/* ── KPI cards ── */}
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -2715,7 +2939,7 @@ function CompanyDashboard() {
         </div>
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><AlertTriangle className="size-3.5" />Open findings</span>
+            <span className="flex items-center gap-1.5"><AlertTriangle className="size-3.5" />Findings</span>
             <span className="font-mono text-[10px] text-critical">{critCount} critical</span>
           </div>
           <div className="mt-3 font-mono text-3xl font-semibold text-foreground">{totalFindings}</div>
@@ -2799,10 +3023,10 @@ function CompanyDashboard() {
           <h2 className="text-sm font-semibold">Rule compliance</h2>
           <p className="mt-0.5 text-[11px] text-muted-foreground">Pass rate across team reviews</p>
           <div className="mt-5 space-y-4">
-            <Metric label="Security"    value={catHealth.security} icon={ShieldAlert} />
-            <Metric label="Bugs"        value={catHealth.bugs} icon={Bug} />
-            <Metric label="Quality"     value={catHealth.quality} icon={Code2} />
-            <Metric label="Performance" value={catHealth.performance} icon={Zap} />
+            <Metric label="Security"    value={catHealth?.security ?? "--"} icon={ShieldAlert} />
+            <Metric label="Bugs"        value={catHealth?.bugs ?? "--"} icon={Bug} />
+            <Metric label="Quality"     value={catHealth?.quality ?? "--"} icon={Code2} />
+            <Metric label="Performance" value={catHealth?.performance ?? "--"} icon={Zap} />
           </div>
           <Button variant="outline" size="sm" className="mt-5 w-full" onClick={() => setView("rules")}>
             <ShieldCheck />
@@ -3836,7 +4060,7 @@ function Company() {
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Active members" value={String(members.length)} delta="Workspace seats" icon={Users} />
         <Stat label="Reviews total" value={String(metricsData?.totalReviews ?? 0)} delta="Across all members" icon={Activity} />
-        <Stat label="Critical open" value={String(metricsData?.criticalCount ?? 0)} delta="Requires attention" icon={ShieldAlert} />
+        <Stat label="Critical findings" value={String(metricsData?.criticalCount ?? 0)} delta="Across listed reviews" icon={ShieldAlert} />
       </div>
       <section className="panel mt-4 overflow-hidden">
         <div className="border-b border-border p-4 text-sm font-semibold">Members ({members.length})</div>
@@ -3873,94 +4097,179 @@ function Company() {
   );
 }
 function Billing() {
-  const [state, setState] = useState("idle");
-  const plans = [
-    {
-      name: "Free",
-      price: "$0",
-      text: "For trying automated reviews",
-      features: ["10 reviews / month", "Standard rules", "PDF reports"],
-    },
-    {
-      name: "Pro",
-      price: "$24",
-      text: "For individual developers",
-      features: ["Unlimited reviews", "Custom rules", "Priority analysis"],
-    },
-    {
-      name: "Company",
-      price: "$79",
-      text: "For engineering teams",
-      features: ["20 members included", "Shared dashboards", "Admin controls"],
-    },
-  ];
+  const user = useAuthStore((state) => state.user);
+  const role = useReviewStore((state) => state.role);
+  const setApiResponse = useReviewStore((state) => state.setApiResponse);
+  const subscription = useSubscriptionQuery(user?.id);
+  const [pendingPlan, setPendingPlan] = useState<"pro" | "enterprise" | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const currentPlan = subscription.data?.plan ?? "free";
+  const planRank: Record<SubscriptionTier, number> = { free: 0, pro: 1, enterprise: 2 };
+
+  const startCheckout = async (plan: "pro" | "enterprise") => {
+    setPendingPlan(plan);
+    setPaymentError(null);
+    const endpoint = plan === "pro" ? "/payment/pro/initiate" : "/payment/enterprise/initiate";
+    try {
+      const payment = await initiateSubscriptionPayment(plan);
+      setApiResponse(`POST ${endpoint}`, {
+        request: { plan },
+        response: payment,
+      });
+      window.location.assign(payment.checkoutUrl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to start Chapa checkout.";
+      setPaymentError(message);
+      setApiResponse(`POST ${endpoint}`, {
+        request: { plan },
+        ...apiFailure(error, message),
+      });
+    } finally {
+      setPendingPlan(null);
+    }
+  };
+
   return (
     <>
       <PageHeading
-        title="Plans & billing"
-        subtitle="Choose the review capacity that fits your team."
+        title={role === "member" ? "Upgrade your plan" : "Plans & billing"}
+        subtitle={role === "member"
+          ? "Choose a subscription upgrade and complete payment securely with Chapa."
+          : "Subscription details retrieved from your ReviewX account."}
       />
-      <div className="grid gap-4 lg:grid-cols-3">
-        {plans.map((p, i) => (
-          <div key={p.name} className={cn("panel p-5", i === 1 && "border-primary")}>
-            <div className="flex items-center">
-              <h2 className="font-semibold">{p.name}</h2>
-              {i === 1 && (
-                <span className="ml-auto rounded bg-primary px-2 py-0.5 text-[9px] font-semibold text-primary-foreground">
-                  CURRENT
-                </span>
-              )}
-            </div>
-            <div className="mt-4">
-              <span className="font-mono text-3xl font-semibold">{p.price}</span>
-              <span className="text-xs text-muted-foreground"> / month</span>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">{p.text}</p>
-            <ul className="my-5 space-y-2">
-              {p.features.map((x) => (
-                <li key={x} className="flex items-center gap-2 text-xs">
-                  <Check className="size-3.5 text-success" />
-                  {x}
-                </li>
-              ))}
-            </ul>
-            <Button
-              variant={i === 1 ? "outline" : "default"}
-              className="w-full"
-              onClick={() => setState(i === 1 ? "idle" : "pending")}
-            >
-              {i === 1 ? "Current plan" : "Choose plan"}
-            </Button>
+      {paymentError && (
+        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <span>{paymentError}</span>
+          <button type="button" aria-label="Dismiss payment error" onClick={() => setPaymentError(null)} className="rounded p-1 hover:bg-destructive/10">
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+      <section className="panel max-w-2xl p-5">
+        {subscription.isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <LoaderCircle className="size-4 animate-spin" /> Loading subscription…
           </div>
-        ))}
-      </div>
-      {state !== "idle" && (
-        <div className="panel mt-4 flex items-center gap-4 p-5">
-          <div className="grid size-10 place-items-center rounded-full bg-warning/10 text-warning">
-            <Clock3 />
+        ) : subscription.isError ? (
+          <div role="alert" className="text-sm text-destructive">
+            {subscription.error instanceof Error
+              ? subscription.error.message
+              : "Unable to retrieve subscription details."}
           </div>
+        ) : subscription.data ? (
+          <>
+            <div className="flex items-center gap-3">
+              <CreditCard className="size-5 text-primary" />
+              <div>
+                <p className="text-xs text-muted-foreground">Current plan</p>
+                <h2 className="text-lg font-semibold capitalize">{subscription.data.plan}</h2>
+              </div>
+              <span className="ml-auto rounded border border-border px-2 py-1 text-xs capitalize">
+                {subscription.data.status}
+              </span>
+            </div>
+            <dl className="mt-5 grid gap-3 border-t border-border pt-4 text-xs sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">Started</dt>
+                <dd className="mt-1">{new Date(subscription.data.startedAt).toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Expires</dt>
+                <dd className="mt-1">
+                  {subscription.data.expiresAt
+                    ? new Date(subscription.data.expiresAt).toLocaleString()
+                    : "No expiration date"}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Plan changes are managed by the subscription service. This workspace only displays the plan currently assigned to your account.
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">No subscription details were returned for this account.</p>
+        )}
+        {subscription.isError && (
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => void subscription.refetch()}>
+            Retry
+          </Button>
+        )}
+      </section>
+      {role === "member" && !subscription.isLoading && !subscription.isError && subscription.data && (
+        <section className="mt-5 space-y-4">
           <div>
-            <h3 className="text-sm font-semibold">Payment pending</h3>
+            <h2 className="text-sm font-semibold">Available upgrades</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Complete your secure Chapa checkout to activate the plan.
+              Plan pricing and currency are supplied by the backend at checkout. Your subscription changes only after Chapa confirms payment.
             </p>
           </div>
-          <div className="ml-auto flex gap-2">
-            <Button variant="outline" onClick={() => setState("idle")}>
-              Cancel
-            </Button>
-            <Button onClick={() => setState("success")}>
-              {state === "success" ? (
-                <>
-                  <Check />
-                  Payment successful
-                </>
-              ) : (
-                "Open Chapa"
-              )}
-            </Button>
+          {planRank[currentPlan] === planRank.enterprise ? (
+            <div className="panel flex items-start gap-3 p-5">
+              <CheckCircle2 className="mt-0.5 size-5 text-success" />
+              <div>
+                <h3 className="text-sm font-semibold">You’re on the highest available plan</h3>
+                <p className="mt-1 text-xs text-muted-foreground">Your Enterprise subscription is active. No further upgrade is available.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {([
+                {
+                  plan: "pro",
+                  title: "Pro",
+                  description: "For individual developers who need expanded review capabilities.",
+                  features: ["Higher review limits", "AI-assisted analysis", "Archive uploads"],
+                },
+                {
+                  plan: "enterprise",
+                  title: "Enterprise",
+                  description: "For teams using GitHub integration and advanced workspace features.",
+                  features: ["Enterprise review capacity", "GitHub integration", "Scheduled reviews"],
+                },
+              ] as const)
+                .filter(({ plan }) => planRank[plan] > planRank[currentPlan])
+                .map(({ plan, title, description, features }) => (
+                  <article key={plan} className="panel flex flex-col p-5">
+                    <div className="flex items-center gap-2">
+                      <CircleDollarSign className="size-5 text-primary" />
+                      <h3 className="text-sm font-semibold">{title}</h3>
+                      {plan === "pro" && <span className="ml-auto rounded border border-border px-2 py-0.5 text-[9px] uppercase text-muted-foreground">Popular</span>}
+                    </div>
+                    <p className="mt-3 min-h-10 text-xs leading-5 text-muted-foreground">{description}</p>
+                    <ul className="my-4 flex-1 space-y-2">
+                      {features.map((feature) => (
+                        <li key={feature} className="flex items-center gap-2 text-xs">
+                          <Check className="size-3.5 text-success" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                    <Button
+                      className="w-full"
+                      disabled={pendingPlan !== null || currentPlan === plan}
+                      onClick={() => void startCheckout(plan)}
+                    >
+                      {pendingPlan === plan ? (
+                        <>
+                          <LoaderCircle className="animate-spin" /> Starting secure checkout…
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard /> Upgrade to {title}
+                        </>
+                      )}
+                    </Button>
+                  </article>
+                ))}
+            </div>
+          )}
+          <div className="flex items-start gap-2 rounded border border-border bg-surface-raised p-3 text-[11px] leading-5 text-muted-foreground">
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+            <p>
+              Checkout is handled by Chapa. The backend verifies the payment before changing your subscription; closing or returning from checkout does not itself mark a payment successful.
+            </p>
           </div>
-        </div>
+        </section>
       )}
     </>
   );

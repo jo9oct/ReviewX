@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import {
   Router,
 } from 'express';
@@ -7,6 +9,10 @@ import {
   getReview,
   getAllReviews,
 } from '../controllers/review.controller.js';
+
+import {
+  authenticate,
+} from '../middleware/authenticate.js';
 
 import {
   accessMiddleware,
@@ -32,6 +38,7 @@ const router =
 
 router.post(
   '/',
+  authenticate,
   parseMultipartReview,
   handleMultipartError,
   normalizeMultipartReview,
@@ -44,20 +51,16 @@ router.post(
   createReview,
 );
 
-/*
- * Get all reviews.
- *
- * Must be declared BEFORE /:reviewId
- * so "all" is not interpreted as a review ID.
- */
 router.get(
   '/all',
+  authenticate,
   accessMiddleware(),
   getAllReviews,
 );
 
 router.get(
   '/:reviewId',
+  authenticate,
   accessMiddleware(),
   getReview,
 );

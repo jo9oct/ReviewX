@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import 'dotenv/config';
 
 const parseBoolean = (
@@ -528,6 +530,38 @@ const environment = Object.freeze({
     ),
   }),
 
+  payment: Object.freeze({
+    chapaSecretKey: normalizeString(
+      process.env.CHAPA_SECRET_KEY,
+      '',
+    ),
+
+    backendUrl: normalizeString(
+      process.env.BACKEND_URL,
+      'http://localhost:5000',
+    ),
+
+    frontendUrl: normalizeString(
+      process.env.FRONTEND_URL,
+      'http://localhost:5173',
+    ),
+
+    currency: normalizeString(
+      process.env.PAYMENT_CURRENCY,
+      'ETB',
+    ).toUpperCase(),
+
+    proPlanPrice: parseFloatValue(
+      process.env.PRO_PLAN_PRICE,
+      500,
+    ),
+
+    enterprisePlanPrice: parseFloatValue(
+      process.env.ENTERPRISE_PLAN_PRICE,
+      5000,
+    ),
+  }),
+
   queue: Object.freeze({
     redisUrl: normalizeString(
       process.env.REDIS_URL,
@@ -592,9 +626,7 @@ const environment = Object.freeze({
 });
 
 const validateEnvironment = () => {
-  if (
-    !environment.database.uri
-  ) {
+  if (!environment.database.uri) {
     throw new Error(
       'MONGODB_URI or DATABASE_URL is required.',
     );
@@ -676,6 +708,70 @@ const validateEnvironment = () => {
   ) {
     throw new Error(
       'OPENAI_API_KEY is required when AI_PROVIDER=openai and AI_ENABLED=true.',
+    );
+  }
+
+  /*
+   * Payment validation.
+   *
+   * Prices are controlled by the backend.
+   */
+  if (
+    !environment.payment.proPlanPrice ||
+    environment.payment.proPlanPrice <= 0
+  ) {
+    throw new Error(
+      'PRO_PLAN_PRICE must be greater than 0.',
+    );
+  }
+
+  if (
+    !environment.payment.enterprisePlanPrice ||
+    environment.payment.enterprisePlanPrice <= 0
+  ) {
+    throw new Error(
+      'ENTERPRISE_PLAN_PRICE must be greater than 0.',
+    );
+  }
+
+  if (
+    !environment.payment.backendUrl
+  ) {
+    throw new Error(
+      'BACKEND_URL is required for payment callbacks.',
+    );
+  }
+
+  if (
+    !environment.payment.frontendUrl
+  ) {
+    throw new Error(
+      'FRONTEND_URL is required for payment redirects.',
+    );
+  }
+
+  if (
+    !environment.payment.currency
+  ) {
+    throw new Error(
+      'PAYMENT_CURRENCY is required.',
+    );
+  }
+
+  /*
+   * The Chapa key is required when
+   * payment initialization is actually used.
+   *
+   * Keeping this check here ensures a
+   * misconfigured production environment
+   * fails early.
+   */
+  if (
+    nodeEnv === 'production' &&
+    !environment.payment.chapaSecretKey
+  ) {
+    throw new Error(
+      'CHAPA_SECRET_KEY is required in production.',
     );
   }
 };

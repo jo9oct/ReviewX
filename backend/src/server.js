@@ -1,6 +1,11 @@
+// STATUS: UPDATED
+
 import 'dotenv/config';
+
 import http from 'node:http';
+
 import express from 'express';
+
 import cors from 'cors';
 
 import environment from './config/environment.js';
@@ -10,11 +15,21 @@ import {
   disconnectDatabase,
 } from './database/connection.js';
 
+import authRoutes from './routes/auth.routes.js';
+
 import reviewRoutes from './routes/review.routes.js';
+
 import reportRoutes from './routes/report.routes.js';
+
 import githubRoutes from './routes/github.routes.js';
+
 import scheduledReviewRoutes from './routes/scheduledReview.routes.js';
+
 import projectRoutes from './routes/project.routes.js';
+
+import subscriptionRoutes from './routes/subscription.routes.js';
+
+import paymentRoutes from './routes/payment.routes.js';
 
 import {
   notFoundMiddleware,
@@ -78,7 +93,6 @@ app.get(
     return res.status(200).json(
       createResponse({
         success: true,
-
         data: {
           status: 'ok',
           service:
@@ -86,7 +100,6 @@ app.get(
           version:
             appConfig.version,
         },
-
         meta: {
           requestId:
             req.requestId,
@@ -94,6 +107,18 @@ app.get(
       }),
     );
   },
+);
+
+/*
+ * Authentication routes
+ *
+ * POST /api/v1/auth/register
+ * POST /api/v1/auth/login
+ * GET  /api/v1/auth/me
+ */
+app.use(
+  '/api/v1/auth',
+  authRoutes,
 );
 
 app.use(
@@ -119,6 +144,16 @@ app.use(
 app.use(
   '/api/v1/projects',
   projectRoutes,
+);
+
+app.use(
+  '/api/v1/subscriptions',
+  subscriptionRoutes,
+);
+
+app.use(
+  '/api/v1/payment',
+  paymentRoutes,
 );
 
 app.use(

@@ -1,5 +1,7 @@
 // STATUS: UPDATED
 
+import mongoose from 'mongoose';
+
 import {
   assertFeatureAccess,
 } from "../access/access.service.js";
@@ -14,14 +16,31 @@ const SCHEDULED_REVIEW_FEATURE =
 const MIN_INTERVAL_SECONDS =
   60;
 
-/*
- * Temporary mock owner ID.
- *
- * This will be replaced with the
- * authenticated user's ID later.
- */
-const DEFAULT_OWNER_ID =
-  "user-test-001";
+const normalizeOwnerId = (
+  ownerId,
+) => {
+  if (
+    !ownerId ||
+    !mongoose.Types.ObjectId.isValid(
+      ownerId,
+    )
+  ) {
+    const error =
+      new Error(
+        "A valid authenticated user is required.",
+      );
+
+    error.code =
+      "AUTHENTICATED_OWNER_REQUIRED";
+
+    error.statusCode =
+      401;
+
+    throw error;
+  }
+
+  return ownerId.toString();
+};
 
 const normalizeReviewId = (
   reviewId,
@@ -113,6 +132,7 @@ const createScheduledReviewService =
       async createSchedule({
         reviewId,
         intervalSeconds,
+        ownerId,
       }) {
         /*
          * Scheduling is Enterprise-only.
@@ -122,12 +142,16 @@ const createScheduledReviewService =
         );
 
         /*
-         * Use the temporary mock owner ID.
-         * The owner ID is not accepted
-         * from user input.
+         * Owner ID must come from the
+         * authenticated user/session.
+         *
+         * It is never accepted as a
+         * frontend-controlled owner ID.
          */
         const normalizedOwnerId =
-          DEFAULT_OWNER_ID;
+          normalizeOwnerId(
+            ownerId,
+          );
 
         const normalizedReviewId =
           normalizeReviewId(
@@ -161,8 +185,8 @@ const createScheduledReviewService =
 
         /*
          * The review must belong to
-         * the same owner creating
-         * the schedule.
+         * the same authenticated owner
+         * creating the schedule.
          */
         if (
           !review.ownerId ||
@@ -252,13 +276,16 @@ const createScheduledReviewService =
 
       async getSchedule({
         scheduleId,
+        ownerId,
       }) {
         assertFeatureAccess(
           SCHEDULED_REVIEW_FEATURE,
         );
 
         const normalizedOwnerId =
-          DEFAULT_OWNER_ID;
+          normalizeOwnerId(
+            ownerId,
+          );
 
         const schedule =
           await scheduledReviewRepository.findById(
@@ -284,7 +311,7 @@ const createScheduledReviewService =
           String(
             schedule.ownerId,
           ) !==
-          normalizedOwnerId
+            normalizedOwnerId
         ) {
           const error =
             new Error(
@@ -330,13 +357,17 @@ const createScheduledReviewService =
         };
       },
 
-      async listSchedules() {
+      async listSchedules({
+        ownerId,
+      }) {
         assertFeatureAccess(
           SCHEDULED_REVIEW_FEATURE,
         );
 
         const normalizedOwnerId =
-          DEFAULT_OWNER_ID;
+          normalizeOwnerId(
+            ownerId,
+          );
 
         const schedules =
           await scheduledReviewRepository.findByOwnerId(
@@ -377,13 +408,16 @@ const createScheduledReviewService =
 
       async cancelSchedule({
         scheduleId,
+        ownerId,
       }) {
         assertFeatureAccess(
           SCHEDULED_REVIEW_FEATURE,
         );
 
         const normalizedOwnerId =
-          DEFAULT_OWNER_ID;
+          normalizeOwnerId(
+            ownerId,
+          );
 
         const schedule =
           await scheduledReviewRepository.findById(

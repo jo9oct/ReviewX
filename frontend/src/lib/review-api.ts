@@ -1,3 +1,13 @@
+import { useQuery } from "@tanstack/react-query";
+import {
+  getApiBaseUrl,
+  getAuthToken,
+  handleUnauthorized,
+  type DashboardFinding,
+  type DashboardMetrics,
+  type DashboardReview,
+} from "./api";
+
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 
 export type ReviewOptions = {
@@ -185,9 +195,9 @@ export type ReviewDetails = {
     totalLines?: number;
     findingCounts?: Record<string, number>;
     score?: number | null;
+    errorCode?: string | null;
     startedAt?: string | null;
     completedAt?: string | null;
-    errorCode?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   };
@@ -248,9 +258,32 @@ export type ReviewIndexRecord = {
   ownerId?: string;
   status?: string;
   sourceType?: string;
+  languages?: string[];
+  findingCounts?: Record<string, number>;
   score?: number | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+};
+
+export type SubscriptionRecord = {
+  _id?: string;
+  userId: string;
+  plan: SubscriptionTier;
+  status: "active" | "expired" | "cancelled";
+  startedAt: string;
+  expiresAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type PaymentInitiation = {
+  paymentId: string;
+  txRef: string;
+  plan: SubscriptionTier;
+  amount: number;
+  currency: string;
+  status: "pending" | "paid" | "failed";
+  checkoutUrl: string;
 };
 
 export type GithubUser = {
@@ -299,22 +332,32 @@ export class ApiRequestError extends Error {
   }
 }
 
-const API_BASE = ((import.meta.env as Record<string, string | undefined>)["VITE_API_BASE_URL"] ?? "http://localhost:5000/api/v1").replace(/\/$/, "");
+const API_BASE = getApiBaseUrl();
 const API_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const isMultipart = typeof FormData !== "undefined" && init?.body instanceof FormData;
+  const headers = new Headers(init?.headers);
+  if (!isMultipart && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  headers.set("Accept", "application/json");
+  const token = getAuthToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      ...(!isMultipart ? { "Content-Type": "application/json" } : {}),
-      ...(init?.headers ?? {}),
-    },
     ...init,
+    credentials: "include",
+    headers,
   });
 
   const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
 
   if (!response.ok) {
+    if (response.status === 401) {
+      handleUnauthorized();
+    }
     const message =
       payload && typeof payload === "object" && "error" in payload && payload.error
         ? String((payload as { error?: { message?: string } }).error?.message ?? "Request failed")
@@ -336,8 +379,15 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function getApiHealth(): Promise<{ status: string; service: string; version: string }> {
-  const response = await fetch(`${API_ORIGIN}/health`);
+  const headers = new Headers({ Accept: "application/json" });
+  const token = getAuthToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${API_ORIGIN}/health`, {
+    credentials: "include",
+    headers,
+  });
   const payload = (await response.json().catch(() => null)) as ApiEnvelope<{ status: string; service: string; version: string }> | null;
+  if (response.status === 401) handleUnauthorized();
   if (!response.ok || !payload?.success || !payload.data) {
     const message = payload?.error?.message ?? `Health check failed (${response.status})`;
     throw new ApiRequestError(message, response.status, payload);
@@ -361,8 +411,39 @@ export function getApiErrorResponse(error: unknown): unknown {
     : undefined;
 }
 
-export function getGithubConnectUrl(): string {
-  return `${API_BASE}/github/connect`;
+export async function startGithubConnect(): Promise<void> {
+  const headers = new Headers({ Accept: "application/json" });
+  const token = getAuthToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${API_BASE}/github/connect`, {
+    method: "GET",
+    credentials: "include",
+    headers,
+    redirect: "manual",
+  });
+
+  if (response.type === "opaqueredirect") {
+    throw new ApiRequestError(
+      "The GitHub connect endpoint redirects to GitHub, but this cross-origin API response hides its redirect location. Configure a same-origin API proxy or update the backend to return an authorization URL.",
+      0,
+      null,
+    );
+  }
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get("Location");
+    if (!location) {
+      throw new ApiRequestError("The GitHub connect response did not include a redirect location.", response.status, null);
+    }
+    window.location.assign(new URL(location, response.url).toString());
+    return;
+  }
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ApiEnvelope<unknown> | null;
+    const message = payload?.error?.message ?? `GitHub authorization request failed (${response.status})`;
+    if (response.status === 401) handleUnauthorized();
+    throw new ApiRequestError(message, response.status, payload);
+  }
+  throw new ApiRequestError("The GitHub connect endpoint returned an unexpected response.", response.status, null);
 }
 
 export async function completeGithubOAuth(params: {
@@ -394,6 +475,61 @@ export async function createReview(payload: CreateReviewPayload): Promise<{ revi
   return apiFetch<{ review: { id: string; status: string; jobId?: string }; status: string; project: { id: string; name: string; sourceType: string } }>("/reviews", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export async function getSubscription(): Promise<SubscriptionRecord> {
+  const result = await apiFetch<{ subscription: SubscriptionRecord }>("/subscriptions");
+  return result.subscription;
+}
+
+export async function initiateSubscriptionPayment(plan: "pro" | "enterprise"): Promise<PaymentInitiation> {
+  const endpoint = plan === "pro" ? "/payment/pro/initiate" : "/payment/enterprise/initiate";
+  const payment = await apiFetch<PaymentInitiation>(endpoint, {
+    method: "POST",
+  });
+  if (!payment.checkoutUrl || !payment.txRef || payment.plan !== plan) {
+    throw new Error("The payment service returned incomplete checkout details.");
+  }
+  return payment;
+}
+
+export type PaymentVerification = {
+  payment: {
+    txRef: string;
+    plan: "pro" | "enterprise";
+    status: "pending" | "paid" | "failed";
+  };
+  alreadyProcessed: boolean;
+  verificationStatus: "pending" | "paid" | "failed";
+};
+
+export async function verifySubscriptionPayment(txRef: string): Promise<PaymentVerification> {
+  if (!txRef.trim()) {
+    throw new Error("A transaction reference is required to verify payment.");
+  }
+  return apiFetch<PaymentVerification>(`/payment/verify/${encodeURIComponent(txRef.trim())}`);
+}
+
+export function useSubscriptionQuery(
+  userId?: string,
+  options?: { untilPlan?: SubscriptionTier; pollIntervalMs?: number },
+) {
+  const untilPlan = options?.untilPlan;
+  return useQuery({
+    queryKey: ["subscription", userId ?? "current-user"],
+    queryFn: getSubscription,
+    enabled: Boolean(userId),
+    staleTime: 60_000,
+    refetchOnMount: "always",
+    refetchInterval: untilPlan
+      ? (query) => {
+          const planOrder: Record<SubscriptionTier, number> = { free: 0, pro: 1, enterprise: 2 };
+          return query.state.data && planOrder[query.state.data.plan] >= planOrder[untilPlan]
+            ? false
+            : options?.pollIntervalMs ?? 3000;
+        }
+      : false,
   });
 }
 
@@ -484,6 +620,218 @@ export async function getGithubRepository(
 ): Promise<{ repository: GithubRepository }> {
   const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
   return apiFetch<{ repository: GithubRepository }>(`/github/connections/${encodeURIComponent(connectionId)}/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(name)}${query}`);
+}
+
+const getReviewIdentifier = (review: ReviewIndexRecord): string =>
+  String(review.reviewId ?? review.id ?? review._id ?? "");
+
+const getReviewScore = (review?: ReviewDetails, fallback?: number | null): number | null => {
+  const score = review?.score as (ReviewDetails["score"] & { overall?: number | null }) | null;
+  const value = score?.overall ?? review?.review.score ?? fallback;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+};
+
+const getRelativeDate = (value?: string | null): string => {
+  if (!value) return "Date unavailable";
+  const elapsed = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(elapsed)) return "Date unavailable";
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
+
+async function getDashboardData(): Promise<{
+  metrics: DashboardMetrics;
+  reviews: DashboardReview[];
+}> {
+  const [reviewIndex, projects] = await Promise.all([
+    listAllReviews(100, 0),
+    listProjects(100, 0),
+  ]);
+  const records = reviewIndex.reviews;
+  const latestRecords = records.slice(0, 20);
+  const details = await Promise.all(
+    latestRecords.map(async (record) => ({
+      record,
+      details: await getReview(getReviewIdentifier(record)),
+    })),
+  );
+  const detailsById = new Map(
+    details.map(({ record, details: item }) => [getReviewIdentifier(record), item]),
+  );
+  const severityTotals = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+  let resolvedCount = 0;
+  let findingTotal = 0;
+  const categoryScores = { security: [] as number[], bugs: [] as number[], quality: [] as number[], performance: [] as number[] };
+  const openFindings: DashboardFinding[] = [];
+
+  for (const record of records) {
+    const counts = record.findingCounts ?? {};
+    let reviewFindingTotal = 0;
+    for (const severity of Object.keys(severityTotals) as Array<keyof typeof severityTotals>) {
+      const count = Number(counts[severity] ?? 0);
+      severityTotals[severity] += count;
+      reviewFindingTotal += count;
+    }
+    const item = detailsById.get(getReviewIdentifier(record));
+    if (reviewFindingTotal === 0 && item) {
+      reviewFindingTotal = item.findings.length;
+      for (const finding of item.findings) {
+        const severity = String(finding.severity ?? "").toLowerCase();
+        if (severity in severityTotals) {
+          severityTotals[severity as keyof typeof severityTotals] += 1;
+        }
+      }
+    }
+    findingTotal += reviewFindingTotal;
+  }
+
+  for (const { details: item } of details) {
+    const findings = item.findings ?? [];
+    for (const finding of findings) {
+      if (finding.status?.toLowerCase() === "resolved") {
+        resolvedCount += 1;
+      } else if (openFindings.length < 20) {
+        openFindings.push({
+          id: String(finding._id ?? finding.id ?? `${item.review.id}-${openFindings.length}`),
+          title: finding.title ?? finding.ruleId ?? "Finding",
+          severity: normalizeSeverity(finding.severity),
+          file: formatFindingFilePath(finding.filePath),
+          category: normalizeCategory(finding.category),
+          reviewId: item.review.id,
+        });
+      }
+    }
+
+    const score = item.score as (ReviewDetails["score"] & {
+      security?: number | null;
+      bugs?: number | null;
+      quality?: number | null;
+      performance?: number | null;
+    }) | null;
+    for (const key of Object.keys(categoryScores) as Array<keyof typeof categoryScores>) {
+      const value = score?.[key];
+      if (typeof value === "number" && Number.isFinite(value)) categoryScores[key].push(value);
+    }
+  }
+
+  const toAverage = (scores: number[]) =>
+    scores.length ? Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length) : null;
+  const dashboardReviews = records.map((record): DashboardReview => {
+    const id = getReviewIdentifier(record);
+    const item = detailsById.get(id);
+    const project = projects.find((entry) => entry.id === item?.review.projectId);
+    const counts = record.findingCounts ?? item?.review.findingCounts ?? {};
+    const unresolvedUrgent = item?.findings.some(
+      (finding) =>
+        finding.status?.toLowerCase() !== "resolved" &&
+        ["critical", "high"].includes(String(finding.severity ?? "").toLowerCase()),
+    ) ?? (Number(counts["critical"] ?? 0) + Number(counts["high"] ?? 0) > 0);
+    const createdAt = item?.review.createdAt ?? record.createdAt ?? null;
+    const language = item?.review.languages?.[0] ?? record.languages?.[0] ?? item?.review.sourceType ?? record.sourceType ?? "Source";
+    const rawScore = getReviewScore(item, record.score);
+    const score = rawScore ?? 0;
+    const count = Object.values(counts).reduce((total, value) => total + Number(value || 0), 0);
+    return {
+      id,
+      reviewId: id,
+      name: project?.name ?? item?.review.sourceType ?? record.sourceType ?? "Code review",
+      lang: language,
+      langBadge: language.slice(0, 3).toUpperCase(),
+      score,
+      date: createdAt ? new Date(createdAt).toLocaleDateString() : "—",
+      relativeDate: getRelativeDate(createdAt),
+      status: unresolvedUrgent ? "Needs attention" : item?.review.status ?? record.status ?? "unknown",
+      findings: count || item?.findings.length || 0,
+      severityCounts: {
+        critical: Number(counts["critical"] ?? 0),
+        high: Number(counts["high"] ?? 0),
+        medium: Number(counts["medium"] ?? 0),
+        low: Number(counts["low"] ?? 0),
+      },
+      ...(createdAt ? { createdAt } : {}),
+    };
+  });
+  const scoresByReviewId = new Map<string, number>();
+  for (const record of records) {
+    const item = detailsById.get(getReviewIdentifier(record));
+    const rawScore = getReviewScore(item, record.score);
+    if (rawScore !== null) {
+      scoresByReviewId.set(getReviewIdentifier(record), rawScore);
+    }
+  }
+  const scoreTrend = [...dashboardReviews]
+    .filter((review) => review.createdAt && scoresByReviewId.has(review.id))
+    .sort((left, right) => new Date(left.createdAt!).getTime() - new Date(right.createdAt!).getTime())
+    .slice(-7)
+    .map((review) => ({
+      label: new Date(review.createdAt!).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      score: review.score,
+    }));
+
+  return {
+    reviews: dashboardReviews,
+    metrics: {
+      totalReviews: records.length,
+      totalFindings: findingTotal,
+      criticalCount: severityTotals.critical,
+      highCount: severityTotals.high,
+      mediumCount: severityTotals.medium,
+      lowCount: severityTotals.low,
+      resolvedPercentage: !findingTotal
+        ? null
+        : details.length === records.length
+          ? Math.round((resolvedCount / findingTotal) * 100)
+          : null,
+      averageScore: scoresByReviewId.size
+        ? Math.round([...scoresByReviewId.values()].reduce((sum, score) => sum + score, 0) / scoresByReviewId.size)
+        : 0,
+      categoryHealth: Object.values(categoryScores).some((scores) => scores.length > 0)
+        ? {
+            security: toAverage(categoryScores.security) ?? 0,
+            bugs: toAverage(categoryScores.bugs) ?? 0,
+            quality: toAverage(categoryScores.quality) ?? 0,
+            performance: toAverage(categoryScores.performance) ?? 0,
+          }
+        : null,
+      scoreTrend,
+      recentReviews: dashboardReviews.slice(0, 10),
+      openFindings,
+    },
+  };
+}
+
+export async function getDashboardMetrics(): Promise<DashboardMetrics> {
+  return (await getDashboardData()).metrics;
+}
+
+export async function listReviews(limit = 20): Promise<DashboardReview[]> {
+  const { reviews } = await getDashboardData();
+  return reviews.slice(0, limit);
+}
+
+export function useDashboardMetricsQuery(userId?: string) {
+  return useQuery({
+    queryKey: ["dashboard-metrics", userId ?? "anonymous"],
+    queryFn: getDashboardMetrics,
+    enabled: Boolean(userId),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useReviewsQuery(limit = 20, userId?: string) {
+  return useQuery({
+    queryKey: ["reviews-list", userId ?? "anonymous", limit],
+    queryFn: () => listReviews(limit),
+    enabled: Boolean(userId),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
 }
 
 export function normalizeSeverity(value?: string | null): Severity {

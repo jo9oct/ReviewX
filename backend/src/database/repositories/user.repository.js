@@ -1,13 +1,10 @@
+// STATUS: UPDATED
+
 /**
  * User repository — all direct MongoDB interactions for the User collection.
  *
  * The service layer never imports Mongoose or touches the User model directly.
- * Only this file does. That decouples business logic from the DB driver and
- * makes mocking straightforward in tests.
- *
- * All `lean()` calls return plain JS objects (faster, no Mongoose overhead).
- * Instance methods (setPassword, verifyPassword) are NOT available on lean
- * objects — the repository handles hashing internally via the model where needed.
+ * Only this file interacts with the User model.
  */
 
 import { User } from '../models/user.model.js';
@@ -17,30 +14,62 @@ import { User } from '../models/user.model.js';
 /**
  * Find a user by email.
  *
- * @param {string}  email
- * @param {boolean} [withPassword=false]  Re-include the select:false passwordHash field
- * @returns {Promise<object|null>}        Plain object (lean), or null
+ * Returns a plain JavaScript object.
+ *
+ * @param {string} email
+ * @param {boolean} [withPassword=false]
+ * @returns {Promise<object|null>}
  */
 export async function findByEmail(email, withPassword = false) {
-  const q = User.findOne({ email: email.toLowerCase().trim() });
-  if (withPassword) q.select('+passwordHash');
+  const q = User.findOne({
+    email: email.toLowerCase().trim(),
+  });
+
+  if (withPassword) {
+    q.select('+passwordHash');
+  }
+
   return q.lean().exec();
+}
+
+/**
+ * Find a user by email for authentication.
+ *
+ * IMPORTANT:
+ * This intentionally returns a Mongoose document instead of a lean object
+ * because the authentication service needs the User model's verifyPassword()
+ * instance method.
+ *
+ * passwordHash is explicitly selected because the User model hides it by
+ * default with select: false.
+ *
+ * @param {string} email
+ * @returns {Promise<object|null>}
+ */
+export async function findByEmailDocument(email) {
+  return User.findOne({
+    email: email.toLowerCase().trim(),
+  })
+    .select('+passwordHash')
+    .exec();
 }
 
 /**
  * Find a user by MongoDB _id.
  *
- * populate is intentionally false by default — the Company model does not
- * exist yet. Set to true once Company is registered or it will throw
- * MissingSchemaError at query execution time.
+ * Returns a plain JavaScript object by default.
  *
- * @param {string}  id
+ * @param {string} id
  * @param {boolean} [populate=false]
  * @returns {Promise<object|null>}
  */
 export async function findById(id, populate = false) {
   const q = User.findById(id);
-  if (populate) q.populate('company', 'name plan');
+
+  if (populate) {
+    q.populate('company', 'name plan');
+  }
+
   return q.lean().exec();
 }
 
@@ -51,8 +80,11 @@ export async function findById(id, populate = false) {
  * @returns {Promise<boolean>}
  */
 export async function emailExists(email) {
-  const n = await User.countDocuments({ email: email.toLowerCase().trim() });
-  return n > 0;
+  const count = await User.countDocuments({
+    email: email.toLowerCase().trim(),
+  });
+
+  return count > 0;
 }
 
 // ── Writes ────────────────────────────────────────────────────────────────────
@@ -60,26 +92,29 @@ export async function emailExists(email) {
 /**
  * Persist a new user.
  *
- * Hashing is handled here via the model's `setPassword` instance method
- * so no raw passwords ever flow through the service layer.
+ * Password hashing is handled by the User model's setPassword() method.
  *
- * @param {{ name: string, email: string, role?: string, company?: string|null }} fields
- * @param {string} plainPassword  Will be hashed before storage
- * @returns {Promise<object>}     Saved Mongoose document (has instance methods)
+ * @param {object} fields
+ * @param {string} plainPassword
+ * @returns {Promise<object>}
  */
 export async function createUser(fields, plainPassword) {
   const user = new User(fields);
+
   await user.setPassword(plainPassword);
   await user.save();
-  return user;   // return full document so caller can call .toPublic() etc.
+
+  return user;
 }
 
 /**
- * Stamp the last-login timestamp — called fire-and-forget after successful login.
+ * Stamp the last-login timestamp.
  *
  * @param {string} id
  * @returns {Promise<void>}
  */
 export async function touchLoginAt(id) {
-  await User.findByIdAndUpdate(id, { lastLoginAt: new Date() });
+  await User.findByIdAndUpdate(id, {
+    lastLoginAt: new Date(),
+  });
 }

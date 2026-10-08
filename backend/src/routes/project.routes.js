@@ -3,6 +3,10 @@ import {
 } from 'express';
 
 import {
+  authenticate,
+} from '../middleware/authenticate.js';
+
+import {
   getProjects,
 } from '../controllers/project.controller.js';
 
@@ -15,6 +19,7 @@ const router =
 
 router.get(
   '/',
+  authenticate,
   accessMiddleware(),
   getProjects,
 );

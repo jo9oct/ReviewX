@@ -3,6 +3,10 @@ import {
 } from 'express';
 
 import {
+  authenticate,
+} from '../middleware/authenticate.js';
+
+import {
   createScheduledReview,
   getScheduledReviews,
   getScheduledReview,
@@ -19,6 +23,7 @@ const router =
 
 router.post(
   '/',
+  authenticate,
   accessMiddleware(),
   requireFeature(
     'scheduledReviews',
@@ -28,6 +33,7 @@ router.post(
 
 router.get(
   '/',
+  authenticate,
   accessMiddleware(),
   requireFeature(
     'scheduledReviews',
@@ -37,6 +43,7 @@ router.get(
 
 router.get(
   '/:scheduleId',
+  authenticate,
   accessMiddleware(),
   requireFeature(
     'scheduledReviews',
@@ -46,6 +53,7 @@ router.get(
 
 router.delete(
   '/:scheduleId',
+  authenticate,
   accessMiddleware(),
   requireFeature(
     'scheduledReviews',

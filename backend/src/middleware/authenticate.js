@@ -1,6 +1,8 @@
+// STATUS: UPDATED
+
 import jwt from 'jsonwebtoken';
 import { config } from '../config/env.js';
-import { findById } from '../repositories/user.repository.js';
+import { findById } from '../database/repositories/user.repository.js';
 
 function authError(res, message, code = 'UNAUTHORIZED') {
   return res.status(401).json({

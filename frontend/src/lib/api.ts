@@ -174,9 +174,22 @@ export class ApiClientError extends Error {
   }
 }
 
-const API_BASE_URL = typeof window !== "undefined"
-  ? (import.meta.env["VITE_API_URL"] || "")
-  : "";
+const configuredApiUrl = (
+  import.meta.env["VITE_API_BASE_URL"] ||
+  import.meta.env["VITE_API_URL"] ||
+  (import.meta.env.DEV ? "/api/v1" : "http://localhost:5000/api/v1")
+).replace(/\/$/, "");
+const API_ORIGIN = configuredApiUrl.replace(/\/api\/v1$/, "");
+const API_BASE_URL = `${API_ORIGIN}/api/v1`;
+
+export function getApiBaseUrl(): string {
+  return API_BASE_URL;
+}
+
+function resolveApiUrl(path: string): string {
+  const endpoint = path.replace(/^\/api\/v1(?=\/)/, "").replace(/^\/api(?=\/)/, "");
+  return `${API_BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+}
 
 let unauthorizedHandler: (() => void) | null = null;
 
@@ -184,8 +197,36 @@ export function setUnauthorizedHandler(handler: () => void): void {
   unauthorizedHandler = handler;
 }
 
+export function handleUnauthorized(): void {
+  if (unauthorizedHandler) {
+    unauthorizedHandler();
+    return;
+  }
+  setAuthToken(null);
+  if (typeof window !== "undefined") {
+    window.location.href = "/auth";
+  }
+}
+
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
+  const cookieToken = document.cookie
+    .split(";")
+    .map((cookie) => cookie.trim())
+    .find((cookie) => /^(reviewx_token|access_token|accesstoken|auth_token|token|jwt)=/i.test(cookie));
+
+  if (cookieToken) {
+    const separator = cookieToken.indexOf("=");
+    const value = cookieToken.slice(separator + 1);
+    try {
+      const decoded = decodeURIComponent(value);
+      const token = decoded.startsWith("Bearer ") ? decoded.slice(7).trim() : decoded;
+      if (token) return token;
+    } catch {
+      if (value) return value;
+    }
+  }
+
   return localStorage.getItem("reviewx_token") || sessionStorage.getItem("reviewx_token");
 }
 
@@ -196,11 +237,14 @@ export function setAuthToken(token: string | null): void {
   } else {
     localStorage.removeItem("reviewx_token");
     sessionStorage.removeItem("reviewx_token");
+    for (const name of ["reviewx_token", "access_token", "accesstoken", "auth_token", "token", "jwt"]) {
+      document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
+    }
   }
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  const url = resolveApiUrl(path);
   const token = getAuthToken();
 
   const headers: Record<string, string> = {
@@ -215,20 +259,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const res = await fetch(url, {
     ...options,
+    credentials: "include",
     headers,
   });
 
   if (res.status === 401) {
-    const isAuthEndpoint = path.includes("/api/auth/login") || path.includes("/api/auth/register");
+    const isAuthEndpoint = path.includes("/api/v1/auth/login") || path.includes("/api/v1/auth/register");
     if (!isAuthEndpoint) {
-      if (unauthorizedHandler) {
-        unauthorizedHandler();
-      } else {
-        setAuthToken(null);
-        if (typeof window !== "undefined") {
-          window.location.href = "/auth";
-        }
-      }
+      handleUnauthorized();
     }
   }
 
@@ -329,7 +367,7 @@ export async function registerUser(userData: {
   email: string;
   password: string;
 }): Promise<AuthResponseData> {
-  const data = await request<AuthResponseData>("/api/auth/register", {
+  const data = await request<AuthResponseData>("/api/v1/auth/register", {
     method: "POST",
     body: JSON.stringify(userData),
   });
@@ -343,7 +381,7 @@ export async function loginUser(credentials: {
   email: string;
   password: string;
 }): Promise<AuthResponseData> {
-  const data = await request<AuthResponseData>("/api/auth/login", {
+  const data = await request<AuthResponseData>("/api/v1/auth/login", {
     method: "POST",
     body: JSON.stringify(credentials),
   });
@@ -354,14 +392,10 @@ export async function loginUser(credentials: {
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {
-  const res = await request<{ user: any }>("/api/auth/me", {
+  const res = await request<{ user: AuthUser }>("/api/v1/auth/me", {
     method: "GET",
   });
-  const u = res.user;
-  return {
-    ...u,
-    id: u.id || u._id?.toString() || u._id,
-  };
+  return res.user;
 }
 
 // ── TanStack Query Hooks ───────────────────────────────────────────────────

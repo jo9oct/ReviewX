@@ -1,150 +1,248 @@
+// STATUS: UPDATED
+
 /**
  * Auth service — all business logic for registration, login, and token issuance.
  *
- * Rules enforced here (not in the controller or router):
- *   • New public registrations are always role "member" — never escalable
- *   • JWT payload is { userId, role } per spec
- *   • Login returns the same generic error regardless of whether the email
- *     exists or the password is wrong (prevents account enumeration)
- *   • passwordHash is never present on any returned object
+ * Rules enforced here:
+ *   • New public registrations are always role "member".
+ *   • JWT payload is { userId, role }.
+ *   • Login returns the same generic error for invalid email/password.
+ *   • passwordHash is never returned.
+ *   • Every new user receives a FREE subscription.
  */
 
-import jwt  from 'jsonwebtoken';
-import { config }    from '../config/env.js';
-import { ApiError }  from '../utils/ApiError.js';
-import * as userRepo from '../database/repositories/user.repository.js';
-import { User }      from '../database/models/user.model.js';
+import jwt from 'jsonwebtoken';
 
-// ── JWT helpers ───────────────────────────────────────────────────────────────
+import { config } from '../config/env.js';
+import { ApiError } from '../utils/ApiError.js';
+import * as userRepo from '../database/repositories/user.repository.js';
+import * as subscriptionService from './subscription.service.js';
+
+// ── JWT helpers ──────────────────────────────────────────────────────────────
 
 /**
  * Sign an access token.
- * Payload: { userId, role } — matches the spec.
  *
- * @param   {{ _id: string, role: string }} user
+ * Payload: { userId, role }
+ *
+ * @param {object} user
  * @returns {string}
  */
 function signToken(user) {
   return jwt.sign(
     {
       userId: user._id.toString(),
-      role:   user.role,
+      role: user.role,
     },
     config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn },
+    {
+      expiresIn: config.jwtExpiresIn,
+    },
   );
 }
 
 /**
- * Build the standard auth response shape.
+ * Build the public user object.
  *
- * @param   {object} user  Mongoose document or plain lean object
- * @returns {{ token: string, expiresIn: string, user: object }}
+ * @param {object} user Mongoose document or lean object
+ * @returns {object}
  */
-function buildAuthPayload(user) {
-  // Works with both Mongoose documents (have .toPublic) and lean plain objects
-  const publicUser = typeof user.toPublic === 'function'
-    ? user.toPublic()
-    : {
-        id:          user._id,
-        name:        user.name,
-        email:       user.email,
-        role:        user.role,
-        company:     user.company ?? null,
-        isActive:    user.isActive,
-        lastLoginAt: user.lastLoginAt ?? null,
-        createdAt:   user.createdAt,
-        updatedAt:   user.updatedAt,
-      };
-
-  // Guard: passwordHash must never appear here
-  delete publicUser.passwordHash;
+function buildPublicUser(user) {
+  if (typeof user.toPublic === 'function') {
+    return user.toPublic();
+  }
 
   return {
-    token:     signToken(user),
-    expiresIn: config.jwtExpiresIn,
-    user:      publicUser,
+    id: user._id.toString(),
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    company: user.company ?? null,
+    isActive: user.isActive,
+    lastLoginAt: user.lastLoginAt ?? null,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
   };
 }
 
-// ── Service methods ───────────────────────────────────────────────────────────
+/**
+ * Build the standard authentication response.
+ *
+ * @param {object} user
+ * @param {object|null} subscription
+ * @returns {{ token: string, expiresIn: string, user: object, subscription?: object }}
+ */
+function buildAuthPayload(user, subscription = null) {
+  const publicUser = buildPublicUser(user);
+
+  // Security guard: passwordHash must never be returned.
+  delete publicUser.passwordHash;
+
+  const payload = {
+    token: signToken(user),
+    expiresIn: config.jwtExpiresIn,
+    user: publicUser,
+  };
+
+  if (subscription) {
+    payload.subscription = subscription;
+  }
+
+  return payload;
+}
+
+// ── Service methods ──────────────────────────────────────────────────────────
 
 /**
  * Register a new account.
  *
- * @param {{ name: string, email: string, password: string, companyId?: string }} dto
- * @returns {Promise<{ token, expiresIn, user }>}
- * @throws {ApiError} 409 if email already registered
+ * Public registration always creates:
+ *   role: member
+ *
+ * It also automatically creates:
+ *   plan: free
+ *   status: active
+ *
+ * @param {{
+ *   name: string,
+ *   email: string,
+ *   password: string,
+ *   companyId?: string
+ * }} dto
+ *
+ * @returns {Promise<{
+ *   token: string,
+ *   expiresIn: string,
+ *   user: object,
+ *   subscription: object
+ * }>}
  */
 export async function register(dto) {
-  const { name, email, password, companyId } = dto;
+  const {
+    name,
+    email,
+    password,
+    companyId,
+  } = dto;
 
-  if (await userRepo.emailExists(email)) {
-    throw ApiError.conflict('An account with that email already exists');
+  const emailAlreadyExists =
+    await userRepo.emailExists(email);
+
+  if (emailAlreadyExists) {
+    throw ApiError.conflict(
+      'An account with that email already exists',
+    );
   }
 
+  // Public registration is ALWAYS a member account.
   const user = await userRepo.createUser(
     {
       name,
       email,
-      role:    'member',             // public registration is ALWAYS member
+      role: 'member',
       company: companyId ?? null,
     },
     password,
   );
 
-  return buildAuthPayload(user);
+  // Every newly registered user starts on the FREE plan.
+  const subscription =
+    await subscriptionService.createFreeSubscription(
+      user._id,
+    );
+
+  return buildAuthPayload(
+    user,
+    subscription,
+  );
 }
 
 /**
  * Authenticate with email + password.
  *
- * Returns identical error for wrong email and wrong password — the client
- * cannot tell which one failed (prevents account enumeration).
+ * The same generic error is returned for:
+ *   • email not found
+ *   • incorrect password
+ *
+ * This prevents account enumeration.
  *
  * @param {{ email: string, password: string }} dto
- * @returns {Promise<{ token, expiresIn, user }>}
- * @throws {ApiError} 401 on bad credentials | 403 if account deactivated
+ * @returns {Promise<{
+ *   token: string,
+ *   expiresIn: string,
+ *   user: object
+ * }>}
  */
 export async function login(dto) {
-  const { email, password } = dto;
-  const INVALID = ApiError.unauthorized('Invalid credentials');
+  const {
+    email,
+    password,
+  } = dto;
 
-  // Fetch lean object WITH the normally-hidden passwordHash field
-  const leanUser = await userRepo.findByEmail(email, /* withPassword */ true);
-  if (!leanUser) throw INVALID;
+  const invalidCredentials =
+    ApiError.unauthorized(
+      'Invalid credentials',
+    );
 
-  // Re-fetch as a full Mongoose document to use the verifyPassword instance method
-  const doc = await User.findById(leanUser._id).select('+passwordHash');
-  if (!doc) throw INVALID;
+  // Repository returns a Mongoose document with
+  // passwordHash explicitly selected.
+  const user =
+    await userRepo.findByEmailDocument(
+      email,
+    );
 
-  const passwordOk = await doc.verifyPassword(password);
-  if (!passwordOk) throw INVALID;
-
-  if (!leanUser.isActive) {
-    throw ApiError.forbidden('Your account has been deactivated');
+  if (!user) {
+    throw invalidCredentials;
   }
 
-  // Fire-and-forget — don't block the response on this
-  userRepo.touchLoginAt(leanUser._id).catch(() => {});
+  const passwordValid =
+    await user.verifyPassword(
+      password,
+    );
 
-  return buildAuthPayload(leanUser);
+  if (!passwordValid) {
+    throw invalidCredentials;
+  }
+
+  if (!user.isActive) {
+    throw ApiError.forbidden(
+      'Your account has been deactivated',
+    );
+  }
+
+  // Update login time without blocking login response.
+  userRepo
+    .touchLoginAt(user._id)
+    .catch(() => {});
+
+  return buildAuthPayload(user);
 }
 
 /**
  * Return the currently authenticated user's profile.
  *
- * @param {string} userId  Set on req.user by the authenticate middleware
+ * @param {string} userId
  * @returns {Promise<object>}
- * @throws {ApiError} 404 if user was deleted after token was issued
  */
 export async function getMe(userId) {
-  // Don't populate company yet — Company model isn't registered.
-  // Re-enable populate:true once src/models/Company.js exists.
-  const user = await userRepo.findById(userId, /* populate */ false);
-  if (!user) throw ApiError.notFound('User not found');
+  const user =
+    await userRepo.findById(
+      userId,
+      false,
+    );
 
-  const safe = { ...user };
-  delete safe.passwordHash;
-  return safe;
+  if (!user) {
+    throw ApiError.notFound(
+      'User not found',
+    );
+  }
+
+  const safeUser = {
+    ...user,
+    id: user._id?.toString(),
+  };
+
+  delete safeUser.passwordHash;
+
+  return safeUser;
 }

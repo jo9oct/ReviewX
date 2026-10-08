@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import mongoose from 'mongoose';
 
 import {
@@ -65,13 +67,6 @@ import aiConfig from '../config/ai.config.js';
 import {
   AppError,
 } from '../utils/errors.js';
-
-/*
- * Temporary owner used until the real
- * authentication/user system is connected.
- */
-const DEFAULT_OWNER_ID =
-  'user-test-001';
 
 const getReviewId = (
   review,
@@ -1778,8 +1773,9 @@ const getReviewResponse = async (
         reviewDocumentId,
 
       ownerId:
-        review.ownerId ||
-        DEFAULT_OWNER_ID,
+        review.ownerId
+          ? review.ownerId.toString()
+          : null,
 
       projectId:
         review.projectId
@@ -1847,6 +1843,7 @@ const getReviewResponse = async (
 const createReviewResponse =
   async (
     payload,
+    ownerId,
   ) => {
     if (
       !payload ||
@@ -1861,6 +1858,27 @@ const createReviewResponse =
           'The review request is invalid.',
 
         statusCode: 400,
+      });
+    }
+
+    /*
+     * The authenticated user ID must come
+     * from the authentication middleware.
+     */
+    if (
+      !ownerId ||
+      !mongoose.Types.ObjectId.isValid(
+        ownerId,
+      )
+    ) {
+      throw new AppError({
+        code:
+          'AUTHENTICATED_OWNER_REQUIRED',
+
+        message:
+          'A valid authenticated user is required to create a review.',
+
+        statusCode: 401,
       });
     }
 
@@ -1941,20 +1959,11 @@ const createReviewResponse =
     });
 
     /*
-     * Temporary owner ID.
-     *
-     * This will later come from the
+     * The owner ID comes from the
      * authenticated user/session.
-     */
-    const ownerId =
-      DEFAULT_OWNER_ID;
-
-    /*
-     * The project is now created/reused
-     * within the current owner's scope.
      *
-     * ownerId is also persisted directly
-     * on the Project document.
+     * It is never accepted from the
+     * frontend request body.
      */
     const project =
       await createProjectForReview({

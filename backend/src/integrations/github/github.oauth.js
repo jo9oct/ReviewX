@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import crypto from 'node:crypto';
 
 import {
@@ -68,46 +70,66 @@ const cleanupExpiredConnections =
     }
   };
 
-const createGithubOAuthSession =
-  () => {
-    cleanupExpiredStates();
+const createGithubOAuthSession = ({
+  userId,
+} = {}) => {
+  cleanupExpiredStates();
 
-    if (
-      !isGithubConfigured()
-    ) {
-      const error = new Error(
-        'GitHub OAuth is not configured.',
-      );
-
-      error.code =
-        'GITHUB_OAUTH_NOT_CONFIGURED';
-
-      error.statusCode = 503;
-
-      throw error;
-    }
-
-    const state =
-      createOAuthState();
-
-    const authorizationUrl =
-      createGithubAuthorizationUrl(
-        state,
-      );
-
-    oauthStates.set(
-      state,
-      {
-        createdAt:
-          Date.now(),
-      },
+  if (
+    !isGithubConfigured()
+  ) {
+    const error = new Error(
+      'GitHub OAuth is not configured.',
     );
 
-    return {
+    error.code =
+      'GITHUB_OAUTH_NOT_CONFIGURED';
+
+    error.statusCode = 503;
+
+    throw error;
+  }
+
+  if (
+    typeof userId !== 'string' ||
+    !userId.trim()
+  ) {
+    const error = new Error(
+      'Authenticated user ID is required to connect GitHub.',
+    );
+
+    error.code =
+      'GITHUB_USER_ID_REQUIRED';
+
+    error.statusCode = 401;
+
+    throw error;
+  }
+
+  const state =
+    createOAuthState();
+
+  const authorizationUrl =
+    createGithubAuthorizationUrl(
       state,
-      authorizationUrl,
-    };
+    );
+
+  oauthStates.set(
+    state,
+    {
+      createdAt:
+        Date.now(),
+
+      userId:
+        userId.trim(),
+    },
+  );
+
+  return {
+    state,
+    authorizationUrl,
   };
+};
 
 const consumeGithubOAuthState =
   (state) => {
@@ -135,7 +157,9 @@ const consumeGithubOAuthState =
       state,
     );
 
-    return record;
+    return Object.freeze({
+      ...record,
+    });
   };
 
 const completeGithubOAuth =
@@ -143,9 +167,10 @@ const completeGithubOAuth =
     state,
     code,
   }) => {
-    consumeGithubOAuthState(
-      state,
-    );
+    const oauthState =
+      consumeGithubOAuthState(
+        state,
+      );
 
     const token =
       await exchangeGithubCode(
@@ -185,45 +210,18 @@ const completeGithubOAuth =
 
     cleanupExpiredConnections();
 
-    githubConnections.set(
-      connectionId,
-      {
-        createdAt:
-          Date.now(),
+    const connection = {
+      createdAt:
+        Date.now(),
 
-        accessToken:
-          token.accessToken,
+      userId:
+        oauthState.userId,
 
-        tokenType:
-          token.tokenType,
+      accessToken:
+        token.accessToken,
 
-        scope:
-          token.scope,
-
-        githubUser: {
-          id:
-            githubUser.id,
-
-          login:
-            githubUser.login,
-
-          name:
-            githubUser.name ||
-            null,
-
-          avatarUrl:
-            githubUser.avatar_url ||
-            null,
-
-          htmlUrl:
-            githubUser.html_url ||
-            null,
-        },
-      },
-    );
-
-    return Object.freeze({
-      connectionId,
+      tokenType:
+        token.tokenType,
 
       scope:
         token.scope,
@@ -247,11 +245,31 @@ const completeGithubOAuth =
           githubUser.html_url ||
           null,
       },
+    };
+
+    githubConnections.set(
+      connectionId,
+      connection,
+    );
+
+    return Object.freeze({
+      connectionId,
+
+      userId:
+        connection.userId,
+
+      scope:
+        connection.scope,
+
+      githubUser:
+        connection.githubUser,
     });
   };
 
 const consumeGithubConnection =
-  (connectionId) => {
+  (
+    connectionId,
+  ) => {
     cleanupExpiredConnections();
 
     const connection =

@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import {
   createGithubOAuthSession,
   completeGithubOAuth,
@@ -30,10 +32,70 @@ const assertGithubEnabled = () => {
   }
 };
 
-const createConnection = () => {
+const assertAuthenticatedUser = (
+  userId,
+) => {
+  if (
+    typeof userId !== 'string' ||
+    !userId.trim()
+  ) {
+    const error = new Error(
+      'A valid authenticated user is required.',
+    );
+
+    error.code =
+      'AUTHENTICATED_USER_REQUIRED';
+
+    error.statusCode = 401;
+
+    throw error;
+  }
+
+  return userId.trim();
+};
+
+const assertConnectionOwnership = (
+  connection,
+  userId,
+) => {
+  const authenticatedUserId =
+    assertAuthenticatedUser(
+      userId,
+    );
+
+  if (
+    connection.userId !==
+    authenticatedUserId
+  ) {
+    const error = new Error(
+      'You do not have access to this GitHub connection.',
+    );
+
+    error.code =
+      'GITHUB_CONNECTION_ACCESS_DENIED';
+
+    error.statusCode = 403;
+
+    throw error;
+  }
+
+  return connection;
+};
+
+const createConnection = ({
+  userId,
+} = {}) => {
   assertGithubEnabled();
 
-  return createGithubOAuthSession();
+  const authenticatedUserId =
+    assertAuthenticatedUser(
+      userId,
+    );
+
+  return createGithubOAuthSession({
+    userId:
+      authenticatedUserId,
+  });
 };
 
 const completeConnection = async ({
@@ -84,6 +146,9 @@ const completeConnection = async ({
     connectionId:
       connection.connectionId,
 
+    userId:
+      connection.userId,
+
     scope:
       connection.scope,
 
@@ -92,9 +157,10 @@ const completeConnection = async ({
   };
 };
 
-const getConnection = (
+const getConnection = ({
   connectionId,
-) => {
+  userId,
+}) => {
   if (
     typeof connectionId !== 'string' ||
     !connectionId.trim()
@@ -111,18 +177,26 @@ const getConnection = (
     throw error;
   }
 
-  return consumeGithubConnection(
-    connectionId,
+  const connection =
+    consumeGithubConnection(
+      connectionId,
+    );
+
+  return assertConnectionOwnership(
+    connection,
+    userId,
   );
 };
 
 const getGithubUser = async ({
+  userId,
   connectionId,
 }) => {
   const connection =
-    getConnection(
+    getConnection({
+      userId,
       connectionId,
-    );
+    });
 
   const githubUser =
     await getAuthenticatedGithubUser({
@@ -138,25 +212,30 @@ const getGithubUser = async ({
       githubUser.login,
 
     name:
-      githubUser.name || null,
+      githubUser.name ||
+      null,
 
     avatarUrl:
-      githubUser.avatar_url || null,
+      githubUser.avatar_url ||
+      null,
 
     htmlUrl:
-      githubUser.html_url || null,
+      githubUser.html_url ||
+      null,
   };
 };
 
 const getRepositories = async ({
+  userId,
   connectionId,
   page = 1,
   perPage = 30,
 }) => {
   const connection =
-    getConnection(
+    getConnection({
+      userId,
       connectionId,
-    );
+    });
 
   const repositories =
     await listGithubRepositories({
@@ -205,6 +284,7 @@ const getRepositories = async ({
 };
 
 const getBranches = async ({
+  userId,
   connectionId,
   owner,
   name,
@@ -212,9 +292,10 @@ const getBranches = async ({
   perPage = 100,
 }) => {
   const connection =
-    getConnection(
+    getConnection({
+      userId,
       connectionId,
-    );
+    });
 
   const branches =
     await listGithubBranches({
@@ -247,15 +328,17 @@ const getBranches = async ({
 };
 
 const getRepository = async ({
+  userId,
   connectionId,
   owner,
   name,
   ref,
 }) => {
   const connection =
-    getConnection(
+    getConnection({
+      userId,
       connectionId,
-    );
+    });
 
   return getRepositorySource({
     owner,

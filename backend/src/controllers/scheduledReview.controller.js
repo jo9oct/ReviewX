@@ -31,6 +31,7 @@ const createScheduledReview = async (
 
     const result =
       await scheduledReviewService.createSchedule({
+        ownerId: req.user.id,
         reviewId,
         intervalSeconds,
       });
@@ -38,9 +39,7 @@ const createScheduledReview = async (
     return res.status(201).json(
       createResponse({
         success: true,
-
         data: result,
-
         meta: {
           requestId:
             req.requestId,
@@ -59,14 +58,14 @@ const getScheduledReviews = async (
 ) => {
   try {
     const result =
-      await scheduledReviewService.listSchedules();
+      await scheduledReviewService.listSchedules({
+        ownerId: req.user.id,
+      });
 
     return res.status(200).json(
       createResponse({
         success: true,
-
         data: result,
-
         meta: {
           requestId:
             req.requestId,
@@ -88,14 +87,13 @@ const getScheduledReview = async (
       await scheduledReviewService.getSchedule({
         scheduleId:
           req.params.scheduleId,
+        ownerId: req.user.id,
       });
 
     return res.status(200).json(
       createResponse({
         success: true,
-
         data: result,
-
         meta: {
           requestId:
             req.requestId,
@@ -117,14 +115,13 @@ const cancelScheduledReview = async (
       await scheduledReviewService.cancelSchedule({
         scheduleId:
           req.params.scheduleId,
+        ownerId: req.user.id,
       });
 
     return res.status(200).json(
       createResponse({
         success: true,
-
         data: result,
-
         meta: {
           requestId:
             req.requestId,

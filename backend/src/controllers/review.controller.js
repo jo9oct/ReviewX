@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import {
   createReviewResponse,
   getReviewResponse,
@@ -20,6 +22,7 @@ const createReview = async (
     const result =
       await createReviewResponse(
         req.body,
+        req.user.id,
       );
 
     return res.status(202).json(
@@ -48,6 +51,7 @@ const getReview = async (
     const result =
       await getReviewResponse(
         req.params.reviewId,
+        req.user.id,
       );
 
     return res.status(200).json(
@@ -81,17 +85,12 @@ const getAllReviews = async (
       req.query.skip || 0,
     );
 
-    const ownerId =
-      typeof req.query.ownerId ===
-      'string'
-        ? req.query.ownerId
-        : undefined;
-
     const reviews =
       await findMany(
-        ownerId
-          ? { ownerId }
-          : {},
+        {
+          ownerId:
+            req.user.id,
+        },
         {
           limit,
           skip,

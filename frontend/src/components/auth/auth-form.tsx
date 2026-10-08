@@ -42,8 +42,18 @@ export function AuthForm({
       return;
     }
 
+    if (mode === "register" && (cleanName.length < 2 || cleanName.length > 80)) {
+      setFormError("Name must be between 2 and 80 characters.");
+      return;
+    }
+
     if (password.length < 8) {
       setFormError("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (mode === "register" && password.length > 128) {
+      setFormError("Password must be 128 characters or fewer.");
       return;
     }
 
@@ -143,6 +153,8 @@ export function AuthForm({
           <Field label="Full name">
             <Input
               required
+              minLength={2}
+              maxLength={80}
               autoComplete="name"
               value={fullName}
               onChange={(e) => {
@@ -180,8 +192,9 @@ export function AuthForm({
             <Input
               required
               minLength={8}
+              maxLength={isRegister ? 128 : undefined}
               type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
+              autoComplete={isRegister ? "new-password" : "current-password"}
               value={password}
               onChange={(e) => {
                 setFormError(null);

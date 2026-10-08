@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import {
   projectRepository,
 } from '../database/repositories/project.repository.js';
@@ -6,12 +8,27 @@ import {
   AppError,
 } from '../utils/errors.js';
 
-/*
- * Temporary owner used until the real
- * authentication/user system is connected.
- */
-const DEFAULT_OWNER_ID =
-  'user-test-001';
+const normalizeOwnerId = (
+  ownerId,
+) => {
+  if (
+    !ownerId ||
+    typeof ownerId !== 'string' ||
+    !ownerId.trim()
+  ) {
+    throw new AppError({
+      code:
+        'AUTHENTICATED_OWNER_REQUIRED',
+
+      message:
+        'An authenticated user is required.',
+
+      statusCode: 401,
+    });
+  }
+
+  return ownerId.trim();
+};
 
 const normalizePagination = (
   options = {},
@@ -75,18 +92,28 @@ const getProjectsResponse =
     options = {},
   ) => {
     const {
+      ownerId,
+      ...paginationOptions
+    } = options;
+
+    const normalizedOwnerId =
+      normalizeOwnerId(
+        ownerId,
+      );
+
+    const {
       limit,
       skip,
     } =
       normalizePagination(
-        options,
+        paginationOptions,
       );
 
     const projects =
       await projectRepository.findMany(
         {
           ownerId:
-            DEFAULT_OWNER_ID,
+            normalizedOwnerId,
         },
         {
           limit,

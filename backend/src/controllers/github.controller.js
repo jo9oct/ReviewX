@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import {
   createConnection,
   completeConnection,
@@ -15,8 +17,9 @@ const connectGithub = (
   try {
     const {
       authorizationUrl,
-    } =
-      createConnection();
+    } = createConnection({
+      userId: req.user.id,
+    });
 
     return res.redirect(
       authorizationUrl,
@@ -63,24 +66,16 @@ const githubCallback = async (
 
     return res.status(200).json({
       success: true,
-
       data: {
-        connected:
-          true,
-
-        provider:
-          'github',
-
+        connected: true,
+        provider: 'github',
         connectionId:
           connection.connectionId,
-
         scope:
           connection.scope,
-
         githubUser:
           connection.githubUser,
       },
-
       meta: {
         requestId:
           req.requestId,
@@ -100,17 +95,17 @@ const getGithubConnectionUser =
     try {
       const githubUser =
         await getGithubUser({
+          userId:
+            req.user.id,
           connectionId:
             req.params.connectionId,
         });
 
       return res.status(200).json({
         success: true,
-
         data: {
           githubUser,
         },
-
         meta: {
           requestId:
             req.requestId,
@@ -130,23 +125,21 @@ const getGithubRepositories =
     try {
       const repositories =
         await getRepositories({
+          userId:
+            req.user.id,
           connectionId:
             req.params.connectionId,
-
           page:
             req.query.page,
-
           perPage:
             req.query.perPage,
         });
 
       return res.status(200).json({
         success: true,
-
         data: {
           repositories,
         },
-
         meta: {
           requestId:
             req.requestId,
@@ -166,29 +159,25 @@ const getGithubBranches =
     try {
       const branches =
         await getBranches({
+          userId:
+            req.user.id,
           connectionId:
             req.params.connectionId,
-
           owner:
             req.params.owner,
-
           name:
             req.params.name,
-
           page:
             req.query.page,
-
           perPage:
             req.query.perPage,
         });
 
       return res.status(200).json({
         success: true,
-
         data: {
           branches,
         },
-
         meta: {
           requestId:
             req.requestId,
@@ -208,26 +197,23 @@ const getGithubRepository =
     try {
       const repository =
         await getRepository({
+          userId:
+            req.user.id,
           connectionId:
             req.params.connectionId,
-
           owner:
             req.params.owner,
-
           name:
             req.params.name,
-
           ref:
             req.query.ref,
         });
 
       return res.status(200).json({
         success: true,
-
         data: {
           repository,
         },
-
         meta: {
           requestId:
             req.requestId,
