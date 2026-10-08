@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import crypto from 'node:crypto';
 
 import environment from '../config/environment.js';
@@ -32,6 +34,8 @@ const securityMiddleware = (req, res, next) => {
   } else {
     res.setHeader('Access-Control-Allow-Origin', '*');
   }
+
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
   res.setHeader(
     'Access-Control-Allow-Methods',
