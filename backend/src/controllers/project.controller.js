@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import {
   getProjectsResponse,
 } from '../services/project.service.js';
@@ -14,7 +16,9 @@ const getProjects = async (
   try {
     const result =
       await getProjectsResponse({
-        ownerId: req.user.id,
+        ownerId:
+          req.user.id,
+
         limit:
           req.query.limit,
 
@@ -22,28 +26,30 @@ const getProjects = async (
           req.query.skip,
       });
 
-    return res.status(200).json(
-      createResponse({
-        success: true,
+    return res
+      .status(200)
+      .json(
+        createResponse({
+          success: true,
 
-        data:
-          result.projects,
+          data:
+            result.projects,
 
-        meta: {
-          requestId:
-            req.requestId,
+          meta: {
+            requestId:
+              req.requestId,
 
-          count:
-            result.projects.length,
+            count:
+              result.projects.length,
 
-          limit:
-            result.limit,
+            limit:
+              result.limit,
 
-          skip:
-            result.skip,
-        },
-      }),
-    );
+            skip:
+              result.skip,
+          },
+        }),
+      );
   } catch (error) {
     return next(error);
   }

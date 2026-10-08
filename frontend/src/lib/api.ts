@@ -179,7 +179,8 @@ const configuredApiUrl = (
   import.meta.env["VITE_API_URL"] ||
   (import.meta.env.DEV ? "/api/v1" : "http://localhost:5000/api/v1")
 ).replace(/\/$/, "");
-const API_ORIGIN = configuredApiUrl.replace(/\/api\/v1$/, "");
+const configuredApiOrigin = configuredApiUrl.replace(/\/api\/v1$/, "");
+const API_ORIGIN = import.meta.env.DEV ? "" : configuredApiOrigin;
 const API_BASE_URL = `${API_ORIGIN}/api/v1`;
 
 export function getApiBaseUrl(): string {

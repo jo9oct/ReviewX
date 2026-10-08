@@ -2,70 +2,100 @@
 
 import {
   buildReport,
-} from "../reports/reportBuilder.js";
+} from '../reports/reportBuilder.js';
 
 import {
   reviewRepository,
-} from "../database/repositories/review.repository.js";
+} from '../database/repositories/review.repository.js';
 
 import {
   findByReviewId as findFindingsByReviewId,
-} from "../database/repositories/finding.repository.js";
+} from '../database/repositories/finding.repository.js';
 
 import {
   findByReviewId as findScoreByReviewId,
-} from "../database/repositories/score.repository.js";
+} from '../database/repositories/score.repository.js';
 
 import {
   findByReviewId as findAiAnalysesByReviewId,
-} from "../database/repositories/aiAnalysis.repository.js";
+} from '../database/repositories/aiAnalysis.repository.js';
 
 import {
   create as createReportRecord,
   findById as findReportById,
+  findByReviewId,
   findByReviewAndFormat,
   markGenerating,
   markCompleted,
   markFailed,
-} from "../database/repositories/report.repository.js";
+} from '../database/repositories/report.repository.js';
 
 import {
   uploadReport,
-} from "../storage/cloudinary/cloudinary.uploader.js";
+} from '../storage/cloudinary/cloudinary.uploader.js';
 
 import {
   assertFeatureAccess,
-} from "../access/access.service.js";
+} from '../access/access.service.js';
 
 import {
   enqueueReportJob,
-} from "../jobs/report.job.js";
+} from '../jobs/report.job.js';
 
 import {
   AppError,
-} from "../utils/errors.js";
+} from '../utils/errors.js';
 
 const normalizeOwnerId = (
   ownerId,
 ) => {
   if (
     !ownerId ||
-    typeof ownerId !==
-      "string" ||
+    typeof ownerId !== 'string' ||
     !ownerId.trim()
   ) {
     throw new AppError({
       code:
-        "AUTHENTICATED_OWNER_REQUIRED",
-
+        'AUTHENTICATED_OWNER_REQUIRED',
       message:
-        "An authenticated user is required.",
-
+        'An authenticated user is required.',
       statusCode: 401,
     });
   }
 
   return ownerId.trim();
+};
+
+const normalizeReviewId = (
+  reviewId,
+) => {
+  if (
+    reviewId === null ||
+    reviewId === undefined
+  ) {
+    throw new AppError({
+      code:
+        'INVALID_REVIEW_ID',
+      message:
+        'Review ID is required.',
+      statusCode: 400,
+    });
+  }
+
+  const normalized =
+    String(reviewId).trim();
+
+  if (!normalized) {
+    throw new AppError({
+      code:
+        'INVALID_REVIEW_ID',
+      message:
+        'Review ID is required.',
+      statusCode: 400,
+    });
+  }
+
+  return normalized;
 };
 
 const getReportId = (
@@ -86,28 +116,22 @@ const normalizeReportId = (
   ) {
     throw new AppError({
       code:
-        "INVALID_REPORT_ID",
-
+        'INVALID_REPORT_ID',
       message:
-        "Report ID is required.",
-
+        'Report ID is required.',
       statusCode: 400,
     });
   }
 
   const normalized =
-    String(
-      reportId,
-    ).trim();
+    String(reportId).trim();
 
   if (!normalized) {
     throw new AppError({
       code:
-        "INVALID_REPORT_ID",
-
+        'INVALID_REPORT_ID',
       message:
-        "Report ID is required.",
-
+        'Report ID is required.',
       statusCode: 400,
     });
   }
@@ -118,25 +142,23 @@ const normalizeReportId = (
 const getReportFeature = (
   format,
 ) => {
-  if (format === "json") {
-    return "jsonReport";
+  if (format === 'json') {
+    return 'jsonReport';
   }
 
-  if (format === "html") {
-    return "htmlReport";
+  if (format === 'html') {
+    return 'htmlReport';
   }
 
-  if (format === "pdf") {
-    return "pdfReport";
+  if (format === 'pdf') {
+    return 'pdfReport';
   }
 
   throw new AppError({
     code:
-      "UNSUPPORTED_REPORT_FORMAT",
-
+      'UNSUPPORTED_REPORT_FORMAT',
     message:
       `Unsupported report format: ${format}`,
-
     statusCode: 400,
   });
 };
@@ -145,9 +167,7 @@ const normalizeReportFormat = (
   format,
 ) => {
   const normalized =
-    String(
-      format || "json",
-    )
+    String(format || 'json')
       .trim()
       .toLowerCase();
 
@@ -158,74 +178,70 @@ const normalizeReportFormat = (
   return normalized;
 };
 
-const normalizeAiAnalysis =
-  (analyses) => {
-    if (
-      !Array.isArray(analyses) ||
-      analyses.length === 0
-    ) {
-      return null;
-    }
+const normalizeAiAnalysis = (
+  analyses,
+) => {
+  if (
+    !Array.isArray(analyses) ||
+    analyses.length === 0
+  ) {
+    return null;
+  }
 
-    const completed =
-      analyses.filter(
+  const completed =
+    analyses.filter(
+      (item) =>
+        item?.status === 'completed',
+    );
+
+  if (!completed.length) {
+    return null;
+  }
+
+  return {
+    enabled: true,
+
+    provider:
+      completed[0]?.provider ||
+      null,
+
+    status: 'completed',
+
+    summary:
+      completed.find(
         (item) =>
-          item?.status ===
-          "completed",
-      );
+          item?.analysisType ===
+          'summary',
+      )?.result || null,
 
-    if (!completed.length) {
-      return null;
-    }
+    findings:
+      completed.filter(
+        (item) =>
+          item?.analysisType ===
+          'finding_analysis',
+      ),
 
-    return {
-      enabled: true,
+    securityReview:
+      completed.find(
+        (item) =>
+          item?.analysisType ===
+          'security_review',
+      )?.result || null,
 
-      provider:
-        completed[0]?.provider ||
-        null,
-
-      status:
-        "completed",
-
-      summary:
-        completed.find(
-          (item) =>
-            item?.analysisType ===
-            "summary",
-        )?.result ||
-        null,
-
-      findings:
-        completed.filter(
-          (item) =>
-            item?.analysisType ===
-            "finding_analysis",
-        ),
-
-      securityReview:
-        completed.find(
-          (item) =>
-            item?.analysisType ===
-            "security_review",
-        )?.result ||
-        null,
-
-      codeImprovements:
-        completed.filter(
-          (item) =>
-            item?.analysisType ===
-            "code_improvement",
-        ),
-    };
+    codeImprovements:
+      completed.filter(
+        (item) =>
+          item?.analysisType ===
+          'code_improvement',
+      ),
   };
+};
 
 const getProjectData = (
   review,
 ) => ({
   id:
-    review?.projectId ||
-    null,
+    review?.projectId || null,
 
   name:
     review?.projectId
@@ -235,150 +251,152 @@ const getProjectData = (
       : null,
 
   sourceType:
-    review?.sourceType ||
-    null,
+    review?.sourceType || null,
 });
 
-const normalizeReportContent =
-  (content, format) => {
-    if (format === "pdf") {
-      if (
-        !Buffer.isBuffer(
-          content,
-        )
-      ) {
-        throw new AppError({
-          code:
-            "INVALID_PDF_REPORT_CONTENT",
-
-          message:
-            "PDF report content is invalid.",
-
-          statusCode: 500,
-        });
-      }
-
-      return content;
-    }
-
-    if (
-      typeof content !==
-      "string"
-    ) {
+const normalizeReportContent = (
+  content,
+  format,
+) => {
+  if (format === 'pdf') {
+    if (!Buffer.isBuffer(content)) {
       throw new AppError({
         code:
-          "INVALID_REPORT_CONTENT",
-
+          'INVALID_PDF_REPORT_CONTENT',
         message:
-          "Report content is invalid.",
-
+          'PDF report content is invalid.',
         statusCode: 500,
       });
     }
 
     return content;
-  };
+  }
 
-const createReport = async ({
-  reviewId,
-  format = "json",
-  ownerId,
-}) => {
-  if (
-    typeof reviewId !==
-      "string" ||
-    !reviewId.trim()
-  ) {
+  if (typeof content !== 'string') {
     throw new AppError({
       code:
-        "INVALID_REVIEW_ID",
-
+        'INVALID_REPORT_CONTENT',
       message:
-        "Review ID is required.",
-
-      statusCode: 400,
+        'Report content is invalid.',
+      statusCode: 500,
     });
   }
 
+  return content;
+};
+
+const assertReviewOwnership = (
+  review,
+  ownerId,
+) => {
   const normalizedOwnerId =
-    normalizeOwnerId(
-      ownerId,
-    );
+    normalizeOwnerId(ownerId);
+
+  if (!review) {
+    throw new AppError({
+      code:
+        'REVIEW_NOT_FOUND',
+      message:
+        'Review not found.',
+      statusCode: 404,
+    });
+  }
+
+  if (
+    !review.ownerId ||
+    String(review.ownerId) !==
+      normalizedOwnerId
+  ) {
+    throw new AppError({
+      code:
+        'REVIEW_OWNER_MISMATCH',
+      message:
+        'Review does not belong to the authenticated user.',
+      statusCode: 403,
+    });
+  }
+
+  return normalizedOwnerId;
+};
+
+const assertReportOwnership = (
+  report,
+  ownerId,
+) => {
+  const normalizedOwnerId =
+    normalizeOwnerId(ownerId);
+
+  if (!report) {
+    throw new AppError({
+      code:
+        'REPORT_NOT_FOUND',
+      message:
+        'Report not found.',
+      statusCode: 404,
+    });
+  }
+
+  if (
+    !report.ownerId ||
+    String(report.ownerId) !==
+      normalizedOwnerId
+  ) {
+    throw new AppError({
+      code:
+        'REPORT_OWNER_MISMATCH',
+      message:
+        'Report does not belong to the authenticated user.',
+      statusCode: 403,
+    });
+  }
+
+  return normalizedOwnerId;
+};
+
+const createReport = async ({
+  reviewId,
+  format = 'json',
+  ownerId,
+}) => {
+  const normalizedOwnerId =
+    normalizeOwnerId(ownerId);
 
   const normalizedReviewId =
-    reviewId.trim();
+    normalizeReviewId(reviewId);
 
   const normalizedFormat =
-    normalizeReportFormat(
-      format,
-    );
+    normalizeReportFormat(format);
 
   const feature =
     getReportFeature(
       normalizedFormat,
     );
 
-  assertFeatureAccess(
-    feature,
-  );
+  assertFeatureAccess(feature);
 
   const review =
     await reviewRepository.findById(
       normalizedReviewId,
     );
 
-  if (!review) {
-    throw new AppError({
-      code:
-        "REVIEW_NOT_FOUND",
-
-      message:
-        "Review not found.",
-
-      statusCode: 404,
-    });
-  }
-
-  /*
-   * The review must belong to the
-   * authenticated user requesting
-   * the report.
-   */
-  if (
-    !review.ownerId ||
-    String(
-      review.ownerId,
-    ) !==
-      normalizedOwnerId
-  ) {
-    throw new AppError({
-      code:
-        "REVIEW_OWNER_MISMATCH",
-
-      message:
-        "Review does not belong to the authenticated user.",
-
-      statusCode: 403,
-    });
-  }
+  assertReviewOwnership(
+    review,
+    normalizedOwnerId,
+  );
 
   if (
     review.status !==
-    "completed"
+    'completed'
   ) {
     throw new AppError({
       code:
-        "REVIEW_NOT_COMPLETED",
-
+        'REVIEW_NOT_COMPLETED',
       message:
-        "A report can only be generated for a completed review.",
-
+        'A report can only be generated for a completed review.',
       statusCode: 409,
-
       details: {
         reviewId:
           normalizedReviewId,
-
         status:
           review.status,
       },
@@ -404,7 +422,7 @@ const createReport = async ({
           normalizedFormat,
 
         status:
-          "pending",
+          'pending',
 
         storageProvider:
           null,
@@ -426,36 +444,17 @@ const createReport = async ({
   if (!report) {
     throw new AppError({
       code:
-        "REPORT_CREATION_FAILED",
-
+        'REPORT_CREATION_FAILED',
       message:
-        "The report could not be created.",
-
+        'The report could not be created.',
       statusCode: 500,
     });
   }
 
-  /*
-   * Verify that an existing report
-   * belongs to the authenticated user.
-   */
-  if (
-    report.ownerId &&
-    String(
-      report.ownerId,
-    ) !==
-      normalizedOwnerId
-  ) {
-    throw new AppError({
-      code:
-        "REPORT_OWNER_MISMATCH",
-
-      message:
-        "Report does not belong to the authenticated user.",
-
-      statusCode: 403,
-    });
-  }
+  assertReportOwnership(
+    report,
+    normalizedOwnerId,
+  );
 
   const reportId =
     normalizeReportId(
@@ -464,7 +463,7 @@ const createReport = async ({
 
   if (
     report.status ===
-      "completed" &&
+      'completed' &&
     report.secureUrl
   ) {
     return {
@@ -495,7 +494,7 @@ const createReport = async ({
 
   if (
     report.status ===
-    "generating"
+    'generating'
   ) {
     return {
       reportId,
@@ -513,7 +512,7 @@ const createReport = async ({
 
   if (
     report.status ===
-    "failed"
+    'failed'
   ) {
     report =
       await createReportRecord({
@@ -527,7 +526,7 @@ const createReport = async ({
           normalizedFormat,
 
         status:
-          "pending",
+          'pending',
 
         storageProvider:
           null,
@@ -548,14 +547,17 @@ const createReport = async ({
     if (!report) {
       throw new AppError({
         code:
-          "REPORT_CREATION_FAILED",
-
+          'REPORT_CREATION_FAILED',
         message:
-          "A new report could not be created after the previous report failed.",
-
+          'A new report could not be created after the previous report failed.',
         statusCode: 500,
       });
     }
+
+    assertReportOwnership(
+      report,
+      normalizedOwnerId,
+    );
   }
 
   const finalReportId =
@@ -567,6 +569,7 @@ const createReport = async ({
     await enqueueReportJob({
       reportId:
         finalReportId,
+        ownerId: normalizedOwnerId,
     });
 
   return {
@@ -580,269 +583,296 @@ const createReport = async ({
       normalizedFormat,
 
     status:
-      "pending",
+      'pending',
 
     jobId:
       job.id,
   };
 };
 
-const generateReport =
-  async ({
-    reportId,
-    ownerId,
-  }) => {
-    const normalizedOwnerId =
-      normalizeOwnerId(
-        ownerId,
-      );
+const getReport = async ({
+  reportId,
+  ownerId,
+}) => {
+  const normalizedOwnerId =
+    normalizeOwnerId(ownerId);
 
-    const normalizedReportId =
-      normalizeReportId(
-        reportId,
-      );
+  const normalizedReportId =
+    normalizeReportId(reportId);
 
-    const report =
-      await findReportById(
-        normalizedReportId,
-      );
-
-    if (!report) {
-      throw new AppError({
-        code:
-          "REPORT_NOT_FOUND",
-
-        message:
-          "Report not found.",
-
-        statusCode: 404,
-      });
-    }
-
-    /*
-     * Verify report ownership before
-     * generating or accessing the report.
-     */
-    if (
-      !report.ownerId ||
-      String(
-        report.ownerId,
-      ) !==
-        normalizedOwnerId
-    ) {
-      throw new AppError({
-        code:
-          "REPORT_OWNER_MISMATCH",
-
-        message:
-          "Report does not belong to the authenticated user.",
-
-        statusCode: 403,
-      });
-    }
-
-    const reportIdentifier =
-      normalizeReportId(
-        getReportId(report),
-      );
-
-    const format =
-      normalizeReportFormat(
-        report.format,
-      );
-
-    const feature =
-      getReportFeature(
-        format,
-      );
-
-    assertFeatureAccess(
-      feature,
+  const report =
+    await findReportById(
+      normalizedReportId,
     );
 
-    const review =
-      await reviewRepository.findById(
-        report.reviewId.toString(),
+  assertReportOwnership(
+    report,
+    normalizedOwnerId,
+  );
+
+  const reviewId =
+    report.reviewId?.toString?.() ||
+    report.reviewId;
+
+  if (!reviewId) {
+    throw new AppError({
+      code:
+        'REPORT_REVIEW_MISSING',
+      message:
+        'The report is not associated with a valid review.',
+      statusCode: 500,
+    });
+  }
+
+  const review =
+    await reviewRepository.findById(
+      reviewId,
+    );
+
+  assertReviewOwnership(
+    review,
+    normalizedOwnerId,
+  );
+
+  return report;
+};
+
+const listReports = async ({
+  reviewId,
+  ownerId,
+}) => {
+  const normalizedOwnerId =
+    normalizeOwnerId(ownerId);
+
+  const normalizedReviewId =
+    normalizeReviewId(reviewId);
+
+  const review =
+    await reviewRepository.findById(
+      normalizedReviewId,
+    );
+
+  assertReviewOwnership(
+    review,
+    normalizedOwnerId,
+  );
+
+  const reports =
+    await findByReviewId(
+      normalizedReviewId,
+    );
+
+  const ownedReports =
+    Array.isArray(reports)
+      ? reports.filter(
+          (report) =>
+            report?.ownerId &&
+            String(
+              report.ownerId,
+            ) ===
+              normalizedOwnerId,
+        )
+      : [];
+
+  return ownedReports;
+};
+
+const generateReport = async ({
+  reportId,
+  ownerId,
+}) => {
+  const normalizedOwnerId =
+    normalizeOwnerId(ownerId);
+
+  const normalizedReportId =
+    normalizeReportId(reportId);
+
+  const report =
+    await findReportById(
+      normalizedReportId,
+    );
+
+  assertReportOwnership(
+    report,
+    normalizedOwnerId,
+  );
+
+  const reportIdentifier =
+    normalizeReportId(
+      getReportId(report),
+    );
+
+  const format =
+    normalizeReportFormat(
+      report.format,
+    );
+
+  const feature =
+    getReportFeature(format);
+
+  assertFeatureAccess(feature);
+
+  const reviewId =
+    report.reviewId?.toString?.() ||
+    report.reviewId;
+
+  if (!reviewId) {
+    throw new AppError({
+      code:
+        'REPORT_REVIEW_MISSING',
+      message:
+        'The report is not associated with a valid review.',
+      statusCode: 500,
+    });
+  }
+
+  const review =
+    await reviewRepository.findById(
+      reviewId,
+    );
+
+  assertReviewOwnership(
+    review,
+    normalizedOwnerId,
+  );
+
+  if (
+    review.status !==
+    'completed'
+  ) {
+    throw new AppError({
+      code:
+        'REVIEW_NOT_COMPLETED',
+      message:
+        'A report can only be generated for a completed review.',
+      statusCode: 409,
+    });
+  }
+
+  await markGenerating({
+    id:
+      reportIdentifier,
+  });
+
+  try {
+    const findings =
+      await findFindingsByReviewId(
+        reviewId,
       );
 
-    if (!review) {
-      throw new AppError({
-        code:
-          "REVIEW_NOT_FOUND",
+    const score =
+      await findScoreByReviewId(
+        reviewId,
+      );
 
-        message:
-          "The review associated with the report was not found.",
+    const aiAnalyses =
+      await findAiAnalysesByReviewId(
+        reviewId,
+      );
 
-        statusCode: 404,
-      });
-    }
+    const aiAnalysis =
+      normalizeAiAnalysis(
+        aiAnalyses,
+      );
 
-    /*
-     * The associated review must also
-     * belong to the authenticated user.
-     */
-    if (
-      !review.ownerId ||
-      String(
-        review.ownerId,
-      ) !==
-        normalizedOwnerId
-    ) {
-      throw new AppError({
-        code:
-          "REVIEW_OWNER_MISMATCH",
+    const project =
+      getProjectData(
+        review,
+      );
 
-        message:
-          "The review associated with the report does not belong to the authenticated user.",
-
-        statusCode: 403,
-      });
-    }
-
-    if (
-      review.status !==
-      "completed"
-    ) {
-      throw new AppError({
-        code:
-          "REVIEW_NOT_COMPLETED",
-
-        message:
-          "A report can only be generated for a completed review.",
-
-        statusCode: 409,
-      });
-    }
-
-    await markGenerating({
-      id:
-        reportIdentifier,
-    });
-
-    try {
-      const findings =
-        await findFindingsByReviewId(
-          report.reviewId.toString(),
-        );
-
-      const score =
-        await findScoreByReviewId(
-          report.reviewId.toString(),
-        );
-
-      const aiAnalyses =
-        await findAiAnalysesByReviewId(
-          report.reviewId.toString(),
-        );
-
-      const aiAnalysis =
-        normalizeAiAnalysis(
-          aiAnalyses,
-        );
-
-      const project =
-        getProjectData(
-          review,
-        );
-
-      const builtReport =
-        buildReport({
-          format,
-
-          review,
-
-          project,
-
-          findings,
-
-          score,
-
-          aiAnalysis,
-        });
-
-      const content =
-        normalizeReportContent(
-          builtReport.content,
-          format,
-        );
-
-      const uploaded =
-        await uploadReport({
-          reviewId:
-            report.reviewId.toString(),
-
-          format,
-
-          content,
-        });
-
-      const completed =
-        await markCompleted({
-          id:
-            reportIdentifier,
-
-          storageProvider:
-            "cloudinary",
-
-          publicId:
-            uploaded.publicId,
-
-          secureUrl:
-            uploaded.secureUrl,
-
-          resourceType:
-            uploaded.resourceType,
-        });
-
-      return {
-        reportId:
-          reportIdentifier,
-
-        reviewId:
-          report.reviewId.toString(),
-
+    const builtReport =
+      buildReport({
         format,
+        review,
+        project,
+        findings,
+        score,
+        aiAnalysis,
+      });
 
-        status:
-          completed?.status ||
-          "completed",
+    const content =
+      normalizeReportContent(
+        builtReport.content,
+        format,
+      );
 
-        storageProvider:
-          completed?.storageProvider ||
-          "cloudinary",
+    const uploaded =
+      await uploadReport({
+        reviewId,
+        format,
+        content,
+      });
 
-        publicId:
-          completed?.publicId ||
-          uploaded.publicId,
-
-        secureUrl:
-          completed?.secureUrl ||
-          uploaded.secureUrl,
-
-        resourceType:
-          completed?.resourceType ||
-          uploaded.resourceType,
-      };
-    } catch (error) {
-      await markFailed({
+    const completed =
+      await markCompleted({
         id:
           reportIdentifier,
 
-        errorCode:
-          error?.code ||
-          "REPORT_GENERATION_FAILED",
+        storageProvider:
+          'cloudinary',
+
+        publicId:
+          uploaded.publicId,
+
+        secureUrl:
+          uploaded.secureUrl,
+
+        resourceType:
+          uploaded.resourceType,
       });
 
-      throw error;
-    }
-  };
+    return {
+      reportId:
+        reportIdentifier,
+
+      reviewId,
+
+      format,
+
+      status:
+        completed?.status ||
+        'completed',
+
+      storageProvider:
+        completed?.storageProvider ||
+        'cloudinary',
+
+      publicId:
+        completed?.publicId ||
+        uploaded.publicId,
+
+      secureUrl:
+        completed?.secureUrl ||
+        uploaded.secureUrl,
+
+      resourceType:
+        completed?.resourceType ||
+        uploaded.resourceType,
+    };
+  } catch (error) {
+    await markFailed({
+      id:
+        reportIdentifier,
+
+      errorCode:
+        error?.code ||
+        'REPORT_GENERATION_FAILED',
+    });
+
+    throw error;
+  }
+};
 
 export {
   createReport,
+  getReport,
+  listReports,
   generateReport,
 };
 
 export default Object.freeze({
   createReport,
+  getReport,
+  listReports,
   generateReport,
 });

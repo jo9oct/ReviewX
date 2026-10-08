@@ -25,22 +25,9 @@ export async function createFreeSubscription(
     );
   }
 
-  const existingSubscription =
-    await subscriptionRepo.findByUserId(
-      userId,
-    );
-
-  if (existingSubscription) {
-    return existingSubscription;
-  }
-
-  return subscriptionRepo.createSubscription({
+  return subscriptionRepo.findOrCreateFreeByUserId(
     userId,
-    plan: PLANS.FREE,
-    status: STATUSES.ACTIVE,
-    startedAt: new Date(),
-    expiresAt: null,
-  });
+  );
 }
 
 export async function getSubscription(
@@ -52,18 +39,9 @@ export async function getSubscription(
     );
   }
 
-  const subscription =
-    await subscriptionRepo.findByUserId(
-      userId,
-    );
-
-  if (!subscription) {
-    throw ApiError.notFound(
-      'Subscription not found',
-    );
-  }
-
-  return subscription;
+  return subscriptionRepo.findOrCreateFreeByUserId(
+    userId,
+  );
 }
 
 export async function updateSubscription(

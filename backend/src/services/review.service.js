@@ -91,7 +91,7 @@ const normalizeReviewId = (
       message:
         'Review ID is required.',
 
-      statusCode: 500,
+      statusCode: 400,
     });
   }
 
@@ -108,11 +108,34 @@ const normalizeReviewId = (
       message:
         'Review ID is required.',
 
-      statusCode: 500,
+      statusCode: 400,
     });
   }
 
   return normalized;
+};
+
+const normalizeOwnerId = (
+  ownerId,
+) => {
+  if (
+    !ownerId ||
+    !mongoose.Types.ObjectId.isValid(
+      ownerId,
+    )
+  ) {
+    throw new AppError({
+      code:
+        'AUTHENTICATED_OWNER_REQUIRED',
+
+      message:
+        'A valid authenticated user is required.',
+
+      statusCode: 401,
+    });
+  }
+
+  return ownerId.toString();
 };
 
 const normalizeReviewOptions = (
@@ -149,26 +172,6 @@ const normalizeReviewOptions = (
   };
 };
 
-/*
- * User-selected analysis options are kept
- * separate from subscription-controlled
- * capabilities.
- *
- * The frontend controls only:
- *
- * - securityAnalysis
- * - bugDetection
- * - codeQuality
- * - performance
- *
- * The backend controls:
- *
- * - aiAnalysis
- * - aiRemediation
- * - advancedAnalysis
- *
- * using the current subscription policy.
- */
 const buildEffectiveReviewOptions = (
   selectedOptions,
   access,
@@ -307,9 +310,6 @@ const calculateSourceStats = (
   };
 };
 
-/*
- * Finding location normalization
- */
 const getFindingLineStart = (
   finding,
 ) => {
@@ -977,22 +977,25 @@ const getReviewIdFromDocument = (
 };
 
 /*
- * Creates or reuses a project for
- * the current owner.
- *
- * ownerId is now stored directly on
- * the Project document.
+ * IMPORTANT:
+ * Projects are owned by the authenticated
+ * user. The client cannot choose ownerId.
  */
 const createProjectForReview = async ({
   ownerId,
   project,
   source,
 }) => {
+  const normalizedOwnerId =
+    normalizeOwnerId(
+      ownerId,
+    );
+
   const existing =
     await projectRepository.findByNormalizedName(
       project.normalizedName,
       source.type,
-      ownerId,
+      normalizedOwnerId,
     );
 
   if (existing) {
@@ -1000,7 +1003,8 @@ const createProjectForReview = async ({
   }
 
   return projectRepository.create({
-    ownerId,
+    ownerId:
+      normalizedOwnerId,
 
     name:
       project.name,
@@ -1044,24 +1048,17 @@ const createReviewRecord = async ({
   projectId,
   source,
 }) => {
-  /*
-   * Generate the review ID once.
-   *
-   * The same identifier is used by:
-   *
-   * - MongoDB
-   * - Redis
-   * - BullMQ
-   * - findings
-   * - evidence
-   * - score
-   * - AI analysis
-   */
+  const normalizedOwnerId =
+    normalizeOwnerId(
+      ownerId,
+    );
+
   const reviewId =
     new mongoose.Types.ObjectId();
 
   return reviewRepository.create({
-    ownerId,
+    ownerId:
+      normalizedOwnerId,
 
     reviewId,
 
@@ -1105,9 +1102,19 @@ const createReviewRecord = async ({
   });
 };
 
+/*
+ * GitHub repository access is always
+ * performed for the authenticated user.
+ */
 const resolveReviewSource = async (
   source,
+  ownerId,
 ) => {
+  const normalizedOwnerId =
+    normalizeOwnerId(
+      ownerId,
+    );
+
   if (
     source?.type !== 'github'
   ) {
@@ -1156,6 +1163,9 @@ const resolveReviewSource = async (
 
   const githubRepository =
     await getRepository({
+      userId:
+        normalizedOwnerId,
+
       connectionId,
 
       owner:
@@ -1220,10 +1230,6 @@ const executeReview = async ({
       review,
     );
 
-  /*
-   * Completed and cancelled reviews must
-   * never be executed again.
-   */
   if (
     review.status ===
       'completed' ||
@@ -1242,30 +1248,10 @@ const executeReview = async ({
     };
   }
 
-  /*
-   * BullMQ attempts are total attempts,
-   * not retry count.
-   *
-   * Example:
-   * attempts = 3
-   *
-   * attempt 1 -> retryable
-   * attempt 2 -> retryable
-   * attempt 3 -> final
-   */
   const isFinalAttempt =
     Number(attemptNumber) >=
     Number(maxAttempts);
 
-  /*
-   * Only queued reviews may transition
-   * into running.
-   *
-   * This database condition makes the
-   * transition atomic and prevents two
-   * workers from executing the same review
-   * concurrently.
-   */
   const startedAt =
     new Date();
 
@@ -1311,10 +1297,6 @@ const executeReview = async ({
       };
     }
 
-    /*
-     * Another worker already owns
-     * the running transition.
-     */
     if (
       currentReview?.status ===
       'running'
@@ -1344,12 +1326,6 @@ const executeReview = async ({
 
   let executionData;
 
-  /*
-   * Tracks actual successful completion.
-   *
-   * Merely retrieving executionData does
-   * not mean that the review succeeded.
-   */
   let completedSuccessfully =
     false;
 
@@ -1500,19 +1476,6 @@ const executeReview = async ({
         result,
     };
   } catch (error) {
-    /*
-     * Retry lifecycle:
-     *
-     * Non-final attempt:
-     *   running -> queued
-     *
-     * Final attempt:
-     *   running -> failed
-     *
-     * The non-final transition is required
-     * because the next BullMQ attempt must
-     * atomically transition queued -> running.
-     */
     try {
       await reviewRepository.updateByIdAndStatus(
         reviewDocumentId,
@@ -1536,30 +1499,11 @@ const executeReview = async ({
         },
       );
     } catch {
-      /*
-       * Preserve the original execution
-       * error.
-       */
+      // Preserve original execution error.
     }
 
-    /*
-     * Rethrow the original error so BullMQ
-     * knows that the current attempt failed
-     * and can schedule the next attempt.
-     */
     throw error;
   } finally {
-    /*
-     * Redis source lifecycle:
-     *
-     * - Keep the source when the current
-     *   attempt fails and BullMQ can retry.
-     * - Delete after successful completion.
-     * - Delete after the final failed attempt.
-     *
-     * The source is intentionally NOT
-     * deleted merely because it was read.
-     */
     if (
       isFinalAttempt ||
       completedSuccessfully
@@ -1569,10 +1513,7 @@ const executeReview = async ({
           normalizedReviewId,
         );
       } catch {
-        /*
-         * Redis TTL remains the fallback
-         * cleanup mechanism.
-         */
+        // Redis TTL remains fallback cleanup.
       }
     }
   }
@@ -1627,7 +1568,7 @@ const queueReviewExecution = async ({
 
   if (
     review.status !==
-    'pending'
+      'pending'
   ) {
     throw new AppError({
       code:
@@ -1691,10 +1632,7 @@ const queueReviewExecution = async ({
         },
       );
     } catch {
-      /*
-       * Preserve the original queue
-       * failure.
-       */
+      // Preserve original queue failure.
     }
 
     throw error;
@@ -1713,14 +1651,28 @@ const queueReviewExecution = async ({
 };
 
 /*
- * Retrieve the current review status and
- * persisted analysis results.
+ * SECURE REVIEW DISPLAY
  *
- * This function is intentionally read-only.
+ * The route already requires:
+ *
+ * authenticate
+ *
+ * The controller passes:
+ *
+ * req.user.id
+ *
+ * This service additionally verifies that
+ * the requested review belongs to that user.
  */
 const getReviewResponse = async (
   reviewId,
+  ownerId,
 ) => {
+  const normalizedOwnerId =
+    normalizeOwnerId(
+      ownerId,
+    );
+
   const normalizedReviewId =
     normalizeReviewId(
       reviewId,
@@ -1740,6 +1692,45 @@ const getReviewResponse = async (
         'Review not found.',
 
       statusCode: 404,
+    });
+  }
+
+  /*
+   * Never return a review simply because
+   * the caller has a valid JWT.
+   *
+   * The JWT identifies the caller.
+   * ownerId identifies who owns the resource.
+   */
+  const reviewOwnerId =
+    review.ownerId
+      ? review.ownerId.toString()
+      : null;
+
+  if (!reviewOwnerId) {
+    throw new AppError({
+      code:
+        'REVIEW_OWNER_MISSING',
+
+      message:
+        'The review does not have a valid owner.',
+
+      statusCode: 500,
+    });
+  }
+
+  if (
+    reviewOwnerId !==
+    normalizedOwnerId
+  ) {
+    throw new AppError({
+      code:
+        'REVIEW_ACCESS_DENIED',
+
+      message:
+        'You do not have access to this review.',
+
+      statusCode: 403,
     });
   }
 
@@ -1773,9 +1764,7 @@ const getReviewResponse = async (
         reviewDocumentId,
 
       ownerId:
-        review.ownerId
-          ? review.ownerId.toString()
-          : null,
+        reviewOwnerId,
 
       projectId:
         review.projectId
@@ -1845,6 +1834,11 @@ const createReviewResponse =
     payload,
     ownerId,
   ) => {
+    const normalizedOwnerId =
+      normalizeOwnerId(
+        ownerId,
+      );
+
     if (
       !payload ||
       typeof payload !== 'object' ||
@@ -1861,42 +1855,11 @@ const createReviewResponse =
       });
     }
 
-    /*
-     * The authenticated user ID must come
-     * from the authentication middleware.
-     */
-    if (
-      !ownerId ||
-      !mongoose.Types.ObjectId.isValid(
-        ownerId,
-      )
-    ) {
-      throw new AppError({
-        code:
-          'AUTHENTICATED_OWNER_REQUIRED',
-
-        message:
-          'A valid authenticated user is required to create a review.',
-
-        statusCode: 401,
-      });
-    }
-
-    /*
-     * The frontend controls only the four
-     * analysis selections.
-     */
     const selectedOptions =
       normalizeReviewOptions(
         payload.options,
       );
 
-    /*
-     * The backend determines the user's
-     * subscription tier and capabilities.
-     *
-     * No tier is accepted from the client.
-     */
     const access =
       getAccessContext();
 
@@ -1906,18 +1869,10 @@ const createReviewResponse =
         access,
       );
 
-    /*
-     * These capabilities are now derived
-     * from the subscription policy.
-     */
     assertRequestedFeatures(
       options,
     );
 
-    /*
-     * GitHub and archive access are also
-     * controlled by the backend policy.
-     */
     assertSourceFeatureAccess(
       payload.source,
     );
@@ -1933,6 +1888,7 @@ const createReviewResponse =
     } =
       await resolveReviewSource(
         payload.source,
+        normalizedOwnerId,
       );
 
     const source =
@@ -1958,16 +1914,10 @@ const createReviewResponse =
       totalFiles,
     });
 
-    /*
-     * The owner ID comes from the
-     * authenticated user/session.
-     *
-     * It is never accepted from the
-     * frontend request body.
-     */
     const project =
       await createProjectForReview({
-        ownerId,
+        ownerId:
+          normalizedOwnerId,
 
         project:
           projectIdentity,
@@ -1994,7 +1944,8 @@ const createReviewResponse =
 
     const review =
       await createReviewRecord({
-        ownerId,
+        ownerId:
+          normalizedOwnerId,
 
         projectId,
 
@@ -2021,7 +1972,8 @@ const createReviewResponse =
         });
 
       return {
-        ownerId,
+        ownerId:
+          normalizedOwnerId,
 
         project: {
           id:
@@ -2057,10 +2009,7 @@ const createReviewResponse =
           reviewId,
         );
       } catch {
-        /*
-         * Redis TTL remains the fallback
-         * cleanup mechanism.
-         */
+        // Redis TTL remains fallback cleanup.
       }
 
       try {
@@ -2079,10 +2028,7 @@ const createReviewResponse =
           },
         );
       } catch {
-        /*
-         * Preserve the original queue
-         * failure.
-         */
+        // Preserve original queue failure.
       }
 
       throw error;

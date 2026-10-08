@@ -1,3 +1,5 @@
+// STATUS: UPDATED
+
 import {
   getReportQueue,
 } from "../queue/queue.factory.js";
@@ -8,6 +10,7 @@ import {
 
 const normalizeReportJobData = ({
   reportId,
+  ownerId,
 }) => {
   if (
     typeof reportId !== "string" ||
@@ -18,15 +21,28 @@ const normalizeReportJobData = ({
     );
   }
 
+  if (
+    typeof ownerId !== "string" ||
+    !ownerId.trim()
+  ) {
+    throw new TypeError(
+      "Owner ID is required.",
+    );
+  }
+
   return {
     reportId:
       reportId.trim(),
+
+    ownerId:
+      ownerId.trim(),
   };
 };
 
 export const enqueueReportJob =
   async ({
     reportId,
+    ownerId,
   }) => {
     const queue =
       getReportQueue();
@@ -34,6 +50,7 @@ export const enqueueReportJob =
     const data =
       normalizeReportJobData({
         reportId,
+        ownerId,
       });
 
     return queue.add(
@@ -69,6 +86,9 @@ export const createReportProcessor =
       return reportService.generateReport({
         reportId:
           data.reportId,
+
+        ownerId:
+          data.ownerId,
       });
     };
   };

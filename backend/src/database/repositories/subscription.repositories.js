@@ -25,6 +25,32 @@ export async function findByUserId(
     .exec();
 }
 
+export async function findOrCreateFreeByUserId(
+  userId,
+) {
+  return Subscription.findOneAndUpdate(
+    {
+      userId,
+    },
+    {
+      $setOnInsert: {
+        userId,
+        plan: 'free',
+        status: 'active',
+        startedAt: new Date(),
+        expiresAt: null,
+      },
+    },
+    {
+      upsert: true,
+      new: true,
+      runValidators: true,
+    },
+  )
+    .lean()
+    .exec();
+}
+
 export async function updateByUserId(
   userId,
   updates,

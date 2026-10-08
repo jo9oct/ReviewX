@@ -1,11 +1,10 @@
-import {
-  createReport as createReportService,
-} from '../services/report.service.js';
+// STATUS: UPDATED
 
 import {
-  findById as findReportById,
-  findByReviewId,
-} from '../database/repositories/report.repository.js';
+  createReport as createReportService,
+  getReport as getReportService,
+  listReports as listReportsService,
+} from '../services/report.service.js';
 
 import {
   createResponse,
@@ -34,17 +33,14 @@ const createReport = async (
 
     return res
       .status(
-        result.status ===
-          'completed'
+        result.status === 'completed'
           ? 200
           : 202,
       )
       .json(
         createResponse({
           success: true,
-
           data: result,
-
           meta: {
             requestId:
               req.requestId,
@@ -67,33 +63,17 @@ const getReport = async (
     } = req.params;
 
     const report =
-      await findReportById(
+      await getReportService({
         reportId,
-      );
-
-    if (!report) {
-      const error =
-        new Error(
-          'Report not found.',
-        );
-
-      error.code =
-        'REPORT_NOT_FOUND';
-
-      error.statusCode =
-        404;
-
-      throw error;
-    }
+        ownerId: req.user.id,
+      });
 
     return res
       .status(200)
       .json(
         createResponse({
           success: true,
-
           data: report,
-
           meta: {
             requestId:
               req.requestId,
@@ -116,22 +96,20 @@ const listReports = async (
     } = req.params;
 
     const reports =
-      await findByReviewId(
+      await listReportsService({
         reviewId,
-      );
+        ownerId: req.user.id,
+      });
 
     return res
       .status(200)
       .json(
         createResponse({
           success: true,
-
           data: reports,
-
           meta: {
             requestId:
               req.requestId,
-
             count:
               reports.length,
           },

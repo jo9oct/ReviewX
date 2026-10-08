@@ -1,3 +1,32 @@
+// STATUS: UPDATED
+
+const PAGE_WIDTH = 595;
+const PAGE_HEIGHT = 842;
+
+const MARGIN_LEFT = 42;
+const MARGIN_RIGHT = 42;
+const MARGIN_TOP = 48;
+const MARGIN_BOTTOM = 48;
+
+const CONTENT_WIDTH =
+  PAGE_WIDTH -
+  MARGIN_LEFT -
+  MARGIN_RIGHT;
+
+const COLORS = {
+  text: '0.12 0.14 0.18',
+  muted: '0.42 0.45 0.50',
+  heading: '0.08 0.10 0.14',
+  border: '0.82 0.84 0.88',
+  background: '0.96 0.97 0.98',
+  white: '1 1 1',
+  critical: '0.75 0.10 0.10',
+  high: '0.85 0.32 0.08',
+  medium: '0.80 0.58 0.05',
+  low: '0.20 0.48 0.72',
+  info: '0.35 0.42 0.52',
+};
+
 const escapePdfText = (value) =>
   String(value ?? '')
     .replace(/\\/g, '\\\\')
@@ -6,164 +35,1094 @@ const escapePdfText = (value) =>
     .replace(/\r/g, '')
     .replace(/\n/g, ' ');
 
-const flattenReportLines = (report) => {
-  const lines = [];
+const normalizeText = (value) =>
+  String(value ?? '')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-  lines.push('AI Code Review Report');
-  lines.push(
-    `Report Version: ${report?.reportVersion || '1.0'}`,
-  );
-  lines.push(
-    `Generated At: ${report?.generatedAt || ''}`,
-  );
-  lines.push('');
+const wrapText = (
+  value,
+  maxCharacters,
+) => {
+  const text =
+    normalizeText(value);
 
-  lines.push('Review');
-  lines.push(
-    `ID: ${report?.review?.id || 'N/A'}`,
-  );
-  lines.push(
-    `Status: ${report?.review?.status || 'N/A'}`,
-  );
-  lines.push('');
-
-  lines.push('Project');
-  lines.push(
-    `Name: ${report?.project?.name || 'N/A'}`,
-  );
-  lines.push(
-    `Source Type: ${report?.project?.sourceType || 'N/A'}`,
-  );
-  lines.push('');
-
-  const summary = report?.summary || {};
-
-  lines.push('Summary');
-  lines.push(
-    `Total Findings: ${summary?.totalFindings ?? 0}`,
-  );
-  lines.push(
-    `Critical: ${summary?.critical ?? 0}`,
-  );
-  lines.push(
-    `High: ${summary?.high ?? 0}`,
-  );
-  lines.push(
-    `Medium: ${summary?.medium ?? 0}`,
-  );
-  lines.push(
-    `Low: ${summary?.low ?? 0}`,
-  );
-  lines.push(
-    `Info: ${summary?.info ?? 0}`,
-  );
-  lines.push('');
-
-  const score = report?.score || {};
-
-  lines.push('Score');
-  lines.push(
-    `Overall: ${score?.overall ?? 'N/A'}`,
-  );
-  lines.push(
-    `Security: ${score?.security ?? 'N/A'}`,
-  );
-  lines.push(
-    `Bugs: ${score?.bugs ?? 'N/A'}`,
-  );
-  lines.push(
-    `Quality: ${score?.quality ?? 'N/A'}`,
-  );
-  lines.push(
-    `Performance: ${score?.performance ?? 'N/A'}`,
-  );
-  lines.push('');
-
-  lines.push('Findings');
-
-  const findings = Array.isArray(
-    report?.findings,
-  )
-    ? report.findings
-    : [];
-
-  if (!findings.length) {
-    lines.push('No findings.');
+  if (!text) {
+    return [''];
   }
 
-  findings.forEach(
-    (finding, index) => {
-      lines.push(
-        `${index + 1}. ${finding?.title || 'Untitled finding'}`,
-      );
+  const words =
+    text.split(' ');
 
-      lines.push(
-        `   Rule: ${finding?.ruleId || 'N/A'}`,
-      );
+  const lines = [];
+  let current = '';
 
-      lines.push(
-        `   Severity: ${finding?.severity || 'N/A'}`,
-      );
+  for (const word of words) {
+    if (!current) {
+      current = word;
+      continue;
+    }
 
-      lines.push(
-        `   Confidence: ${finding?.confidence || 'N/A'}`,
-      );
+    const candidate =
+      `${current} ${word}`;
 
-      lines.push(
-        `   File: ${finding?.filePath || 'N/A'}`,
-      );
+    if (
+      candidate.length <=
+      maxCharacters
+    ) {
+      current = candidate;
+      continue;
+    }
 
-      lines.push(
-        `   Description: ${finding?.description || 'N/A'}`,
-      );
+    lines.push(current);
+    current = word;
+  }
 
-      if (finding?.remediation) {
-        lines.push(
-          `   Remediation: ${finding.remediation}`,
-        );
-      }
-
-      lines.push('');
-    },
-  );
+  if (current) {
+    lines.push(current);
+  }
 
   return lines;
 };
 
-const buildPdf = (lines) => {
-  const pageWidth = 595;
-  const pageHeight = 842;
+const severityColor = (
+  severity,
+) => {
+  switch (
+    String(
+      severity || '',
+    ).toLowerCase()
+  ) {
+    case 'critical':
+      return COLORS.critical;
 
-  const marginLeft = 40;
-  const startY = 800;
-  const lineHeight = 14;
+    case 'high':
+      return COLORS.high;
 
-  const maxLinesPerPage = Math.floor(
-    (startY - 40) / lineHeight,
+    case 'medium':
+      return COLORS.medium;
+
+    case 'low':
+      return COLORS.low;
+
+    default:
+      return COLORS.info;
+  }
+};
+
+const addText = (
+  commands,
+  {
+    x,
+    y,
+    text,
+    font = 'F1',
+    size = 10,
+    color = COLORS.text,
+  },
+) => {
+  commands.push(
+    `${color} rg`,
   );
 
-  const pages = [];
+  commands.push(
+    `BT /${font} ${size} Tf ${x} ${y} Td (${escapePdfText(
+      text,
+    )}) Tj ET`,
+  );
+};
 
-  for (
-    let index = 0;
-    index < lines.length;
-    index += maxLinesPerPage
-  ) {
-    pages.push(
-      lines.slice(
-        index,
-        index + maxLinesPerPage,
-      ),
+const addLine = (
+  commands,
+  {
+    x1,
+    y1,
+    x2,
+    y2,
+    color = COLORS.border,
+    width = 0.7,
+  },
+) => {
+  commands.push(
+    `${color} RG`,
+  );
+
+  commands.push(
+    `${width} w`,
+  );
+
+  commands.push(
+    `${x1} ${y1} m ${x2} ${y2} l S`,
+  );
+};
+
+const addRectangle = (
+  commands,
+  {
+    x,
+    y,
+    width,
+    height,
+    fill = COLORS.background,
+    stroke = null,
+    strokeWidth = 0.7,
+  },
+) => {
+  if (fill) {
+    commands.push(
+      `${fill} rg`,
     );
   }
 
-  if (!pages.length) {
-    pages.push(['AI Code Review Report']);
+  if (stroke) {
+    commands.push(
+      `${stroke} RG`,
+    );
+
+    commands.push(
+      `${strokeWidth} w`,
+    );
   }
 
+  commands.push(
+    `${x} ${y} ${width} ${height} re ${
+      stroke ? 'B' : 'f'
+    }`,
+  );
+};
+
+const createPage = () => ({
+  commands: [],
+  y:
+    PAGE_HEIGHT -
+    MARGIN_TOP,
+});
+
+const ensureSpace = (
+  page,
+  requiredHeight,
+  pages,
+) => {
+  if (
+    page.y -
+      requiredHeight <
+    MARGIN_BOTTOM
+  ) {
+    pages.push(page);
+    return createPage();
+  }
+
+  return page;
+};
+
+const addFooter = (
+  page,
+  pageNumber,
+) => {
+  addLine(
+    page.commands,
+    {
+      x1: MARGIN_LEFT,
+      y1: 34,
+      x2:
+        PAGE_WIDTH -
+        MARGIN_RIGHT,
+      y2: 34,
+      color:
+        COLORS.border,
+      width: 0.5,
+    },
+  );
+
+  addText(
+    page.commands,
+    {
+      x: MARGIN_LEFT,
+      y: 20,
+      text:
+        'AI Code Review Platform',
+      font: 'F1',
+      size: 7.5,
+      color:
+        COLORS.muted,
+    },
+  );
+
+  addText(
+    page.commands,
+    {
+      x:
+        PAGE_WIDTH -
+        MARGIN_RIGHT -
+        28,
+      y: 20,
+      text:
+        `Page ${pageNumber}`,
+      font: 'F1',
+      size: 7.5,
+      color:
+        COLORS.muted,
+    },
+  );
+};
+
+const addSectionTitle = (
+  page,
+  title,
+  pages,
+) => {
+  page =
+    ensureSpace(
+      page,
+      42,
+      pages,
+    );
+
+  addText(
+    page.commands,
+    {
+      x: MARGIN_LEFT,
+      y: page.y,
+      text: title,
+      font: 'F2',
+      size: 15,
+      color:
+        COLORS.heading,
+    },
+  );
+
+  page.y -= 8;
+
+  addLine(
+    page.commands,
+    {
+      x1: MARGIN_LEFT,
+      y1: page.y,
+      x2:
+        PAGE_WIDTH -
+        MARGIN_RIGHT,
+      y2: page.y,
+      color:
+        COLORS.border,
+      width: 0.8,
+    },
+  );
+
+  page.y -= 20;
+
+  return page;
+};
+
+const addLabelValue = (
+  page,
+  label,
+  value,
+  pages,
+) => {
+  const wrapped =
+    wrapText(
+      value,
+      78,
+    );
+
+  page =
+    ensureSpace(
+      page,
+      18 +
+        wrapped.length *
+          13,
+      pages,
+    );
+
+  addText(
+    page.commands,
+    {
+      x: MARGIN_LEFT,
+      y: page.y,
+      text: `${label}:`,
+      font: 'F2',
+      size: 9,
+      color:
+        COLORS.heading,
+    },
+  );
+
+  const labelWidth =
+    label.length * 5.2 +
+    8;
+
+  wrapped.forEach(
+    (line, index) => {
+      addText(
+        page.commands,
+        {
+          x:
+            MARGIN_LEFT +
+            labelWidth,
+          y:
+            page.y -
+            index * 13,
+          text: line,
+          font: 'F1',
+          size: 9,
+          color:
+            COLORS.text,
+        },
+      );
+    },
+  );
+
+  page.y -=
+    wrapped.length *
+      13 +
+    5;
+
+  return page;
+};
+
+const addSummaryCard = (
+  page,
+  summary,
+  pages,
+) => {
+  const values = [
+    [
+      'Total Findings',
+      summary?.totalFindings ??
+        0,
+    ],
+    [
+      'Critical',
+      summary?.critical ?? 0,
+    ],
+    [
+      'High',
+      summary?.high ?? 0,
+    ],
+    [
+      'Medium',
+      summary?.medium ?? 0,
+    ],
+    [
+      'Low',
+      summary?.low ?? 0,
+    ],
+    [
+      'Info',
+      summary?.info ?? 0,
+    ],
+  ];
+
+  const gap = 8;
+  const cardWidth =
+    (CONTENT_WIDTH -
+      gap * 2) /
+    3;
+
+  const cardHeight = 55;
+
+  page =
+    ensureSpace(
+      page,
+      cardHeight + 15,
+      pages,
+    );
+
+  values.forEach(
+    ([label, value], index) => {
+      const column =
+        index % 3;
+
+      const row =
+        Math.floor(index / 3);
+
+      const x =
+        MARGIN_LEFT +
+        column *
+          (cardWidth + gap);
+
+      const y =
+        page.y -
+        row *
+          (cardHeight + gap);
+
+      addRectangle(
+        page.commands,
+        {
+          x,
+          y:
+            y -
+            cardHeight,
+          width:
+            cardWidth,
+          height:
+            cardHeight,
+          fill:
+            COLORS.background,
+          stroke:
+            COLORS.border,
+        },
+      );
+
+      addText(
+        page.commands,
+        {
+          x: x + 10,
+          y:
+            y - 18,
+          text:
+            String(value),
+          font: 'F2',
+          size: 18,
+          color:
+            COLORS.heading,
+        },
+      );
+
+      addText(
+        page.commands,
+        {
+          x: x + 10,
+          y:
+            y - 38,
+          text: label,
+          font: 'F1',
+          size: 8,
+          color:
+            COLORS.muted,
+        },
+      );
+    },
+  );
+
+  page.y -=
+    cardHeight * 2 +
+    gap +
+    10;
+
+  return page;
+};
+
+const addScoreCard = (
+  page,
+  score,
+  pages,
+) => {
+  const values = [
+    [
+      'Overall',
+      score?.overall,
+    ],
+    [
+      'Security',
+      score?.security,
+    ],
+    [
+      'Bugs',
+      score?.bugs,
+    ],
+    [
+      'Quality',
+      score?.quality,
+    ],
+    [
+      'Performance',
+      score?.performance,
+    ],
+  ];
+
+  page =
+    ensureSpace(
+      page,
+      62,
+      pages,
+    );
+
+  const gap = 7;
+
+  const cardWidth =
+    (CONTENT_WIDTH -
+      gap * 4) /
+    5;
+
+  values.forEach(
+    ([label, value], index) => {
+      const x =
+        MARGIN_LEFT +
+        index *
+          (cardWidth + gap);
+
+      addRectangle(
+        page.commands,
+        {
+          x,
+          y:
+            page.y - 50,
+          width:
+            cardWidth,
+          height: 50,
+          fill:
+            COLORS.white,
+          stroke:
+            COLORS.border,
+        },
+      );
+
+      addText(
+        page.commands,
+        {
+          x: x + 8,
+          y:
+            page.y - 19,
+          text:
+            String(
+              value ??
+                'N/A',
+            ),
+          font: 'F2',
+          size: 13,
+          color:
+            COLORS.heading,
+        },
+      );
+
+      addText(
+        page.commands,
+        {
+          x: x + 8,
+          y:
+            page.y - 38,
+          text: label,
+          font: 'F1',
+          size: 7.5,
+          color:
+            COLORS.muted,
+        },
+      );
+    },
+  );
+
+  page.y -= 65;
+
+  return page;
+};
+
+const addFinding = (
+  page,
+  finding,
+  index,
+  pages,
+) => {
+  const title =
+    `${index + 1}. ${
+      finding?.title ||
+      'Untitled finding'
+    }`;
+
+  const description =
+    finding?.description ||
+    'No description provided.';
+
+  const remediation =
+    finding?.remediation ||
+    '';
+
+  const descriptionLines =
+    wrapText(
+      description,
+      86,
+    );
+
+  const remediationLines =
+    remediation
+      ? wrapText(
+          remediation,
+          86,
+        )
+      : [];
+
+  const height =
+    105 +
+    descriptionLines.length *
+      12 +
+    remediationLines.length *
+      12;
+
+  page =
+    ensureSpace(
+      page,
+      Math.min(
+        height,
+        260,
+      ),
+      pages,
+    );
+
+  const startY =
+    page.y;
+
+  addRectangle(
+    page.commands,
+    {
+      x: MARGIN_LEFT,
+      y:
+        startY - height,
+      width:
+        CONTENT_WIDTH,
+      height,
+      fill:
+        COLORS.white,
+      stroke:
+        COLORS.border,
+    },
+  );
+
+  const severity =
+    String(
+      finding?.severity ||
+        'info',
+    ).toUpperCase();
+
+  const badgeWidth =
+    Math.max(
+      48,
+      severity.length * 6.5 +
+        16,
+    );
+
+  addRectangle(
+    page.commands,
+    {
+      x:
+        PAGE_WIDTH -
+        MARGIN_RIGHT -
+        badgeWidth -
+        10,
+      y:
+        startY - 26,
+      width:
+        badgeWidth,
+      height: 16,
+      fill:
+        severityColor(
+          finding?.severity,
+        ),
+    },
+  );
+
+  addText(
+    page.commands,
+    {
+      x:
+        PAGE_WIDTH -
+        MARGIN_RIGHT -
+        badgeWidth -
+        2,
+      y:
+        startY - 20,
+      text: severity,
+      font: 'F2',
+      size: 7,
+      color:
+        COLORS.white,
+    },
+  );
+
+  addText(
+    page.commands,
+    {
+      x: MARGIN_LEFT + 10,
+      y:
+        startY - 21,
+      text: title,
+      font: 'F2',
+      size: 11,
+      color:
+        COLORS.heading,
+    },
+  );
+
+  let y =
+    startY - 46;
+
+  const metadata = [
+    [
+      'Rule',
+      finding?.ruleId ||
+        'N/A',
+    ],
+    [
+      'Confidence',
+      finding?.confidence ||
+        'N/A',
+    ],
+    [
+      'File',
+      finding?.filePath ||
+        'N/A',
+    ],
+  ];
+
+  metadata.forEach(
+    ([label, value]) => {
+      addText(
+        page.commands,
+        {
+          x:
+            MARGIN_LEFT +
+            10,
+          y,
+          text:
+            `${label}: ${normalizeText(
+              value,
+            )}`,
+          font: 'F1',
+          size: 8,
+          color:
+            COLORS.muted,
+        },
+      );
+
+      y -= 13;
+    },
+  );
+
+  y -= 3;
+
+  addText(
+    page.commands,
+    {
+      x:
+        MARGIN_LEFT +
+        10,
+      y,
+      text:
+        'Description',
+      font: 'F2',
+      size: 8.5,
+      color:
+        COLORS.heading,
+    },
+  );
+
+  y -= 13;
+
+  descriptionLines.forEach(
+    (line) => {
+      addText(
+        page.commands,
+        {
+          x:
+            MARGIN_LEFT +
+            10,
+          y,
+          text: line,
+          font: 'F1',
+          size: 8,
+          color:
+            COLORS.text,
+        },
+      );
+
+      y -= 12;
+    },
+  );
+
+  if (
+    remediationLines.length
+  ) {
+    y -= 4;
+
+    addText(
+      page.commands,
+      {
+        x:
+          MARGIN_LEFT +
+          10,
+        y,
+        text:
+          'Remediation',
+        font: 'F2',
+        size: 8.5,
+        color:
+          COLORS.heading,
+      },
+    );
+
+    y -= 13;
+
+    remediationLines.forEach(
+      (line) => {
+        addText(
+          page.commands,
+          {
+            x:
+              MARGIN_LEFT +
+              10,
+            y,
+            text: line,
+            font: 'F1',
+            size: 8,
+            color:
+              COLORS.text,
+          },
+        );
+
+        y -= 12;
+      },
+    );
+  }
+
+  page.y =
+    startY -
+    height -
+    14;
+
+  return page;
+};
+
+const buildPdfPages = (
+  report,
+) => {
+  const pages = [];
+  let page =
+    createPage();
+
+  addText(
+    page.commands,
+    {
+      x: MARGIN_LEFT,
+      y: page.y,
+      text:
+        'AI CODE REVIEW',
+      font: 'F2',
+      size: 10,
+      color:
+        COLORS.muted,
+    },
+  );
+
+  page.y -= 28;
+
+  addText(
+    page.commands,
+    {
+      x: MARGIN_LEFT,
+      y: page.y,
+      text:
+        'Code Review Report',
+      font: 'F2',
+      size: 26,
+      color:
+        COLORS.heading,
+    },
+  );
+
+  page.y -= 22;
+
+  addText(
+    page.commands,
+    {
+      x: MARGIN_LEFT,
+      y: page.y,
+      text:
+        `Version ${
+          report?.reportVersion ||
+          '1.0'
+        }`,
+      font: 'F1',
+      size: 9,
+      color:
+        COLORS.muted,
+    },
+  );
+
+  page.y -= 18;
+
+  addText(
+    page.commands,
+    {
+      x: MARGIN_LEFT,
+      y: page.y,
+      text:
+        `Generated ${
+          report?.generatedAt ||
+          'N/A'
+        }`,
+      font: 'F1',
+      size: 8.5,
+      color:
+        COLORS.muted,
+    },
+  );
+
+  page.y -= 20;
+
+  addLine(
+    page.commands,
+    {
+      x1: MARGIN_LEFT,
+      y1: page.y,
+      x2:
+        PAGE_WIDTH -
+        MARGIN_RIGHT,
+      y2: page.y,
+      color:
+        COLORS.border,
+      width: 1,
+    },
+  );
+
+  page.y -= 25;
+
+  page =
+    addSectionTitle(
+      page,
+      'Review',
+      pages,
+    );
+
+  page =
+    addLabelValue(
+      page,
+      'Review ID',
+      report?.review?.id ||
+        'N/A',
+      pages,
+    );
+
+  page =
+    addLabelValue(
+      page,
+      'Status',
+      report?.review?.status ||
+        'N/A',
+      pages,
+    );
+
+  page =
+    addSectionTitle(
+      page,
+      'Project',
+      pages,
+    );
+
+  page =
+    addLabelValue(
+      page,
+      'Name',
+      report?.project?.name ||
+        'N/A',
+      pages,
+    );
+
+  page =
+    addLabelValue(
+      page,
+      'Source Type',
+      report?.project?.sourceType ||
+        'N/A',
+      pages,
+    );
+
+  page =
+    addSectionTitle(
+      page,
+      'Summary',
+      pages,
+    );
+
+  page =
+    addSummaryCard(
+      page,
+      report?.summary || {},
+      pages,
+    );
+
+  page =
+    addSectionTitle(
+      page,
+      'Score',
+      pages,
+    );
+
+  page =
+    addScoreCard(
+      page,
+      report?.score || {},
+      pages,
+    );
+
+  page =
+    addSectionTitle(
+      page,
+      'Findings',
+      pages,
+    );
+
+  const findings =
+    Array.isArray(
+      report?.findings,
+    )
+      ? report.findings
+      : [];
+
+  if (!findings.length) {
+    page =
+      ensureSpace(
+        page,
+        40,
+        pages,
+      );
+
+    addText(
+      page.commands,
+      {
+        x: MARGIN_LEFT,
+        y: page.y,
+        text:
+          'No findings were detected.',
+        font: 'F1',
+        size: 10,
+        color:
+          COLORS.muted,
+      },
+    );
+
+    page.y -= 30;
+  } else {
+    findings.forEach(
+      (finding, index) => {
+        page =
+          addFinding(
+            page,
+            finding,
+            index,
+            pages,
+          );
+      },
+    );
+  }
+
+  pages.push(page);
+
+  pages.forEach(
+    (currentPage, index) => {
+      addFooter(
+        currentPage,
+        index + 1,
+      );
+    },
+  );
+
+  return pages;
+};
+
+const buildPdf = (
+  pages,
+) => {
   const objects = [];
-  const pageObjectNumbers = [];
-  const contentObjectNumbers = [];
 
   objects.push(
     '<< /Type /Catalog /Pages 2 0 R >>',
@@ -173,13 +1132,21 @@ const buildPdf = (lines) => {
     '<< /Type /Pages /Kids [] /Count 0 >>',
   );
 
-  const fontObjectNumber = 3;
+  const regularFontObject = 3;
+  const boldFontObject = 4;
 
   objects.push(
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
   );
 
-  let nextObjectNumber = 4;
+  objects.push(
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
+  );
+
+  let nextObjectNumber = 5;
+
+  const pageObjectNumbers = [];
+  const contentObjectNumbers = [];
 
   pages.forEach(() => {
     const pageObjectNumber =
@@ -205,58 +1172,45 @@ const buildPdf = (lines) => {
     ] = '';
   });
 
-  pages.forEach((pageLines, pageIndex) => {
-    const commands = [
-      'BT',
-      '/F1 10 Tf',
-      `${marginLeft} ${startY} Td`,
-    ];
-
-    pageLines.forEach(
-      (line, lineIndex) => {
-        if (lineIndex > 0) {
-          commands.push(
-            `0 -${lineHeight} Td`,
-          );
-        }
-
-        commands.push(
-          `(${escapePdfText(line)}) Tj`,
+  pages.forEach(
+    (page, pageIndex) => {
+      const content =
+        page.commands.join(
+          '\n',
         );
-      },
-    );
 
-    commands.push('ET');
+      const contentObjectNumber =
+        contentObjectNumbers[
+          pageIndex
+        ];
 
-    const content =
-      commands.join('\n');
+      objects[
+        contentObjectNumber - 1
+      ] =
+        `<< /Length ${Buffer.byteLength(
+          content,
+          'utf8',
+        )} >>\nstream\n${content}\nendstream`;
 
-    const contentObjectNumber =
-      contentObjectNumbers[pageIndex];
+      const pageObjectNumber =
+        pageObjectNumbers[
+          pageIndex
+        ];
 
-    objects[
-      contentObjectNumber - 1
-    ] =
-      `<< /Length ${Buffer.byteLength(
-        content,
-        'utf8',
-      )} >>\nstream\n${content}\nendstream`;
+      objects[
+        pageObjectNumber - 1
+      ] =
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 ${regularFontObject} 0 R /F2 ${boldFontObject} 0 R >> >> /Contents ${contentObjectNumber} 0 R >>`;
+    },
+  );
 
-    const pageObjectNumber =
-      pageObjectNumbers[pageIndex];
-
-    objects[
-      pageObjectNumber - 1
-    ] =
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObjectNumber} 0 R >> >> /Contents ${contentObjectNumber} 0 R >>`;
-  });
-
-  const kids = pageObjectNumbers
-    .map(
-      (number) =>
-        `${number} 0 R`,
-    )
-    .join(' ');
+  const kids =
+    pageObjectNumbers
+      .map(
+        (number) =>
+          `${number} 0 R`,
+      )
+      .join(' ');
 
   objects[1] =
     `<< /Type /Pages /Kids [${kids}] /Count ${pageObjectNumbers.length} >>`;
@@ -289,7 +1243,9 @@ const buildPdf = (lines) => {
     );
 
   pdf +=
-    `xref\n0 ${objects.length + 1}\n`;
+    `xref\n0 ${
+      objects.length + 1
+    }\n`;
 
   pdf +=
     '0000000000 65535 f \n';
@@ -302,7 +1258,10 @@ const buildPdf = (lines) => {
     pdf +=
       `${String(
         offsets[index],
-      ).padStart(10, '0')} 00000 n \n`;
+      ).padStart(
+        10,
+        '0',
+      )} 00000 n \n`;
   }
 
   pdf +=
@@ -331,10 +1290,12 @@ export const generatePdfReport = (
     );
   }
 
-  const lines =
-    flattenReportLines(
+  const pages =
+    buildPdfPages(
       report,
     );
 
-  return buildPdf(lines);
+  return buildPdf(
+    pages,
+  );
 };

@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+// import VoxideAssistant from "./ai/VoxideAssistant";
 import {
   ApiClientError,
   type ReviewResult,
@@ -1783,7 +1784,9 @@ function ScoreRing({ score = 78, size = "large" }: { score?: number; size?: "lar
 }
 
 function ReviewResult() {
-  const { severity, setSeverity, setSelectedFinding, setView, activeReview, activeReviewId, activeReviewStatus, setApiResponse } = useReviewStore();
+  const { severity, setSeverity, setSelectedFinding, setView, activeReview, activeReviewId, activeReviewStatus, setApiResponse, subscriptionTier } = useReviewStore();
+  const [generatingReport, setGeneratingReport] = useState<"json" | "html" | "pdf" | null>(null);
+  const [reportLinks, setReportLinks] = useState<Partial<Record<"json" | "html" | "pdf", string>>>({});
 
   const allFindings = useMemo(() => {
     if (activeReview?.findings && activeReview.findings.length > 0) {
@@ -1794,17 +1797,23 @@ function ReviewResult() {
 
   const visible = severity === "All" ? allFindings : allFindings.filter((f) => f.severity === severity);
 
-  const handleDownloadReport = async (type: "json" | "pdf") => {
+  const handleGenerateReport = async (type: "json" | "html" | "pdf") => {
     if (!activeReview?.reviewId) {
       toast.error("The backend review result is not available yet.");
       return;
     }
 
     try {
+      setGeneratingReport(type);
+      setReportLinks((links) => ({ ...links, [type]: undefined }));
       toast.info(`Generating ${type.toUpperCase()} report...`);
       const request = { reviewId: activeReview.reviewId, format: type };
       let report = await createReport(activeReview.reviewId, type);
       setApiResponse(`POST /reviews/${activeReview.reviewId}/reports`, { request, response: report });
+
+      if (!report.reportId && report.status !== "completed") {
+        throw new Error("The backend did not return an ID for the generated report.");
+      }
 
       for (let attempt = 0; report.status !== "completed" && report.status !== "failed" && report.reportId && attempt < 30; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 1000));
@@ -1815,7 +1824,7 @@ function ReviewResult() {
         throw new Error(report.errorCode ?? "The backend could not generate this report.");
       }
       if (report.secureUrl) {
-        window.open(report.secureUrl, "_blank", "noopener,noreferrer");
+        setReportLinks((links) => ({ ...links, [type]: report.secureUrl ?? undefined }));
         toast.success(`${type.toUpperCase()} report ready!`);
       } else if (report.status === "completed") {
         throw new Error("The backend completed the report but did not return a download URL.");
@@ -1825,6 +1834,8 @@ function ReviewResult() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to generate report";
       toast.error(msg);
+    } finally {
+      setGeneratingReport(null);
     }
   };
 
@@ -1868,19 +1879,48 @@ function ReviewResult() {
             {reviewId} · {language} · {activeReview.status} · {allFindings.length} {allFindings.length === 1 ? "finding" : "findings"}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <Mic />
-            Ask Voxide
-          </Button>
-          <Button variant="outline" onClick={() => handleDownloadReport("json")}>
-            <FileText />
-            JSON
-          </Button>
-          <Button variant="outline" onClick={() => handleDownloadReport("pdf")}>
-            <Download />
-            PDF Report
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {(["json", "html", "pdf"] as const).map((format) => {
+            const allowed = TIER_POLICIES[subscriptionTier][`${format}Report`];
+            const reportUrl = reportLinks[format];
+            const label = `${format.toUpperCase()} report`;
+
+            return (
+              <div key={format} className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  disabled={!allowed || generatingReport !== null || activeReview.status !== "completed"}
+                  title={
+                    !allowed
+                      ? `${format.toUpperCase()} reports are not included in your ${subscriptionTier} plan.`
+                      : activeReview.status !== "completed"
+                        ? "Reports are available after the review is completed."
+                        : undefined
+                  }
+                  onClick={() => void handleGenerateReport(format)}
+                >
+                  {generatingReport === format ? (
+                    <LoaderCircle className="animate-spin" />
+                  ) : format === "pdf" ? (
+                    <Download />
+                  ) : (
+                    <FileText />
+                  )}
+                  {generatingReport === format ? "Generating…" : format.toUpperCase()}
+                </Button>
+                {reportUrl && (
+                  <a
+                    href={reportUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-medium text-primary underline underline-offset-4 hover:text-primary/80"
+                  >
+                    View full {label}
+                  </a>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

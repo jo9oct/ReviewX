@@ -1,7 +1,10 @@
 import { createFileRoute, Outlet, redirect, isRedirect } from "@tanstack/react-router";
 import { LoaderCircle } from "lucide-react";
+import { lazy, Suspense } from "react";
 import { getAuthToken } from "@/lib/api";
 import { useAuthStore, normalizeRole } from "@/lib/auth-store";
+
+const VoxideAssistant = lazy(() => import("@/components/ai/VoxideAssistant"));
 
 function AuthLoadingScreen() {
   return (
@@ -56,10 +59,20 @@ export const Route = createFileRoute("/_authenticated")({
 
 function AuthenticatedLayout() {
   const { status, user } = useAuthStore();
+  const role = normalizeRole(user?.role);
 
   if (status === "loading" || (!user && status !== "unauthenticated")) {
     return <AuthLoadingScreen />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      {status === "authenticated" && role !== "platform" && (
+        <Suspense fallback={null}>
+          <VoxideAssistant />
+        </Suspense>
+      )}
+    </>
+  );
 }
