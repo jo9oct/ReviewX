@@ -1,7 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ResetPasswordForm } from "@/components/auth/password-forms";
+import { redirectIfAuthenticated } from "@/lib/auth";
 
 export const Route = createFileRoute("/reset-password")({
+  ssr: false,
+  beforeLoad: async () => {
+    await redirectIfAuthenticated();
+  },
   head: () => ({
     meta: [
       { title: "Choose new password — ReviewX" },

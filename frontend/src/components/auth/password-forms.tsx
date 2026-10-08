@@ -1,14 +1,37 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { AuthShell } from "./auth-shell";
 import { Button, Input } from "@/components/primitives";
+import { getAuthToken } from "@/lib/api";
+import { useAuthStore } from "@/lib/auth-store";
 
 export function ForgotPasswordForm() {
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (token || user) {
+      void (async () => {
+        let activeUser = user;
+        if (!activeUser && token) {
+          try {
+            activeUser = await useAuthStore.getState().initialize();
+          } catch {
+            return;
+          }
+        }
+        if (activeUser) {
+          void navigate({ to: "/dashboard" });
+        }
+      })();
+    }
+  }, [navigate, user]);
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -66,9 +89,29 @@ export function ForgotPasswordForm() {
 
 export function ResetPasswordForm() {
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (token || user) {
+      void (async () => {
+        let activeUser = user;
+        if (!activeUser && token) {
+          try {
+            activeUser = await useAuthStore.getState().initialize();
+          } catch {
+            return;
+          }
+        }
+        if (activeUser) {
+          void navigate({ to: "/dashboard" });
+        }
+      })();
+    }
+  }, [navigate, user]);
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (password !== confirm) {

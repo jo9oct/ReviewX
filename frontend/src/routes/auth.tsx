@@ -1,9 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { AuthForm } from "@/components/auth/auth-form";
+import { redirectIfAuthenticated } from "@/lib/auth";
 
 export const Route = createFileRoute("/auth")({
+  ssr: false,
   validateSearch: z.object({ next: z.string().optional() }),
+  beforeLoad: async ({ search }) => {
+    await redirectIfAuthenticated(search.next);
+  },
   head: () => ({
     meta: [
       { title: "Sign in — ReviewX" },

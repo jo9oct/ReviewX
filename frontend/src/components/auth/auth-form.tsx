@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, LoaderCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import {
   registerUser,
   getCurrentUser,
   setAuthToken,
+  getAuthToken,
   ApiClientError,
 } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
@@ -22,6 +23,7 @@ export function AuthForm({
   next?: string | undefined;
 }) {
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,6 +31,25 @@ export function AuthForm({
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const destination = safeNext(next);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (token || user) {
+      void (async () => {
+        let activeUser = user;
+        if (!activeUser && token) {
+          try {
+            activeUser = await useAuthStore.getState().initialize();
+          } catch {
+            return;
+          }
+        }
+        if (activeUser) {
+          void navigate({ to: destination });
+        }
+      })();
+    }
+  }, [navigate, destination, user]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
