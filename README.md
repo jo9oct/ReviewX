@@ -1,379 +1,397 @@
-# ReviewX
+# ReviewX — AI-Powered Code Review Platform
 
-**ReviewX** is a secure SaaS-based code review platform that automatically analyzes source code for security vulnerabilities, bugs, code-quality issues, and performance problems.
+**Document Type:** Software Project Documentation
+**Version:** 1.0
+**Backend:** Express.js
+**Frontend:** React
+**Database:** MongoDB with Mongoose
+**Analysis Engine:** Tree-sitter, AST and static analysis
+**Supporting Technologies:** Redis, Joi and Docker Compose
+**Integrations:** Groq, OpenAI, GitHub, Cloudinary and Voxide
 
-It combines static code analysis, company rules, AI assistance, scoring, and report generation to help developers understand and improve their code.
+## Project Overview
 
----
+ReviewX is an AI-powered code review platform designed to help developers identify potential security vulnerabilities, programming errors and code-quality issues.
 
-## Features
+The platform combines structured source-code parsing, static analysis and optional AI assistance to provide review findings, explanations and remediation recommendations.
 
-- Source-code review through pasted code or file upload
-- Automatic programming-language detection
-- Source-code parsing
-- Security vulnerability detection
-- Bug detection
-- Code-quality analysis
-- Performance analysis
-- Company-specific coding rules
-- Finding normalization and deduplication
-- Evidence collection
-- AI-powered explanations and fix suggestions
-- Code-review scoring
-- JSON reports
-- PDF reports
-- Cloudinary storage for generated reports
-- MongoDB persistence
-- Secure file handling
-- Source code is never executed
+## Project Objectives
 
----
+* Identify potential security vulnerabilities and programming errors.
+* Analyze supported source code using AST-based parsing and static analysis.
+* Provide structured findings and remediation guidance.
+* Manage projects, reviews and reports.
+* Enforce subscription-tier limits and feature permissions.
+* Integrate external AI providers and development services.
+* Maintain a secure, modular and maintainable architecture.
 
-## V1 Analysis
+## Core Features
 
-### Security
+* **Automated Code Review:** Analyze submitted source code for supported issues.
+* **Static Analysis:** Detect potential security, correctness and maintainability problems.
+* **AST-Based Analysis:** Examine source-code structure using supported parsers.
+* **AI Assistance:** Generate explanations and remediation suggestions when enabled.
+* **Review Management:** Organize findings by severity, confidence and status.
+* **Project Management:** Associate reviews with relevant projects.
+* **Report Generation:** Support available JSON, HTML and PDF formats according to the user's tier.
+* **GitHub Integration:** Support authorized repository-review workflows.
+* **Subscription Tiers:** Apply feature permissions and resource limits.
+* **File and Report Storage:** Use Cloudinary for supported storage workflows.
 
-- SQL Injection
-- Broken Access Control
-- Authentication Problems
+## System Architecture
 
-### Bugs
-
-- Null / Undefined Problems
-- Logic Errors
-
-### Code Quality
-
-- Code Complexity
-- Unused Code
-
-### Performance
-
-- N+1 Database Queries
-
-The architecture is designed so additional analyzers can be added in future versions without changing the core review engine.
-
----
-
-## How ReviewX Works
-
-ReviewX processes source code through the following pipeline:
+ReviewX follows a modular frontend and backend architecture.
 
 ```text
-Source Code
-     ↓
-Validation & Access Control
-     ↓
-Input Processing
-     ↓
-Language Detection
-     ↓
-Parsing
-     ↓
-Static Analysis
-     ↓
-Company Rules
-     ↓
-Finding Normalization
-     ↓
-Merge & Deduplication
-     ↓
-Evidence Collection
-     ↓
-AI Analysis
-     ↓
-Scoring
-     ↓
-Result Builder
-     ↓
-JSON / PDF Report
-     ↓
-MongoDB / Cloudinary
+React Frontend
+      |
+      v
+Express.js REST API
+      |
+      v
+Middleware and Joi Validation
+      |
+      v
+Controllers
+      |
+      v
+Services
+      |
+      +---- Code Analysis Engine
+      |          |
+      |          +---- Tree-sitter / AST
+      |          +---- Static Analyzers
+      |          +---- Optional AI Assistance
+      |
+      +---- Repositories ---- MongoDB
+      |
+      +---- External Integrations
+                 |
+                 +---- GitHub
+                 +---- Cloudinary
+                 +---- Groq / OpenAI
+
+Redis: Supporting service for configured workflows
 ```
 
-Deterministic analyzers identify technical findings first. AI is then used to explain findings, suggest fixes, improve code, and generate summaries.
-
----
+The frontend manages user interaction. The Express.js backend handles validation, authorization, business logic, analysis workflows and persistence.
 
 ## Technology Stack
 
-### Backend
+| Technology              | Purpose                                               |
+| ----------------------- | ----------------------------------------------------- |
+| React                   | Frontend user interface                               |
+| JavaScript / ES Modules | Application implementation                            |
+| Express.js              | Backend REST API                                      |
+| MongoDB                 | Document database                                     |
+| Mongoose                | Database models and operations                        |
+| Joi                     | Request validation                                    |
+| Tree-sitter / AST       | Structured source-code parsing                        |
+| Redis                   | Configured caching or background-processing workflows |
+| Groq / OpenAI           | Optional AI-assisted review                           |
+| GitHub                  | Authorized repository integration                     |
+| Cloudinary              | Supported file and report storage                     |
+| Docker Compose          | Backend services and container management             |
 
-- Node.js
-- Express.js
-- JavaScript ES Modules
+## Code Review Engine
 
-### Database
+The analysis engine processes submitted source code and produces structured findings.
 
-- MongoDB
-- Mongoose
+**Review workflow:**
 
-### Validation & Security
+* Validate the submitted source code and applicable usage limits.
+* Identify the programming language.
+* Parse supported source files.
+* Execute applicable static analyzers.
+* Normalize and organize findings.
+* Generate AI-assisted explanations when enabled.
+* Store applicable review data and return the results.
 
-- Joi
-- Multer
-- Secure file validation
-- Input validation
-- Rate limiting
-- Security middleware
+Potential finding categories include SQL injection, broken access control, authentication problems, null or undefined handling, logic errors, excessive complexity, unused code and N+1 query patterns. Actual detection coverage depends on the implemented analyzers and rules.
 
-### AI
+### Finding Classification
 
-- Groq
-- OpenAI-compatible provider architecture
+| Field      | Values                                                 |
+| ---------- | ------------------------------------------------------ |
+| Severity   | Critical, High, Medium, Low, Info                      |
+| Confidence | High, Medium, Low                                      |
+| Status     | Detected, Verified, False Positive, Accepted, Resolved |
 
-### Storage
+Severity describes potential impact, while confidence indicates the strength of the available evidence. Findings and AI recommendations require appropriate review and should not be treated as guaranteed security conclusions.
 
-- Cloudinary
+## Subscription Tiers
 
-### Reports
+ReviewX defines three intended tiers with different resource limits and features.
 
-- JSON
-- PDF
+| Capability                    | Free         | Pro             | Enterprise      |
+| ----------------------------- | ------------ | --------------- | --------------- |
+| Source-code lines             | 500          | 5,000           | Unlimited       |
+| Number of files               | 1            | 100             | Unlimited       |
+| ZIP uploads                   | Not included | Included        | Included        |
+| Report formats                | JSON         | JSON, HTML, PDF | JSON, HTML, PDF |
+| AI remediation                | Disabled     | Enabled         | Enabled         |
+| GitHub integration            | Not included | Not included    | Included        |
+| Company-specific review rules | Not included | Not included    | Included        |
 
-### HTTP
+**Enterprise limits:** Source-code lines and file counts are unlimited at the subscription-plan level. Global technical safeguards, such as request-size limits, archive-size limits, processing capacity and external AI-provider limits, may still apply. These safeguards are separate from subscription limits.
 
-- Axios or equivalent HTTP client
+All tier restrictions must be enforced by backend services rather than relying only on frontend controls. The deployed configuration must match these plan definitions.
 
----
+## Backend Architecture
 
-## Architecture
+The backend follows a layered architecture with clearly separated responsibilities.
 
-ReviewX follows a modular and layered backend architecture:
+* **Routes:** Define API endpoints and connect requests to handlers.
+* **Middleware:** Handle authentication, authorization and shared request processing.
+* **Controllers:** Coordinate HTTP requests and responses.
+* **Services:** Implement business logic and coordinate application workflows.
+* **Validation:** Use Joi schemas to validate incoming data.
+* **Repositories:** Isolate database operations.
+* **Analysis Engine:** Coordinate parsing and static analyzers.
+* **Integrations:** Encapsulate communication with external services.
+* **Configuration:** Centralize environment variables and application settings.
+* **Error Handling and Logging:** Standardize error responses and operational diagnostics.
 
-```text
-Routes
-  ↓
-Controllers
-  ↓
-Services
-  ↓
-Review Engine
-  ↓
-Analyzers / Parsers / AI
-  ↓
-Repositories
-  ↓
-MongoDB
+Controllers should not contain substantial business logic or access the database directly. Database operations should remain within the repository layer.
+
+## Database and Data Management
+
+MongoDB stores application data, while Mongoose provides schemas and database operations.
+
+The data model may include projects, reviews, findings, ownership information and integration metadata, depending on the implemented features.
+
+The backend must enforce resource ownership and authorization before returning or modifying protected records. Successful API responses must reflect completed operations rather than assumed database persistence.
+
+## API Design
+
+The Express.js backend exposes REST endpoints for supported platform operations.
+
+Each endpoint should document its HTTP method, route, authentication requirements, request validation, response format, tier restrictions and relevant database or integration effects.
+
+Where implemented, a standard success response may follow this structure:
+
+```json
+{
+  "success": true,
+  "data": {},
+  "meta": {
+    "requestId": "request-correlation-id"
+  }
+}
 ```
 
-### Main Components
+Validation failures, authentication errors, authorization failures, missing resources, tier-limit violations and unexpected server errors should use consistent response formats.
 
-#### Controllers
+The definitive API reference must match the actual registered routes and implemented service contracts.
 
-- Handle HTTP requests and responses
-- Do not contain analysis logic
-- Do not directly access MongoDB
+## Security and Privacy
 
-#### Services
+ReviewX processes source code that may contain confidential information. Secure handling is therefore essential.
 
-- Handle application-level operations
-- Coordinate different components
+Key security requirements include:
 
-#### Analyzers
+* Validate all untrusted input.
+* Authenticate users and authorize protected operations.
+* Enforce resource ownership and subscription limits on the backend.
+* Store credentials in environment configuration rather than source control.
+* Apply source-code, archive-size and file-count safeguards.
+* Protect archive extraction against path traversal.
+* Never execute submitted source code as part of static analysis.
+* Limit sensitive source-code transfers to external AI services.
+* Validate AI-generated output before using it.
+* Avoid exposing secrets and internal stack traces.
+* Configure suitable request limits, CORS policies and security headers.
+* Define appropriate data-retention and deletion procedures.
 
-- Perform static source-code analysis
-- Detect security, bug, quality, and performance issues
-- Never execute uploaded source code
+## External Integrations
 
-#### Review Engine
+**Groq and OpenAI:** Provide optional AI-assisted explanations and remediation according to configured providers and enabled features.
 
-- Controls the complete review pipeline
-- Coordinates analyzers, rules, evidence, AI, and scoring
+**GitHub:** Supports authorized repository workflows and must respect repository permissions.
 
-#### Repositories
+**Cloudinary:** Supports configured file and report storage operations.
 
-- Handle MongoDB operations only
-- Keep database logic separate from application logic
+**Redis:** Provides the functionality required by configured caching or background-processing workflows.
 
-#### AI
+**Voxide:** Provides its implemented integration-specific functionality. Its precise role should be documented according to the current implementation.
 
-- Explains detected findings
-- Provides fix and improvement suggestions
-- Generates review summaries
+All integrations should use centralized configuration, appropriate access controls and consistent error handling.
 
-#### Reports
+## Configuration and Environment
 
-- Generate JSON and PDF reports
+Application configuration should be centralized and validated at startup.
 
----
+Example configuration values include:
 
-## Project Structure
-
-```text
-ReviewX/
-├── src/
-│   ├── config/
-│   ├── routes/
-│   ├── controllers/
-│   ├── services/
-│   ├── validators/
-│   ├── middleware/
-│   ├── database/
-│   ├── storage/
-│   ├── engine/
-│   ├── analysis/
-│   ├── analyzers/
-│   ├── parsers/
-│   ├── company-rules/
-│   ├── ai/
-│   ├── reports/
-│   ├── schemas/
-│   ├── utils/
-│   └── tests/
-│
-├── .env
-├── .env.example
-├── .gitignore
-├── package.json
-└── README.md
+```dotenv
+APP_NAME=professional-ai-code-review
+DB_NAME=ai_code_review
+AI_ENABLED=false
+AI_PROVIDER=groq
+USER_TIER=free
+SOURCE_MAX_BYTES=1048576
+ARCHIVE_MAX_BYTES=10485760
+MAX_FILES=1000
+REDIS_URL=redis://127.0.0.1:6379
 ```
 
-### Directory Overview
+These are example project settings, not a complete verified inventory of every environment variable. Use the actual variable names and defaults defined by the backend. Never commit real API keys, database credentials or authentication secrets.
 
-| Directory | Purpose |
-|---|---|
-| `config/` | Application and service configuration |
-| `routes/` | API endpoints |
-| `controllers/` | HTTP request handling |
-| `services/` | Application logic |
-| `validators/` | Request validation |
-| `middleware/` | Express middleware |
-| `database/` | MongoDB models and repositories |
-| `storage/` | Cloudinary integration |
-| `engine/` | Main review pipeline |
-| `analysis/` | Finding processing |
-| `analyzers/` | Security, bug, quality, and performance analysis |
-| `parsers/` | Source-code parsing |
-| `company-rules/` | Company-specific rules |
-| `ai/` | AI providers and analysis |
-| `reports/` | JSON and PDF reports |
-| `schemas/` | Data structures and validation |
-| `utils/` | Shared utilities |
-| `tests/` | Unit and integration tests |
+## Installation and Local Development
 
----
+### Prerequisites
 
-## Security Principles
+Install the following before starting development:
 
-Security is a core part of ReviewX.
+* Git
+* A supported Node.js version and npm
+* Docker Desktop with Docker Compose
+* MongoDB access, local or hosted
+* Required environment variables and external-service credentials
 
-- Uploaded source code is never executed
-- File extensions and MIME types are validated
-- File sizes are restricted
-- Empty and invalid files are rejected
-- Path traversal is prevented
-- Temporary files are cleaned after processing
-- Source code is not uploaded to Cloudinary by default
-- AI input is limited to relevant analysis data
-- Database access is isolated inside repositories
-- Controllers cannot directly access MongoDB
-- AI failures do not stop deterministic analysis
+The frontend runs locally with npm. The backend uses npm for dependency installation and Docker Compose for its containerized services.
 
----
+### Clone the Repository
 
-## Data Storage
-
-ReviewX stores meaningful review results instead of every temporary analysis operation.
-
-### Main MongoDB Collections
-
-```text
-reviews
-findings
-evidence
-scores
-aiAnalyses
-reports
+```bash
+git clone <repository-url>
+cd <repository-directory>
 ```
 
-Temporary analysis data is kept during the review process and is not unnecessarily persisted.
+Use the actual repository URL and directory name.
 
----
+### Backend Setup
 
-## Access & Premium Integration
+Open a terminal in the backend directory:
 
-User accounts, companies, subscriptions, payments, and usage limits belong to the main application backend.
-
-The ReviewX analysis backend receives generic access information such as:
-
-```text
-plan
-limits
-features
+```bash
+cd backend
+npm i
 ```
 
-The analysis engine remains independent from subscription and payment logic.
+Install backend dependencies before building the Docker images.
 
----
+Build the backend services:
 
-## Reports
+```bash
+docker compose build
+```
 
-A completed ReviewX analysis can produce:
+Start the services in the background:
 
-- Structured JSON results
-- PDF reports
-- Security findings
-- Bug findings
-- Quality findings
-- Performance findings
-- Evidence
-- Recommendations
-- AI explanations
-- Review scoring
+```bash
+docker compose up -d
+```
 
-Generated PDF reports can be stored using Cloudinary.
+Check the service status:
 
----
+```bash
+docker compose ps
+```
 
-## Development Status
+View recent logs if a service fails to start:
 
-### V1
+```bash
+docker compose logs --tail=100
+```
 
-- Backend architecture
-- Input processing
-- Language detection
-- Parsing
-- Security analysis
-- Bug analysis
-- Quality analysis
-- Performance analysis
-- Company rules
-- AI analysis
-- Scoring
-- JSON reports
-- PDF reports
-- Cloudinary integration
-- Testing
-- Final security review
+Follow live logs when troubleshooting:
 
----
+```bash
+docker compose logs -f
+```
 
-## Future Improvements
+**Important:** Run Docker Compose commands from the directory containing the applicable `compose.yaml` or `docker-compose.yml` file. If the Compose file is at the repository root rather than inside `backend`, run the commands from that root directory instead. Use the service definitions and environment settings provided by the repository.
 
-ReviewX can be extended with additional analyzers such as:
+### Frontend Setup
 
-- XSS
-- CSRF
-- SSRF
-- Command Injection
-- Path Traversal
-- Open Redirect
-- Secrets Detection
-- JWT Security
-- CORS Security
-- File Upload Security
-- Code Duplication
-- Maintainability
-- Readability
-- API Performance
-- Memory Analysis
-- Framework-specific analysis
+Open a separate terminal in the frontend directory:
 
----
+```bash
+cd frontend
+npm i
+npm run dev
+```
 
-## Core Principle
+The frontend runs directly through the development server. **Do not build or run the frontend with Docker** for this local development workflow.
 
-> Detect problems with deterministic analysis, provide real evidence, and use AI to explain and improve the results.
+After running `npm run dev`, open the local URL printed in the terminal, commonly a Vite development URL such as `http://localhost:5173`. Use the actual URL displayed by your application.
 
-ReviewX is designed with a modular architecture so new languages, analyzers, rules, AI providers, and report formats can be added without redesigning the entire platform.
+### Development Workflow Summary
+
+| Component       | Installation | Start / Build                                       |
+| --------------- | ------------ | --------------------------------------------------- |
+| Backend         | `npm i`      | `docker compose build`, then `docker compose up -d` |
+| Backend status  | —            | `docker compose ps`                                 |
+| Frontend        | `npm i`      | `npm run dev`                                       |
+| Frontend Docker | Not used     | Not required                                        |
+
+The backend and frontend run separately during development. Ensure the frontend API base URL points to the correct backend address and port, and configure CORS appropriately.
+
+## Deployment and Operations
+
+Production deployment should include:
+
+* Secure environment and secret management.
+* Persistent database storage and regular backups.
+* Health checks for required services.
+* Monitoring and centralized logs.
+* Appropriate resource limits and processing concurrency.
+* Controlled dependency updates.
+* Reliable error handling and recovery procedures.
+
+The local development commands above are not, by themselves, a complete production deployment procedure.
+
+## Performance and Reliability
+
+The platform should manage resource consumption through source and archive limits, tier enforcement, bounded AI requests, provider timeouts, appropriate analysis concurrency and efficient database queries.
+
+External-service failures must be handled predictably. The backend should not report an operation as successful if a required processing or persistence step has failed.
+
+## Testing and Quality Assurance
+
+Important verification areas include:
+
+* Request validation and authorization.
+* Subscription-tier enforcement.
+* Analyzer accuracy and supported-language handling.
+* Resource ownership and database persistence.
+* File and archive safety.
+* AI-disabled behavior.
+* External-service failure handling.
+* Docker Compose service health.
+* Frontend-to-backend connectivity.
+
+Only report tests as passed when they have actually been executed and the results recorded.
+
+## Limitations
+
+* Static analysis may produce false positives and false negatives.
+* Language support depends on installed parsers and implemented rules.
+* AI-generated recommendations may be inaccurate.
+* External integrations depend on valid credentials and service availability.
+* Technical safeguards may apply even to Enterprise plans.
+* Exact API behavior and data relationships depend on the current implementation.
+
+## Conclusion
+
+ReviewX provides a structured approach to code review by combining source-code parsing, static analysis, optional AI assistance and external integrations.
+
+Its layered Express.js backend separates business logic, validation, database access and analysis responsibilities. The React frontend runs locally through npm during development, while the backend is built and managed through Docker Compose.
+
+Reliable operation depends on secure authorization, accurate analyzer rules, consistent tier enforcement, safe source-code handling and correct environment configuration.
+
+## Final Implementation Checklist
+
+* [x] Confirm API routes, request schemas and response formats.
+* [x] Confirm database models, relationships and indexes.
+* [x] Verify supported languages and implemented analyzer rules.
+* [x] Ensure Free, Pro and Enterprise policies match backend enforcement.
+* [x] Validate all required environment variables.
+* [x] Confirm authentication and authorization behavior.
+* [x] Verify GitHub, Cloudinary, AI-provider and Voxide integrations.
+* [x] Confirm Redis and Docker Compose service configuration.
+* [x] Verify backend setup using `npm i` and Docker Compose.
+* [x] Verify frontend setup using `npm i` and `npm run dev`, without Docker.
+* [x] Confirm frontend-to-backend connectivity.
+* [x] Record actual test results, operational requirements and known limitations.
