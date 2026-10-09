@@ -25,13 +25,20 @@ export default defineConfig(({ mode }) => {
           entry: "server",
         },
       }),
-      nitro(),
+      nitro({
+        routeRules: {
+          "/api/**": { proxy: `${backendUrl}/api/**` },
+          "/health": { proxy: `${backendUrl}/health` },
+        }
+      }),
       react(),
       tailwindcss(),
       tsconfigPaths(),
     ],
 
     server: {
+      port: 5173,
+      strictPort: true,
       proxy: {
         "/api": {
           target: backendUrl,

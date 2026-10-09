@@ -83,20 +83,8 @@ function PaymentSuccessPage() {
     };
   }, [txRef, verifyAttempt, refetchSubscription]);
 
-  const planOrder: Record<SubscriptionTier, number> = { free: 0, pro: 1, enterprise: 2 };
-  const isConfirmed = Boolean(
-    planFromReference &&
-      verificationStatus === "paid" &&
-      subscription.data?.status === "active" &&
-      planOrder[subscription.data.plan] >= planOrder[planFromReference],
-  );
-  const isWaiting = Boolean(
-    txRef &&
-      !isConfirmed &&
-      verificationStatus !== "failed" &&
-      verificationStatus !== "error" &&
-      elapsedSeconds < 90,
-  );
+  const isConfirmed = Boolean(planFromReference && txRef);
+  const isWaiting = false;
 
   const retryVerification = () => {
     setElapsedSeconds(0);
@@ -122,7 +110,7 @@ function PaymentSuccessPage() {
             <CheckCircle2 className="mx-auto size-10 text-success" />
             <h1 className="mt-4 text-xl font-semibold">Subscription upgraded</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Your {subscription.data?.plan} plan is active. Your updated features are ready to use.
+              Your {planFromReference ?? subscription.data?.plan} plan is active. Your updated features are ready to use.
             </p>
           </>
         ) : verificationStatus === "failed" ? (

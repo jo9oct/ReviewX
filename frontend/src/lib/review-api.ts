@@ -411,40 +411,41 @@ export function getApiErrorResponse(error: unknown): unknown {
     : undefined;
 }
 
-export async function startGithubConnect(): Promise<void> {
-  const headers = new Headers({ Accept: "application/json" });
-  const token = getAuthToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${API_BASE}/github/connect`, {
-    method: "GET",
-    credentials: "include",
-    headers,
-    redirect: "manual",
+import { createServerFn } from "@tanstack/react-start";
+
+export const getGithubConnectUrlFn = createServerFn({ method: "GET" })
+  .validator((token: string) => token)
+  .handler(async ({ data: token }) => {
+    // Determine absolute backend URL for server-side fetch
+    const backendUrl = process.env.VITE_API_BASE_URL || process.env.VITE_API_URL || "http://localhost:5000/api/v1";
+    const absoluteUrl = backendUrl.replace(/\/$/, "") + "/github/connect";
+
+    // We run on the server (Nitro) where Node's fetch can read Location headers from manual redirects!
+    const response = await fetch(absoluteUrl, {
+      method: "GET",
+      headers: { 
+        "Accept": "application/json",
+        "Authorization": `Bearer ${token}` 
+      },
+      redirect: "manual",
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("Location");
+      if (location) return location;
+    }
+    
+    throw new Error("Failed to get GitHub redirect URL");
   });
 
-  if (response.type === "opaqueredirect") {
-    throw new ApiRequestError(
-      "The GitHub connect endpoint redirects to GitHub, but this cross-origin API response hides its redirect location. Configure a same-origin API proxy or update the backend to return an authorization URL.",
-      0,
-      null,
-    );
-  }
-  if (response.status >= 300 && response.status < 400) {
-    const location = response.headers.get("Location");
-    if (!location) {
-      throw new ApiRequestError("The GitHub connect response did not include a redirect location.", response.status, null);
-    }
-    window.location.assign(new URL(location, response.url).toString());
-    return;
-  }
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as ApiEnvelope<unknown> | null;
-    const message = payload?.error?.message ?? `GitHub authorization request failed (${response.status})`;
-    if (response.status === 401) handleUnauthorized();
-    throw new ApiRequestError(message, response.status, payload);
-  }
-  throw new ApiRequestError("The GitHub connect endpoint returned an unexpected response.", response.status, null);
+export async function startGithubConnect(): Promise<void> {
+  const token = getAuthToken();
+  if (!token) throw new ApiRequestError("Not authenticated", 401, null);
+  
+  const location = await getGithubConnectUrlFn({ data: token });
+  window.location.assign(location);
 }
+
 
 export async function completeGithubOAuth(params: {
   state?: string;

@@ -10,7 +10,7 @@ import {
   type ReviewIndexRecord,
 } from "../lib/review-api";
 
-const publicKey = import.meta.env["VITE_VOXIDE_PUBLIC_KEY"];
+const publicKey = "vox_pub_d43137a02fdcf69397b435065b07e046e48b227098afbfe3";
 
 if (!publicKey) {
   throw new Error("VITE_VOXIDE_PUBLIC_KEY is not configured.");
