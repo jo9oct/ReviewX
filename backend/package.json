@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "worker": "node worker.js",
-    "start": "node --watch src/server.js"
+    "start": "node start.js"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -38,6 +38,6 @@
     "tree-sitter-php": "0.23.12",
     "tree-sitter-python": "0.23.4",
     "tree-sitter-typescript": "0.23.2",
-    "unzipper": "^0.12.5"
+    "unzipper": "^0.12.0"
   }
 }
