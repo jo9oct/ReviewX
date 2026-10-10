@@ -49,6 +49,10 @@ import {
 
 const app = express();
 
+// Configure the trusted reverse proxy for Render.
+// Assumes the application receives traffic through one trusted proxy hop.
+app.set('trust proxy', 1);
+
 const {
   app: appConfig,
   http: httpConfig,
