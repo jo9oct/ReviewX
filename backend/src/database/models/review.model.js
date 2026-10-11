@@ -214,7 +214,18 @@ const reviewSchema = new Schema(
       trim: true,
       maxlength: 1000,
       default: null
-    }
+    },
+
+    /**
+     * True when the review ran AI analysis (explanation, suggestions, summary).
+     * Set by the review engine after the AI step completes successfully.
+     * Used to count AI-assisted review quota consumption.
+     */
+    hasAiAnalysis: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -227,6 +238,9 @@ reviewSchema.index({ company: 1, createdAt: -1 });
 reviewSchema.index({ ownerId: 1, createdAt: -1 });
 reviewSchema.index({ createdAt: -1 });
 reviewSchema.index({ status: 1, createdAt: -1 });
+// Compound indexes for workspace usage counting queries
+reviewSchema.index({ company: 1, status: 1, hasAiAnalysis: 1, createdAt: -1 });
+reviewSchema.index({ user: 1, company: 1, status: 1, hasAiAnalysis: 1, createdAt: -1 });
 
 export const Review = mongoose.model('Review', reviewSchema);
 export default Review;

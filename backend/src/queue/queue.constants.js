@@ -10,6 +10,9 @@ export const QUEUE_NAMES =
 
     CLEANUP:
       queueConfig.queues.cleanup,
+
+    NOTIFICATION:
+      queueConfig.queues.notification,
   });
 
 export const JOB_NAMES =
@@ -22,6 +25,9 @@ export const JOB_NAMES =
 
     CLEANUP:
       'cleanup.execute',
+
+    NOTIFICATION:
+      'notification.deliver',
   });
 
 export const QUEUE_DEFAULT_OPTIONS =

@@ -10,6 +10,7 @@ import {
 } from "@/lib/review-api";
 
 export const Route = createFileRoute("/_authenticated/payment-success")({
+  ssr: false,
   validateSearch: (search: Record<string, unknown>) => ({
     tx_ref: typeof search["tx_ref"] === "string" ? search["tx_ref"] : undefined,
   }),
@@ -32,9 +33,11 @@ function PaymentSuccessPage() {
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const planFromReference: SubscriptionTier | undefined = txRef?.toUpperCase().includes("ENTERPRISE")
     ? "enterprise"
-    : txRef?.toUpperCase().includes("PRO")
-      ? "pro"
-      : undefined;
+    : txRef?.toUpperCase().includes("TEAM")
+      ? "team"
+      : txRef?.toUpperCase().includes("PRO")
+        ? "pro"
+        : undefined;
   const subscription = useSubscriptionQuery(
     user?.id,
     elapsedSeconds < 90 && planFromReference
@@ -83,7 +86,7 @@ function PaymentSuccessPage() {
     };
   }, [txRef, verifyAttempt, refetchSubscription]);
 
-  const planOrder: Record<SubscriptionTier, number> = { free: 0, pro: 1, enterprise: 2 };
+  const planOrder: Record<SubscriptionTier, number> = { free: 0, pro: 1, team: 2, enterprise: 3 };
   const isConfirmed = Boolean(
     planFromReference &&
       verificationStatus === "paid" &&

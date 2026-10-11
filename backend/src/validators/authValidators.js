@@ -45,20 +45,42 @@ export const registerSchema = Joi.object({
     }),
 
   /**
-   * Optional company ID — a new user can be pre-associated with a company
-   * at registration time (e.g. via an invite link that carries a companyId).
-   * The service validates that the company actually exists.
+   * Which signup path the user is taking:
+   *   individual     → plain member account, no company
+   *   company_owner  → creates a Company and becomes its company_admin
+   *
+   * companyName is only required (and only accepted) for company_owner.
    */
-  companyId: Joi.string()
-    .pattern(/^[a-f\d]{24}$/i, 'MongoDB ObjectId')
-    .optional()
+  accountType: Joi.string()
+    .valid('individual', 'company_owner')
+    .default('individual')
     .messages({
-      'string.pattern.name': 'companyId must be a valid ID',
+      'any.only': 'accountType must be "individual" or "company_owner"',
     }),
 
-  // Role is intentionally NOT accepted — always defaults to 'member'.
+  companyName: Joi.string()
+    .trim()
+    .min(2)
+    .max(100)
+    .when('accountType', {
+      is: 'company_owner',
+      then: Joi.required(),
+      otherwise: Joi.forbidden(),
+    })
+    .messages({
+      'any.required': 'Company name is required to create a company',
+      'string.min':   'Company name must be at least 2 characters',
+      'string.max':   'Company name must be at most 100 characters',
+      'any.forbidden': 'companyName is only valid when accountType is "company_owner"',
+    }),
+
+  // Role is intentionally NOT accepted — service derives it from accountType.
   // Stripping it here prevents any client from escalating privileges.
   role: Joi.any().strip(),
+
+  // Legacy field (invite links now use the Invitation collection).
+  // Stripped so old clients don't trigger unknown-field errors.
+  companyId: Joi.any().strip(),
 });
 
 // ── Login ─────────────────────────────────────────────────────────────────────

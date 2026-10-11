@@ -33,5 +33,7 @@ const authLimiter = rateLimit({
 router.post('/register', authLimiter, validate(registerSchema), authCtrl.register);
 router.post('/login', authLimiter, validate(loginSchema), authCtrl.login);
 router.get('/me', authenticate, authCtrl.getMe);
+router.post('/revoke-other-sessions', authenticate, authCtrl.revokeOtherSessions);
+router.post('/switch-workspace', authenticate, authCtrl.switchWorkspace);
 
 export default router;

@@ -46,6 +46,10 @@ import {
   AppError,
 } from '../utils/errors.js';
 
+import {
+  notificationTriggerService,
+} from './notificationTrigger.service.js';
+
 const normalizeOwnerId = (
   ownerId,
 ) => {
@@ -288,6 +292,7 @@ const normalizeReportContent = (
 const assertReviewOwnership = (
   review,
   ownerId,
+  user = null,
 ) => {
   const normalizedOwnerId =
     normalizeOwnerId(ownerId);
@@ -302,11 +307,18 @@ const assertReviewOwnership = (
     });
   }
 
-  if (
-    !review.ownerId ||
-    String(review.ownerId) !==
-      normalizedOwnerId
-  ) {
+  const reviewOwnerId = review.ownerId ? String(review.ownerId) : null;
+  const reviewCompanyId = review.company ? String(review.company) : null;
+  const userCompanyId = user?.company ? String(user.company) : null;
+
+  const isOwner = reviewOwnerId === normalizedOwnerId;
+  const isSameCompany = Boolean(
+    reviewCompanyId &&
+    userCompanyId &&
+    reviewCompanyId === userCompanyId
+  );
+
+  if (!isOwner && !isSameCompany) {
     throw new AppError({
       code:
         'REVIEW_OWNER_MISMATCH',
@@ -322,6 +334,7 @@ const assertReviewOwnership = (
 const assertReportOwnership = (
   report,
   ownerId,
+  user = null,
 ) => {
   const normalizedOwnerId =
     normalizeOwnerId(ownerId);
@@ -336,11 +349,11 @@ const assertReportOwnership = (
     });
   }
 
-  if (
-    !report.ownerId ||
-    String(report.ownerId) !==
-      normalizedOwnerId
-  ) {
+  const reportOwnerId = report.ownerId ? String(report.ownerId) : null;
+  const isOwner = reportOwnerId === normalizedOwnerId;
+  const userCompanyId = user?.company ? String(user.company) : null;
+
+  if (!isOwner && !userCompanyId) {
     throw new AppError({
       code:
         'REPORT_OWNER_MISMATCH',
@@ -357,6 +370,7 @@ const createReport = async ({
   reviewId,
   format = 'json',
   ownerId,
+  user = null,
 }) => {
   const normalizedOwnerId =
     normalizeOwnerId(ownerId);
@@ -382,6 +396,7 @@ const createReport = async ({
   assertReviewOwnership(
     review,
     normalizedOwnerId,
+    user,
   );
 
   if (
@@ -593,6 +608,7 @@ const createReport = async ({
 const getReport = async ({
   reportId,
   ownerId,
+  user = null,
 }) => {
   const normalizedOwnerId =
     normalizeOwnerId(ownerId);
@@ -608,6 +624,7 @@ const getReport = async ({
   assertReportOwnership(
     report,
     normalizedOwnerId,
+    user,
   );
 
   const reviewId =
@@ -632,6 +649,7 @@ const getReport = async ({
   assertReviewOwnership(
     review,
     normalizedOwnerId,
+    user,
   );
 
   return report;
@@ -640,6 +658,7 @@ const getReport = async ({
 const listReports = async ({
   reviewId,
   ownerId,
+  user = null,
 }) => {
   const normalizedOwnerId =
     normalizeOwnerId(ownerId);
@@ -655,6 +674,7 @@ const listReports = async ({
   assertReviewOwnership(
     review,
     normalizedOwnerId,
+    user,
   );
 
   const reports =
@@ -662,19 +682,22 @@ const listReports = async ({
       normalizedReviewId,
     );
 
-  const ownedReports =
+  const isSameCompany = Boolean(
+    review?.company &&
+    user?.company &&
+    String(review.company) === String(user.company)
+  );
+
+  const returnedReports =
     Array.isArray(reports)
       ? reports.filter(
           (report) =>
             report?.ownerId &&
-            String(
-              report.ownerId,
-            ) ===
-              normalizedOwnerId,
+            (String(report.ownerId) === normalizedOwnerId || isSameCompany),
         )
       : [];
 
-  return ownedReports;
+  return returnedReports;
 };
 
 const generateReport = async ({
@@ -821,6 +844,21 @@ const generateReport = async ({
           uploaded.resourceType,
       });
 
+    // Fire notification: report ready
+    try {
+      const { reviewRepository } = await import('../database/repositories/review.repository.js');
+      const review = await reviewRepository.findById(reviewId);
+      const user = review ? { _id: review.ownerId, name: '' } : null;
+      if (user) {
+        await notificationTriggerService.onReportReady(
+          { ...completed, reviewId, type: format },
+          user,
+        );
+      }
+    } catch (notifErr) {
+      console.warn('[report] Notification trigger failed:', notifErr.message);
+    }
+
     return {
       reportId:
         reportIdentifier,
@@ -858,6 +896,22 @@ const generateReport = async ({
         error?.code ||
         'REPORT_GENERATION_FAILED',
     });
+
+    // Fire notification: report failed
+    try {
+      const { reviewRepository } = await import('../database/repositories/review.repository.js');
+      const review = await reviewRepository.findById(reviewId);
+      const user = review ? { _id: review.ownerId, name: '' } : null;
+      if (user) {
+        await notificationTriggerService.onReportFailed(
+          { reviewId, type: format },
+          error,
+          user,
+        );
+      }
+    } catch (notifErr) {
+      console.warn('[report] Notification trigger failed:', notifErr.message);
+    }
 
     throw error;
   }

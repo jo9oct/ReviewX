@@ -40,7 +40,8 @@ const parseSource = ({
 
   const parser = createParser(language);
 
-  const tree = parser.parse(source);
+  const bufferSize = Math.max(1024 * 1024, Buffer.byteLength(source, 'utf8') * 2);
+  const tree = parser.parse(source, null, { bufferSize });
 
   if (!tree?.rootNode) {
     throw new AppError({

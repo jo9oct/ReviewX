@@ -393,110 +393,66 @@ const getRepositorySource =
       throw error;
     }
 
-    const files = [];
+    const candidateEntries = tree.tree
+      .filter((entry) => {
+        if (entry?.type !== 'blob') return false;
+        if (typeof entry.path !== 'string' || !entry.sha) return false;
+        if (shouldIgnorePath(entry.path)) return false;
+        if (!hasSupportedExtension(entry.path)) return false;
+        return true;
+      })
+      .slice(0, githubConfig.maxFiles);
 
+    const concurrency = 10;
+    let nextIndex = 0;
+    const downloadedFiles = [];
+
+    const fetchWorker = async () => {
+      while (nextIndex < candidateEntries.length) {
+        const entry = candidateEntries[nextIndex++];
+        if (!entry) break;
+
+        try {
+          const blob = await getBlob({
+            owner: repositoryInput.owner,
+            name: repositoryInput.name,
+            sha: entry.sha,
+            accessToken,
+          });
+
+          const content = decodeBlob(blob?.content || '');
+          if (content === null) continue;
+
+          const byteLength = Buffer.byteLength(content, 'utf8');
+          if (byteLength > githubConfig.maxFileBytes) continue;
+
+          downloadedFiles.push({
+            path: entry.path,
+            content,
+            byteLength,
+          });
+        } catch (_blobErr) {
+          // Gracefully continue with remaining files
+        }
+      }
+    };
+
+    const workers = Array.from(
+      { length: Math.min(concurrency, candidateEntries.length) },
+      () => fetchWorker(),
+    );
+
+    await Promise.all(workers);
+
+    const files = [];
     let totalBytes = 0;
 
-    for (
-      const entry
-      of tree.tree
-    ) {
-      if (
-        files.length >=
-        githubConfig.maxFiles
-      ) {
+    for (const file of downloadedFiles) {
+      if (totalBytes + file.byteLength > githubConfig.maxTotalBytes) {
         break;
       }
-
-      if (
-        entry?.type !==
-        'blob'
-      ) {
-        continue;
-      }
-
-      if (
-        typeof entry.path !==
-          'string' ||
-        !entry.sha
-      ) {
-        continue;
-      }
-
-      if (
-        shouldIgnorePath(
-          entry.path,
-        )
-      ) {
-        continue;
-      }
-
-      if (
-        !hasSupportedExtension(
-          entry.path,
-        )
-      ) {
-        continue;
-      }
-
-      const blob =
-        await getBlob({
-          owner:
-            repositoryInput.owner,
-
-          name:
-            repositoryInput.name,
-
-          sha:
-            entry.sha,
-
-          accessToken,
-        });
-
-      const content =
-        decodeBlob(
-          blob?.content ||
-            '',
-        );
-
-      if (
-        content === null
-      ) {
-        continue;
-      }
-
-      const byteLength =
-        Buffer.byteLength(
-          content,
-          'utf8',
-        );
-
-      if (
-        byteLength >
-        githubConfig.maxFileBytes
-      ) {
-        continue;
-      }
-
-      if (
-        totalBytes +
-          byteLength >
-        githubConfig.maxTotalBytes
-      ) {
-        break;
-      }
-
-      files.push({
-        path:
-          entry.path,
-
-        content,
-
-        byteLength,
-      });
-
-      totalBytes +=
-        byteLength;
+      files.push(file);
+      totalBytes += file.byteLength;
     }
 
     return {

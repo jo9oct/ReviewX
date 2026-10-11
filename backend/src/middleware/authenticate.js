@@ -48,6 +48,15 @@ export async function authenticate(req, res, next) {
     });
   }
 
+  // Token version check — invalidated by revoke-other-sessions
+  const userTokenVersion = user.tokenVersion ?? 0;
+  if (
+    typeof payload.tokenVersion === 'number' &&
+    payload.tokenVersion !== userTokenVersion
+  ) {
+    return authError(res, 'Session has been revoked — please log in again', 'SESSION_REVOKED');
+  }
+
   req.user = {
     _id: user._id.toString(),
     id: user._id.toString(),
@@ -55,6 +64,9 @@ export async function authenticate(req, res, next) {
     role: user.role,
     company: user.company ? user.company.toString() : null,
   };
+
+  // Carry the active workspace from the token so resolveWorkspace() works
+  req.activeCompanyId = payload.activeCompanyId ?? null;
 
   next();
 }

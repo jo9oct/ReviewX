@@ -15,6 +15,7 @@ export const getRedisConnection = () => {
       maxRetriesPerRequest: null,
       enableReadyCheck: true,
       lazyConnect: true,
+      connectTimeout: 3000,
     },
   );
 

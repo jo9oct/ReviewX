@@ -3,6 +3,7 @@
 import 'dotenv/config';
 
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 
 import express from 'express';
 
@@ -31,6 +32,16 @@ import subscriptionRoutes from './routes/subscription.routes.js';
 
 import paymentRoutes from './routes/payment.routes.js';
 
+import companyRulesRoutes from './routes/companyRules.routes.js';
+
+import companyRoutes from './routes/company.routes.js';
+
+import invitationRoutes from './routes/invitation.routes.js';
+
+import adminRoutes from './routes/admin.routes.js';
+
+import notificationRoutes from './routes/notification.routes.js';
+
 import {
   notFoundMiddleware,
 } from './middleware/notFound.middleware.js';
@@ -47,6 +58,15 @@ import {
   createResponse,
 } from './utils/response.js';
 
+import {
+  getSSEManager,
+} from './utils/sseManager.js';
+
+import {
+  subscribeToNotificationEvents,
+  closeNotificationEventBus,
+} from './utils/notificationEventBus.js';
+
 const app = express();
 
 const {
@@ -62,10 +82,21 @@ app.use(
   securityMiddleware,
 );
 
+const configuredOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+const defaultOrigins = ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000'];
+const corsWhitelist = configuredOrigins.length > 0 ? configuredOrigins : defaultOrigins;
+
 app.use(
   cors({
-    origin:
-      process.env.CORS_ORIGIN,
+    origin: (origin, callback) => {
+      if (!origin || corsWhitelist.includes(origin) || corsWhitelist.includes('*')) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
   }),
 );
@@ -157,6 +188,36 @@ app.use(
 );
 
 app.use(
+  '/api/v1/company-rules',
+  companyRulesRoutes,
+);
+
+app.use(
+  '/api/v1/company',
+  companyRoutes,
+);
+
+app.use(
+  '/api/v1/invitations',
+  invitationRoutes,
+);
+
+app.use(
+  '/api/v1/admin',
+  adminRoutes,
+);
+
+app.use(
+  '/api/admin',
+  adminRoutes,
+);
+
+app.use(
+  '/api/v1/notifications',
+  notificationRoutes,
+);
+
+app.use(
   notFoundMiddleware,
 );
 
@@ -204,6 +265,8 @@ const shutdown = async (
       }
 
       try {
+        await closeNotificationEventBus();
+
         await disconnectDatabase();
 
         process.stdout.write(
@@ -295,6 +358,22 @@ const startServer =
         'MongoDB connected successfully.\n',
       );
 
+      // Bridge notification events published by the worker process to the SSE
+      // connections held by this (server) process.
+      try {
+        await subscribeToNotificationEvents((userId, event) => {
+          getSSEManager().sendToUser(userId, event);
+        });
+
+        process.stdout.write(
+          'Notification event bus subscribed.\n',
+        );
+      } catch (busError) {
+        process.stderr.write(
+          `Notification event bus subscribe failed: ${busError.message}\n`,
+        );
+      }
+
       server.listen(
         appConfig.port,
         appConfig.host,
@@ -318,7 +397,22 @@ const startServer =
     }
   };
 
-startServer();
+// Don't auto-bind the port when running under the test runner — the
+// integration tests import `app` and listen on an ephemeral port themselves.
+const isMainModule =
+  Boolean(process.argv[1]) &&
+  fileURLToPath(import.meta.url) === process.argv[1];
+
+const isTestRun =
+  process.env.NODE_TEST_CONTEXT !== undefined ||
+  process.env.NODE_ENV === 'test' ||
+  process.argv.includes('--test') ||
+  process.execArgv.includes('--test') ||
+  process.argv.some((arg) => arg.includes('.test.') || arg.includes('test'));
+
+if (isMainModule && !isTestRun) {
+  startServer();
+}
 
 export {
   app,

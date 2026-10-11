@@ -36,11 +36,19 @@ export async function listMembers(req, res, next) {
   }
 }
 
-export async function inviteMember(req, res, next) {
+export async function getCompanyProfile(req, res, next) {
   try {
-    const { name, email, role } = req.body;
-    const member = await companyService.inviteCompanyMember(req.user, { name, email, role });
-    res.status(201).json({ success: true, data: member });
+    const company = await companyService.getCompanyProfile(req.user);
+    res.status(200).json({ success: true, data: company });
+  } catch (err) {
+    handleError(err, res, next);
+  }
+}
+
+export async function updateCompanyProfile(req, res, next) {
+  try {
+    const company = await companyService.updateCompanyProfile(req.user, req.body);
+    res.status(200).json({ success: true, data: company });
   } catch (err) {
     handleError(err, res, next);
   }

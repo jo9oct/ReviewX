@@ -59,6 +59,11 @@ import {
 } from '../access/access.service.js';
 
 import {
+  atomicIncrementQuota,
+  decrementQuota,
+} from '../utils/workspaceQuota.js';
+
+import {
   getRepository,
 } from './github.service.js';
 
@@ -67,6 +72,18 @@ import aiConfig from '../config/ai.config.js';
 import {
   AppError,
 } from '../utils/errors.js';
+
+import {
+  notificationTriggerService,
+} from './notificationTrigger.service.js';
+
+import {
+  getEffectiveSubscription,
+} from './entitlement.service.js';
+
+import {
+  getWorkspaceUsage,
+} from './usage.service.js';
 
 const getReviewId = (
   review,
@@ -1047,6 +1064,8 @@ const createReviewRecord = async ({
   ownerId,
   projectId,
   source,
+  workspace = null,
+  user = null,
 }) => {
   const normalizedOwnerId =
     normalizeOwnerId(
@@ -1056,9 +1075,27 @@ const createReviewRecord = async ({
   const reviewId =
     new mongoose.Types.ObjectId();
 
+  const userObjectId =
+    user && mongoose.Types.ObjectId.isValid(user)
+      ? new mongoose.Types.ObjectId(user)
+      : mongoose.Types.ObjectId.isValid(normalizedOwnerId)
+        ? new mongoose.Types.ObjectId(normalizedOwnerId)
+        : null;
+
+  const companyObjectId =
+    workspace?.companyId && mongoose.Types.ObjectId.isValid(workspace.companyId)
+      ? new mongoose.Types.ObjectId(workspace.companyId)
+      : null;
+
   return reviewRepository.create({
     ownerId:
       normalizedOwnerId,
+
+    user:
+      userObjectId,
+
+    company:
+      companyObjectId,
 
     reviewId,
 
@@ -1366,7 +1403,46 @@ const executeReview = async ({
         source,
       );
 
-    assertReviewLimits({
+    // Resolve entitlement context — prefer values already on review if present,
+    // otherwise load from workspace so the queue worker enforces real plan limits.
+    let effectiveSub = review?._entitlementSub;
+    let effectiveUsage = review?._entitlementUsage;
+
+    if (!effectiveSub) {
+      const workspace = review.company
+        ? {
+            type: 'company',
+            userId: (review.user || review.ownerId)?.toString(),
+            companyId: review.company.toString(),
+          }
+        : {
+            type: 'personal',
+            userId: (review.user || review.ownerId)?.toString(),
+            companyId: null,
+          };
+
+      try {
+        const entitlement = await getEffectiveSubscription(workspace);
+        effectiveSub =
+          entitlement?.sub ?? {
+            linesPerReview: 1000,
+            filesPerReview: 50,
+            aiAssistedReviews: 5,
+          };
+        effectiveUsage = await getWorkspaceUsage(workspace, effectiveSub);
+      } catch {
+        effectiveSub = {
+          linesPerReview: 1000,
+          filesPerReview: 50,
+          aiAssistedReviews: 5,
+        };
+        effectiveUsage = {};
+      }
+    }
+
+    const { canUseAi } = assertReviewLimits({
+      subscription: effectiveSub,
+      usage:        effectiveUsage,
       totalLines,
       totalFiles,
     });
@@ -1380,6 +1456,11 @@ const executeReview = async ({
         access,
       );
 
+    // Override aiAnalysis flag if AI quota is exhausted
+    if (!canUseAi && options.aiAnalysis) {
+      options.aiAnalysis = false;
+    }
+
     assertRequestedFeatures(
       options,
     );
@@ -1387,6 +1468,20 @@ const executeReview = async ({
     assertSourceFeatureAccess(
       source,
     );
+
+    // Fetch active company rules if this review belongs to a company
+    let companyRules = [];
+    if (review?.company) {
+      try {
+        const { CompanyRule } = await import('../database/models/companyRule.model.js');
+        companyRules = await CompanyRule.find({
+          company: review.company,
+          enabled: true,
+        }).lean();
+      } catch (err) {
+        console.warn('[executeReview] Failed to load company rules:', err.message);
+      }
+    }
 
     const result =
       await reviewEngine.run({
@@ -1397,6 +1492,8 @@ const executeReview = async ({
 
         projectId:
           review.projectId,
+
+        companyRules,
 
         options,
 
@@ -1465,6 +1562,14 @@ const executeReview = async ({
     completedSuccessfully =
       true;
 
+    // Fire notification: review completed
+    try {
+      const user = { _id: review.ownerId, name: review.ownerName || '' };
+      await notificationTriggerService.onReviewCompleted(updatedReview, result, user);
+    } catch (notifErr) {
+      console.warn('[review] Notification trigger failed:', notifErr.message);
+    }
+
     return {
       reviewId:
         reviewDocumentId,
@@ -1500,6 +1605,16 @@ const executeReview = async ({
       );
     } catch {
       // Preserve original execution error.
+    }
+
+    // Fire notification: review failed (only on final attempt)
+    if (isFinalAttempt) {
+      try {
+        const user = { _id: review.ownerId, name: review.ownerName || '' };
+        await notificationTriggerService.onReviewFailed(review, error, user);
+      } catch (notifErr) {
+        console.warn('[review] Notification trigger failed:', notifErr.message);
+      }
     }
 
     throw error;
@@ -1667,6 +1782,7 @@ const queueReviewExecution = async ({
 const getReviewResponse = async (
   reviewId,
   ownerId,
+  userContext = null,
 ) => {
   const normalizedOwnerId =
     normalizeOwnerId(
@@ -1696,11 +1812,9 @@ const getReviewResponse = async (
   }
 
   /*
-   * Never return a review simply because
-   * the caller has a valid JWT.
-   *
-   * The JWT identifies the caller.
-   * ownerId identifies who owns the resource.
+   * Verify access:
+   * 1. The caller is the individual owner (ownerId matches)
+   * 2. OR the review belongs to a company and the caller belongs to that same company
    */
   const reviewOwnerId =
     review.ownerId
@@ -1719,10 +1833,19 @@ const getReviewResponse = async (
     });
   }
 
-  if (
-    reviewOwnerId !==
-    normalizedOwnerId
-  ) {
+  const reviewCompanyId = review.company ? review.company.toString() : null;
+  const userCompanyId = userContext?.company
+    ? userContext.company.toString()
+    : (userContext?.activeCompanyId || null);
+
+  const isOwner = reviewOwnerId === normalizedOwnerId;
+  const isSameCompany = Boolean(
+    reviewCompanyId &&
+    userCompanyId &&
+    reviewCompanyId === userCompanyId
+  );
+
+  if (!isOwner && !isSameCompany) {
     throw new AppError({
       code:
         'REVIEW_ACCESS_DENIED',
@@ -1833,6 +1956,7 @@ const createReviewResponse =
   async (
     payload,
     ownerId,
+    entitlement = {},
   ) => {
     const normalizedOwnerId =
       normalizeOwnerId(
@@ -1909,10 +2033,24 @@ const createReviewResponse =
         source,
       );
 
-    assertReviewLimits({
+    // Resolve effective subscription & usage from entitlement context
+    // (attached by accessMiddleware via the controller) or fall back to Free.
+    const effectiveSub   = entitlement.subscription ?? { linesPerReview: 1000, filesPerReview: 50, aiAssistedReviews: 5 };
+    const effectiveUsage = entitlement.usage        ?? {};
+    const workspace      = entitlement.workspace    ?? null;
+
+    // Per-review size limits (sync check, no DB)
+    const { canUseAi } = assertReviewLimits({
+      subscription: effectiveSub,
+      usage:        effectiveUsage,
       totalLines,
       totalFiles,
     });
+
+    // Atomic monthly quota check — increments the counter; throws 429 if exhausted
+    if (workspace) {
+      await atomicIncrementQuota(workspace, effectiveSub);
+    }
 
     const project =
       await createProjectForReview({
@@ -1931,6 +2069,8 @@ const createReviewResponse =
       null;
 
     if (!projectId) {
+      // Decrement quota since we won't actually run the review
+      if (workspace) await decrementQuota(workspace).catch(() => {});
       throw new AppError({
         code:
           'PROJECT_IDENTIFIER_MISSING',
@@ -1947,9 +2087,19 @@ const createReviewResponse =
         ownerId:
           normalizedOwnerId,
 
+        user:
+          normalizedOwnerId,
+
+        workspace,
+
         projectId,
 
         source,
+        // Carry entitlement forward so the worker execution path can
+        // honour the same limits without a second DB round-trip.
+        _entitlementSub:   effectiveSub,
+        _entitlementUsage: effectiveUsage,
+        _canUseAi:         canUseAi,
       });
 
     const reviewId =
@@ -1970,6 +2120,14 @@ const createReviewResponse =
         await queueReviewExecution({
           reviewId,
         });
+
+      // Fire notification: review queued
+      try {
+        const user = { _id: normalizedOwnerId, name: '' };
+        await notificationTriggerService.onReviewQueued(queuedReview, user);
+      } catch (notifErr) {
+        console.warn('[review] Notification trigger failed:', notifErr.message);
+      }
 
       return {
         ownerId:

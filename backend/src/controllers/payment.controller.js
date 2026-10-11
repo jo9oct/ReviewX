@@ -4,6 +4,8 @@ import {
   initiatePayment as initiatePaymentService,
   verifyAndCompletePayment,
 } from '../services/payment.service.js';
+import { WebhookLog } from '../database/models/webhookLog.model.js';
+import { resolveWorkspace } from '../utils/resolveWorkspace.js';
 
 const initiateProPayment = async (
   req,
@@ -11,10 +13,38 @@ const initiateProPayment = async (
   next,
 ) => {
   try {
+    const workspace = resolveWorkspace(req);
     const result =
       await initiatePaymentService({
         userId: req.user.id,
         plan: 'pro',
+        workspace,
+      });
+
+    return res.status(201).json({
+      success: true,
+      data: result,
+      meta: {
+        requestId: req.requestId,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const initiateTeamPayment = async (
+  req,
+  res,
+  next,
+) => {
+  try {
+    const workspace = resolveWorkspace(req);
+    const result =
+      await initiatePaymentService({
+        userId: req.user.id,
+        plan: 'team',
+        workspace,
       });
 
     return res.status(201).json({
@@ -35,10 +65,12 @@ const initiateEnterprisePayment = async (
   next,
 ) => {
   try {
+    const workspace = resolveWorkspace(req);
     const result =
       await initiatePaymentService({
         userId: req.user.id,
         plan: 'enterprise',
+        workspace,
       });
 
     return res.status(201).json({
@@ -112,6 +144,14 @@ const handleChapaCallback = async (
         txRef: txRef.trim(),
       });
 
+    await WebhookLog.create({
+      provider: 'chapa',
+      txRef: txRef.trim(),
+      payload: req.body,
+      signatureValid: true,
+      processingStatus: 'processed',
+    }).catch(() => {});
+
     return res.status(200).json({
       success: true,
       data: {
@@ -123,12 +163,22 @@ const handleChapaCallback = async (
       },
     });
   } catch (error) {
+    await WebhookLog.create({
+      provider: 'chapa',
+      txRef: req.body?.tx_ref || req.body?.data?.tx_ref || null,
+      payload: req.body,
+      signatureValid: true,
+      processingStatus: 'failed',
+      errorMessage: error.message,
+    }).catch(() => {});
+
     return next(error);
   }
 };
 
 export {
   initiateProPayment,
+  initiateTeamPayment,
   initiateEnterprisePayment,
   verifyPayment,
   handleChapaCallback,

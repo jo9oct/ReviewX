@@ -27,6 +27,7 @@ const createReport = async (
     const result =
       await createReportService({
         ownerId: req.user.id,
+        user: req.user,
         reviewId,
         format,
       });
@@ -66,6 +67,7 @@ const getReport = async (
       await getReportService({
         reportId,
         ownerId: req.user.id,
+        user: req.user,
       });
 
     return res
@@ -99,6 +101,7 @@ const listReports = async (
       await listReportsService({
         reviewId,
         ownerId: req.user.id,
+        user: req.user,
       });
 
     return res

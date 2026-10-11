@@ -49,8 +49,40 @@ export async function login(req, res, next) {
 
 export async function getMe(req, res, next) {
   try {
-    const user = await authService.getMe(req.user.id || req.user.userId);
+    const user = await authService.getMe(
+      req.user.id || req.user.userId,
+      req.activeCompanyId ?? null,
+    );
     res.status(200).json({ success: true, data: { user } });
+  } catch (err) {
+    handleError(err, res, next);
+  }
+}
+
+export async function revokeOtherSessions(req, res, next) {
+  try {
+    const data = await authService.revokeOtherSessions(req.user._id || req.user.userId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    handleError(err, res, next);
+  }
+}
+
+export async function switchWorkspace(req, res, next) {
+  try {
+    const { workspaceType, companyId } = req.body ?? {};
+    if (!workspaceType) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'workspaceType is required', code: 'BAD_REQUEST' },
+      });
+    }
+    const data = await authService.switchWorkspace(
+      req.user.id || req.user.userId,
+      workspaceType,
+      companyId ?? null,
+    );
+    res.status(200).json({ success: true, data });
   } catch (err) {
     handleError(err, res, next);
   }

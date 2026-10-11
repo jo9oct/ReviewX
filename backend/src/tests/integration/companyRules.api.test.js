@@ -45,7 +45,7 @@ test("Company Rules API integration tests", async (t) => {
     }
 
     server = await startTestServer();
-    baseUrl = `http://127.0.0.1:${server.address().port}/api/company-rules`;
+    baseUrl = `http://127.0.0.1:${server.address().port}/api/v1/company-rules`;
 
     // Create test users in DB so authenticate middleware finds them
     adminA = await User.create({
@@ -83,8 +83,11 @@ test("Company Rules API integration tests", async (t) => {
     await CompanyRule.deleteMany({ company: { $in: [companyA, companyB] } });
 
     if (server) {
+      server.closeAllConnections?.();
       await new Promise((resolve) => server.close(resolve));
     }
+    // Release the DB connection so the test process can exit.
+    if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
   });
 
   await t.test("POST /api/company-rules - company_admin creates rule", async () => {

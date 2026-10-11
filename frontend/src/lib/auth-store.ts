@@ -36,12 +36,33 @@ function syncReviewStore(user: User | null) {
   }
 }
 
+function getStoredUser(): User | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("reviewx_user") || sessionStorage.getItem("reviewx_user");
+    return raw ? (JSON.parse(raw) as User) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setStoredUser(user: User | null): void {
+  if (typeof window === "undefined") return;
+  if (user) {
+    localStorage.setItem("reviewx_user", JSON.stringify(user));
+  } else {
+    localStorage.removeItem("reviewx_user");
+    sessionStorage.removeItem("reviewx_user");
+  }
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null,
+  user: typeof window !== "undefined" ? getStoredUser() : null,
   token: typeof window !== "undefined" ? getAuthToken() : null,
-  status: "idle",
+  status: typeof window !== "undefined" && getAuthToken() ? "authenticated" : "idle",
 
   setUser: (user) => {
+    setStoredUser(user);
     set({ user });
     syncReviewStore(user);
   },
@@ -55,6 +76,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setAuth: (user, token) => {
     setAuthToken(token);
+    setStoredUser(user);
     set({
       user,
       token,
@@ -65,6 +87,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     setAuthToken(null);
+    setStoredUser(null);
     set({
       user: null,
       token: null,
@@ -73,29 +96,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     syncReviewStore(null);
     if (typeof window !== "undefined") {
       sessionStorage.clear();
-      window.location.href = "/auth";
     }
   },
 
   initialize: async () => {
     const token = getAuthToken();
     if (!token) {
+      setStoredUser(null);
       set({ user: null, token: null, status: "unauthenticated" });
       return null;
     }
 
-    const current = get();
-    if (current.status === "authenticated" && current.user) {
-      return current.user;
+    const storedUser = getStoredUser();
+    if (storedUser) {
+      set({ user: storedUser, token, status: "authenticated" });
+      syncReviewStore(storedUser);
     }
 
-    set({ status: "loading", token });
     try {
       const user = await getCurrentUser();
       get().setAuth(user, token);
       return user;
     } catch {
+      // If we had a stored user, don't evict on temporary network issues
+      if (storedUser) {
+        return storedUser;
+      }
       setAuthToken(null);
+      setStoredUser(null);
       set({ user: null, token: null, status: "unauthenticated" });
       syncReviewStore(null);
       return null;

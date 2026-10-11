@@ -1,14 +1,16 @@
-import mongoose from "mongoose";
 import { User } from "../database/models/user.model.js";
 import { Review } from "../database/models/review.model.js";
 import { Finding } from "../database/models/finding.model.js";
 import { Score } from "../database/models/score.model.js";
-import { ApiError } from "../utils/ApiError.js";
+import { notificationTriggerService } from "./notificationTrigger.service.js";
 
 export async function getCompanyMembers(user) {
   let filter = {};
+  let companyDoc = null;
   if (user?.company) {
     filter = { company: user.company };
+    const { Company } = await import("../database/models/company.model.js");
+    companyDoc = await Company.findById(user.company).select("owner").lean();
   } else {
     const uid = user?._id || user?.id || user?.userId;
     if (!uid) return [];
@@ -41,11 +43,23 @@ export async function getCompanyMembers(user) {
         });
       }
 
+      const isOwner = companyDoc?.owner
+        ? companyDoc.owner.toString() === u._id.toString()
+        : false;
+      const displayRole = isOwner
+        ? "Owner"
+        : u.role === "company_admin"
+        ? "Admin"
+        : u.role === "platform_admin"
+        ? "Platform admin"
+        : "Member";
+
       return {
         id: u._id.toString(),
         name: u.name,
         email: u.email,
-        role: u.role === "company_admin" ? "Company admin" : u.role === "platform_admin" ? "Platform admin" : "Member",
+        role: displayRole,
+        isOwner,
         rawRole: u.role,
         reviews: reviewsCount,
         avg: avgScore,
@@ -59,61 +73,36 @@ export async function getCompanyMembers(user) {
   return membersWithStats;
 }
 
-export async function inviteCompanyMember(currentUser, { name, email, role = "member" }) {
-  if (!name || !email) {
-    throw ApiError.badRequest("Name and email are required.");
+export async function getCompanyProfile(user) {
+  if (!user?.company) {
+    return null;
   }
-
-  let companyId = currentUser.company;
-  if (!companyId) {
-    companyId = new mongoose.Types.ObjectId();
-    await User.findByIdAndUpdate(currentUser._id || currentUser.id, {
-      company: companyId
-    });
-    currentUser.company = companyId.toString();
+  const { Company } = await import("../database/models/company.model.js");
+  const company = await Company.findById(user.company).populate("owner", "name email").lean();
+  if (!company) {
+    return null;
   }
-
-  const cleanEmail = email.toLowerCase().trim();
-  const existing = await User.findOne({ email: cleanEmail });
-  if (existing) {
-    existing.company = companyId;
-    if (role === "company_admin") existing.role = "company_admin";
-    await existing.save();
-    return {
-      id: existing._id.toString(),
-      name: existing.name,
-      email: existing.email,
-      role: existing.role === "company_admin" ? "Company admin" : "Member",
-      rawRole: existing.role,
-      reviews: 0,
-      avg: 0,
-      open: 0,
-      trend: "neutral",
-      createdAt: existing.createdAt
-    };
-  }
-
-  const tempPassword = "TempPassword123!";
-  const newUser = new User({
-    name: name.trim(),
-    email: cleanEmail,
-    role: role === "company_admin" ? "company_admin" : "member",
-    company: companyId,
-    isActive: true
-  });
-  await newUser.setPassword(tempPassword);
-  await newUser.save();
-
+  const membersCount = await User.countDocuments({ company: user.company });
   return {
-    id: newUser._id.toString(),
-    name: newUser.name,
-    email: newUser.email,
-    role: newUser.role === "company_admin" ? "Company admin" : "Member",
-    rawRole: newUser.role,
-    reviews: 0,
-    avg: 0,
-    open: 0,
-    trend: "neutral",
-    createdAt: newUser.createdAt
+    ...company,
+    membersCount,
   };
+}
+
+export async function updateCompanyProfile(user, { name }) {
+  if (!user?.company) {
+    const { ApiError } = await import("../utils/ApiError.js");
+    throw ApiError.notFound("User is not associated with a company");
+  }
+  const { Company } = await import("../database/models/company.model.js");
+  const company = await Company.findById(user.company);
+  if (!company) {
+    const { ApiError } = await import("../utils/ApiError.js");
+    throw ApiError.notFound("Company not found");
+  }
+  if (name?.trim()) {
+    company.name = name.trim();
+    await company.save();
+  }
+  return company.toObject();
 }

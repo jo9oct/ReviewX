@@ -41,11 +41,23 @@ const assertFeatureAccess = (feature) => {
 };
 
 const assertReviewLimits = ({
+  subscription,
+  usage,
   totalLines = 0,
-  totalFiles = 0
+  totalFiles = 0,
 } = {}) => {
-  const tier = getCurrentTier();
-  const policy = getCurrentPolicy();
+  // ── Per-review size limits ────────────────────────────────────────────
+  const isEnterprise =
+    subscription?.plan === 'enterprise' ||
+    subscription?.tier === 'enterprise';
+
+  const lineLimit = isEnterprise
+    ? Math.max(subscription?.linesPerReview ?? 0, 1000000)
+    : (subscription?.linesPerReview ?? getCurrentPolicy().maxLinesPerReview);
+
+  const fileLimit = isEnterprise
+    ? Math.max(subscription?.filesPerReview ?? 0, 10000)
+    : (subscription?.filesPerReview ?? getCurrentPolicy().maxFilesPerReview);
 
   if (
     !Number.isInteger(totalLines) ||
@@ -69,33 +81,38 @@ const assertReviewLimits = ({
     });
   }
 
-  if (totalLines > policy.maxLinesPerReview) {
+  if (totalLines > lineLimit) {
     throw new AppError({
       code: 'REVIEW_LINE_LIMIT_EXCEEDED',
-      message: 'The review exceeds the line limit for the current subscription tier.',
+      message: `Review exceeds the line limit for your plan (${lineLimit} lines).`,
       statusCode: 403,
       details: {
-        tier,
-        limit: policy.maxLinesPerReview,
+        limit: lineLimit,
         requested: totalLines
       }
     });
   }
 
-  if (totalFiles > policy.maxFilesPerReview) {
+  if (totalFiles > fileLimit) {
     throw new AppError({
       code: 'REVIEW_FILE_LIMIT_EXCEEDED',
-      message: 'The review exceeds the file limit for the current subscription tier.',
+      message: `Review exceeds the file limit for your plan (${fileLimit} files).`,
       statusCode: 403,
       details: {
-        tier,
-        limit: policy.maxFilesPerReview,
+        limit: fileLimit,
         requested: totalFiles
       }
     });
   }
 
-  return true;
+  // ── AI quota ─────────────────────────────────────────────────────────
+  // AI exhaustion does NOT throw — it returns canUseAi: false so the
+  // review proceeds without AI analysis rather than being blocked.
+  const aiLimit = subscription?.aiAssistedReviews ?? 5;
+  const aiUsed  = usage?.aiReviews?.used ?? 0;
+  const canUseAi = aiUsed < aiLimit;
+
+  return { canUseAi };
 };
 
 const getAccessContext = () => {

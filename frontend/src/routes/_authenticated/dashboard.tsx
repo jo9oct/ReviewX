@@ -5,6 +5,7 @@ import { useAuthStore, normalizeRole } from "@/lib/auth-store";
 import { useReviewStore } from "@/lib/review-store";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Workspace — ReviewX" },

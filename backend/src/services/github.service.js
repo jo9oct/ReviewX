@@ -157,7 +157,7 @@ const completeConnection = async ({
   };
 };
 
-const getConnection = ({
+const getConnection = async ({
   connectionId,
   userId,
 }) => {
@@ -178,7 +178,7 @@ const getConnection = ({
   }
 
   const connection =
-    consumeGithubConnection(
+    await consumeGithubConnection(
       connectionId,
     );
 
@@ -193,7 +193,7 @@ const getGithubUser = async ({
   connectionId,
 }) => {
   const connection =
-    getConnection({
+    await getConnection({
       userId,
       connectionId,
     });
@@ -232,7 +232,7 @@ const getRepositories = async ({
   perPage = 30,
 }) => {
   const connection =
-    getConnection({
+    await getConnection({
       userId,
       connectionId,
     });
@@ -292,7 +292,7 @@ const getBranches = async ({
   perPage = 100,
 }) => {
   const connection =
-    getConnection({
+    await getConnection({
       userId,
       connectionId,
     });
@@ -335,7 +335,7 @@ const getRepository = async ({
   ref,
 }) => {
   const connection =
-    getConnection({
+    await getConnection({
       userId,
       connectionId,
     });

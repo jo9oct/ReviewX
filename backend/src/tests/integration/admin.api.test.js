@@ -6,6 +6,9 @@ import jwt from "jsonwebtoken";
 import app from "../../app.js";
 import { config } from "../../config/env.js";
 import { User } from "../../database/models/user.model.js";
+import { EmailLog } from "../../database/models/emailLog.model.js";
+import { closeQueues } from "../../queue/queue.factory.js";
+import { disconnectRedis } from "../../queue/redis.client.js";
 
 async function startTestServer() {
   return new Promise((resolve) => {
@@ -38,7 +41,7 @@ test("Admin API Integration Tests", async (t) => {
     }
 
     server = await startTestServer();
-    baseUrl = `http://127.0.0.1:${server.address().port}/api/admin`;
+    baseUrl = `http://127.0.0.1:${server.address().port}/api/v1/admin`;
 
     platformAdminUser = await User.create({
       name: "Super Admin",
@@ -68,10 +71,17 @@ test("Admin API Integration Tests", async (t) => {
     if (platformAdminUser) await User.deleteOne({ _id: platformAdminUser._id });
     if (memberUser) await User.deleteOne({ _id: memberUser._id });
     if (targetUser) await User.deleteOne({ _id: targetUser._id });
+    await EmailLog.deleteMany({ to: { $regex: '@test.com' } }).catch(() => {});
+
+    await closeQueues().catch(() => {});
+    await disconnectRedis().catch(() => {});
 
     if (server) {
+      server.closeAllConnections?.();
       await new Promise((resolve) => server.close(resolve));
     }
+    // Release the DB connection so the test process can exit.
+    if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
   });
 
   await t.test("GET /api/admin/stats - returns live KPIs and events for platform_admin", async () => {
@@ -153,5 +163,103 @@ test("Admin API Integration Tests", async (t) => {
       headers: { Authorization: `Bearer ${memberToken}` },
     });
     assert.equal(resUsers.status, 403);
+  });
+
+  await t.test("GET /admin/queues/summary - returns job counts for all queues", async () => {
+    const res = await fetch(`${baseUrl}/queues/summary`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(body.data.queues);
+    assert.ok(body.data.queues.review);
+    assert.ok(body.data.queues.report);
+    assert.ok(body.data.queues.cleanup);
+    assert.ok(typeof body.data.totalFailed === 'number');
+    assert.ok(typeof body.data.totalWaiting === 'number');
+  });
+
+  await t.test("GET /admin/queues - returns detailed queue info with failed jobs array", async () => {
+    const res = await fetch(`${baseUrl}/queues`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(body.data.queues);
+    assert.ok(Array.isArray(body.data.queues.review?.failedJobs));
+    assert.ok(Array.isArray(body.data.queues.report?.failedJobs));
+    assert.ok(Array.isArray(body.data.queues.cleanup?.failedJobs));
+  });
+
+  await t.test("GET /admin/reviews - returns paginated platform reviews", async () => {
+    const res = await fetch(`${baseUrl}/reviews?page=1&limit=10`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(Array.isArray(body.data.reviews));
+    assert.ok(typeof body.data.total === 'number');
+    assert.ok(typeof body.data.page === 'number');
+    assert.ok(typeof body.data.totalPages === 'number');
+  });
+
+  await t.test("GET /admin/activity - returns paginated audit log entries", async () => {
+    const res = await fetch(`${baseUrl}/activity?page=1&limit=10`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(Array.isArray(body.data.logs));
+    assert.ok(typeof body.data.total === 'number');
+    assert.ok(typeof body.data.page === 'number');
+  });
+
+  await t.test("GET /admin/email-logs - returns paginated email delivery logs", async () => {
+    const res = await fetch(`${baseUrl}/email-logs?page=1&limit=10`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(Array.isArray(body.data.logs));
+    assert.ok(typeof body.data.total === 'number');
+  });
+
+  await t.test("GET /admin/settings - returns sanitized platform configuration", async () => {
+    const res = await fetch(`${baseUrl}/settings`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(body.data.application);
+    assert.ok(typeof body.data.application.name === 'string');
+    assert.ok(typeof body.data.application.uptimeSeconds === 'number');
+    assert.ok(body.data.queues);
+    assert.ok(body.data.integrations);
+    assert.ok(body.data.featureFlags);
+    // Ensure secrets are NOT present
+    assert.equal(body.data.application.jwtSecret, undefined);
+    assert.equal(body.data.application.mongoUri, undefined);
+  });
+
+  await t.test("POST /auth/revoke-other-sessions - increments tokenVersion and returns new token", async () => {
+    // Use the baseUrl for auth (need to derive it from the server port)
+    const authBaseUrl = baseUrl.replace('/api/v1/admin', '/api/v1/auth');
+    const res = await fetch(`${authBaseUrl}/revoke-other-sessions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(typeof body.data.token === 'string');
+    assert.ok(body.data.user);
+    // New token should be different from the old one
+    assert.notEqual(body.data.token, adminToken);
   });
 });

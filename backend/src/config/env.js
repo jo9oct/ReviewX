@@ -1,4 +1,4 @@
-﻿import dotenv from "dotenv";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -54,7 +54,7 @@ if (!["development", "test", "production"].includes(nodeEnv)) {
 
 const corsOrigins = getString(
   "CORS_ORIGINS",
-  "http://localhost:5173"
+  "http://localhost:3000"
 )
   .split(",")
   .map((origin) => origin.trim())
@@ -73,7 +73,7 @@ export const env = Object.freeze({
 
   requestTimeoutMs: getPositiveNumber(
     "REQUEST_TIMEOUT_MS",
-    30000
+    120000
   ),
 
   rateLimit: Object.freeze({
@@ -148,6 +148,23 @@ export const env = Object.freeze({
     maxFiles: getPositiveNumber(
       "UPLOAD_MAX_FILES",
       1
+    )
+  }),
+
+  email: Object.freeze({
+    // Resend HTTP API key. When empty, outgoing mail (e.g. invite links)
+    // is logged to the console instead of sent — the dev fallback.
+    resendApiKey: getString("RESEND_API_KEY"),
+
+    from: getString(
+      "EMAIL_FROM",
+      "ReviewX <onboarding@resend.dev>"
+    ),
+
+    // Public base URL of the frontend, used to build invite links.
+    frontendUrl: getString(
+      "FRONTEND_URL",
+      "http://localhost:3000"
     )
   })
 });

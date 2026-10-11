@@ -1,6 +1,6 @@
-import { createFileRoute, Outlet, redirect, isRedirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, isRedirect, useNavigate } from "@tanstack/react-router";
 import { LoaderCircle } from "lucide-react";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { getAuthToken } from "@/lib/api";
 import { useAuthStore, normalizeRole } from "@/lib/auth-store";
 
@@ -18,12 +18,29 @@ function AuthLoadingScreen() {
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async ({ location }) => {
+    // During server-side rendering (SSR), client-only session storage (localStorage)
+    // is not accessible. Since ssr is false for this layout, return a placeholder
+    // context and allow client-side hydration to perform the auth guard check.
+    if (typeof window === "undefined") {
+      return {
+        user: null,
+        role: "member" as const,
+      };
+    }
+
+    const nextParam =
+      location.pathname &&
+      !location.pathname.startsWith("/auth") &&
+      !location.pathname.startsWith("/register")
+        ? location.pathname
+        : "/dashboard";
+
     // 1. Must have an auth token in storage
     const token = getAuthToken();
     if (!token) {
       throw redirect({
         to: "/auth",
-        search: { next: location.href },
+        search: { next: nextParam },
       });
     }
 
@@ -36,7 +53,7 @@ export const Route = createFileRoute("/_authenticated")({
         if (isRedirect(err)) throw err;
         throw redirect({
           to: "/auth",
-          search: { next: location.href },
+          search: { next: nextParam },
         });
       }
     }
@@ -44,7 +61,7 @@ export const Route = createFileRoute("/_authenticated")({
     if (!user) {
       throw redirect({
         to: "/auth",
-        search: { next: location.href },
+        search: { next: nextParam },
       });
     }
 
@@ -58,8 +75,24 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 function AuthenticatedLayout() {
-  const { status, user } = useAuthStore();
+  const navigate = useNavigate();
+  const { status, user, initialize } = useAuthStore();
   const role = normalizeRole(user?.role);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      void navigate({ to: "/auth", replace: true });
+      return;
+    }
+    if (!user) {
+      void initialize().then((activeUser) => {
+        if (!activeUser) {
+          void navigate({ to: "/auth", replace: true });
+        }
+      });
+    }
+  }, [user, navigate, initialize]);
 
   if (status === "loading" || (!user && status !== "unauthenticated")) {
     return <AuthLoadingScreen />;

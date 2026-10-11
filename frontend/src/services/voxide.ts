@@ -10,17 +10,29 @@ import {
   type ReviewIndexRecord,
 } from "../lib/review-api";
 
-const publicKey = import.meta.env["VITE_VOXIDE_PUBLIC_KEY"];
+const rawPublicKey =
+  (typeof import.meta !== "undefined" && import.meta.env?.["VITE_VOXIDE_PUBLIC_KEY"]) ||
+  (typeof process !== "undefined" && (process.env?.["VITE_VOXIDE_PUBLIC_KEY"] as string | undefined)) ||
+  "";
 
-if (!publicKey) {
-  throw new Error("VITE_VOXIDE_PUBLIC_KEY is not configured.");
+const publicKey = typeof rawPublicKey === "string" ? rawPublicKey.trim() : "";
+
+export const isVoxideConfigured = Boolean(publicKey && publicKey.length > 0);
+
+export const voxide: VoxideClient | null = isVoxideConfigured
+  ? new VoxideClient({
+      publicKey,
+    })
+  : null;
+
+if (!isVoxideConfigured) {
+  console.warn(
+    "[Voxide] VITE_VOXIDE_PUBLIC_KEY is not configured. Voxide Assistant widget is disabled.",
+  );
 }
 
-export const voxide = new VoxideClient({
-  publicKey,
-});
-
-voxide.register({
+if (voxide) {
+  voxide.register({
   getMyProjects: {
     description:
       "Get the projects that belong to the currently authenticated user.",
@@ -269,3 +281,4 @@ voxide.register({
     },
   },
 });
+}

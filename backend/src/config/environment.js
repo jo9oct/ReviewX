@@ -543,7 +543,7 @@ const environment = Object.freeze({
 
     frontendUrl: normalizeString(
       process.env.FRONTEND_URL,
-      'http://localhost:5173',
+      'http://localhost:3000',
     ),
 
     currency: normalizeString(

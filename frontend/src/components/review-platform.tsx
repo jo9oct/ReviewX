@@ -21,8 +21,40 @@ import {
   type AdminCompanyItem,
   useCompanyMembersQuery,
   useInviteCompanyMemberMutation,
+  useInvitationsQuery,
+  useRevokeInvitationMutation,
+  useCompanyProfileQuery,
+  useUpdateCompanyProfileMutation,
   type CompanyMember,
+  useQueuesSummaryQuery,
+  useQueuesDetailQuery,
+  useRetryFailedJobsMutation,
+  useAdminReviewsQuery,
+  useAuditLogsQuery,
+  useEmailLogsQuery,
+  usePlatformSettingsQuery,
+  useRevokeOtherSessionsMutation,
+  usePlatformSettingsFullQuery,
+  useUpdatePlatformSettingsMutation,
+  useIntegrationStatusesQuery,
+  useSendTestEmailMutation,
+  useAdminListQuery,
+  usePromoteAdminMutation,
+  useDemoteAdminMutation,
+  type AdminReviewItem,
+  type AuditLogItem,
+  type EmailLogItem,
+  type PlatformSettings,
 } from "@/lib/api";
+import {
+  useWebhookLogsQuery,
+  useReplayWebhookMutation,
+} from "@/lib/adminBilling-api";
+import { CompanyDashboardSidebar } from "./sidebar";
+import { NotificationBell } from "./notifications/NotificationBell";
+import { NotificationToastHandler } from "./notifications/NotificationToast";
+import { NotificationCenter } from "./notifications/NotificationCenter";
+import { PlatformBillingHub } from "./admin/PlatformBillingHub";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
 import {
@@ -104,11 +136,17 @@ import {
   useDashboardMetricsQuery,
   useReviewsQuery,
   useSubscriptionQuery,
+  useUpgradeRequestMutation,
+  useUpgradeRequestsQuery,
+  useAcknowledgeUpgradeRequestMutation,
   listScheduledReviews,
   getScheduledReview,
   createScheduledReview,
   cancelScheduledReview,
   startGithubConnect,
+  openGithubConnectPopup,
+  getGithubStatus,
+  disconnectGithubApi,
   initiateSubscriptionPayment,
   type CreateReviewPayload,
   type ScheduledReview,
@@ -116,6 +154,7 @@ import {
   type ReviewIndexRecord,
   type ReviewDetails,
   TIER_POLICIES,
+  PLAN_LIMITS,
   type SubscriptionTier,
 } from "@/lib/review-api";
 import { useReviewStore, type Role, type View } from "@/lib/review-store";
@@ -479,103 +518,23 @@ export function ReviewPlatform() {
     payments: "Payments",
     integrations: "Integrations",
     schedules: "Scheduled reviews",
+    findings: "Cross-review findings",
+    reports: "Reports & exports",
+    settings: "Company settings",
+    "admin-reviews": "Reviews",
+    activity: "Activity / Audit Log",
+    queues: "Queues & Jobs",
+    webhooks: "Webhooks & Email",
+    "platform-settings": "Platform Settings",
+    notifications: "Notifications",
   };
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <aside
-        aria-label="Site navigation"
-        className={cn(
-          "fixed inset-y-0 left-0 z-40 w-60 border-r border-border bg-sidebar transition-transform lg:translate-x-0",
-          mobileNav ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        {/* Logo */}
-        <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-          <img src="/my-icon.png" alt="" className="size-7 rounded object-contain" />
-          <span className="font-semibold">ReviewX</span>
-          <span className="ml-auto rounded-sm border border-border px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
-            BETA
-          </span>
-        </div>
-
-        {/* Organisation context block — static per session, no switcher */}
-        <div className="border-b border-border p-3">
-          <div className="flex items-center gap-2 rounded border border-border bg-surface-raised p-2">
-            <div className="grid size-7 place-items-center rounded bg-accent text-xs font-semibold">
-              {orgInitials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium">{orgName}</div>
-              <div className="text-[10px] text-muted-foreground">{roleBadge}</div>
-            </div>
-          </div>
-        </div>
-        <nav className="space-y-6 p-3">
-          {nav.map((group) => (
-            <div key={group.section}>
-              <p className="mb-2 px-2 text-[10px] font-semibold uppercase text-muted-foreground">
-                {group.section}
-              </p>
-              <div className="space-y-0.5">
-                {group.items.map((item) => (
-                  <button
-                    key={item.view}
-                    onClick={() => {
-                      setView(item.view);
-                      setMobileNav(false);
-                    }}
-                    className={cn(
-                      "flex h-8 w-full items-center gap-2 rounded px-2 text-xs transition-colors",
-                      view === item.view ||
-                        (item.view === "new" && ["result", "finding"].includes(view))
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                    )}
-                  >
-                    <item.icon className="size-3.5" />
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </nav>
-        <div className="absolute inset-x-0 bottom-0 flex items-center border-t border-border p-3 gap-1">
-          <button
-            onClick={() => setView("profile")}
-            className="flex flex-1 items-center gap-2 rounded p-2 hover:bg-accent min-w-0"
-          >
-            <div className="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-              {userName
-                .split(" ")
-                .map((n) => n[0] ?? "")
-                .join("")
-                .slice(0, 2)
-                .toUpperCase() || "?"}
-            </div>
-            <div className="min-w-0 flex-1 text-left">
-              <div className="truncate text-xs font-medium">{userName}</div>
-              <div className="truncate text-[10px] text-muted-foreground">{userEmail}</div>
-            </div>
-          </button>
-          <button
-            type="button"
-            title="Sign out"
-            aria-label="Sign out"
-            onClick={() => useAuthStore.getState().logout()}
-            className="grid size-8 shrink-0 place-items-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-          >
-            <LogOut className="size-4" />
-          </button>
-        </div>
-      </aside>
-      {mobileNav && (
-        <button
-          aria-label="Close navigation"
-          onClick={() => setMobileNav(false)}
-          className="fixed inset-0 z-30 bg-overlay lg:hidden"
-        />
-      )}
+      <CompanyDashboardSidebar
+        currentUser={user}
+        mobileNav={mobileNav}
+        setMobileNav={setMobileNav}
+      />
       <main className="lg:pl-60">
         <header className="sticky top-0 z-20 flex h-14 items-center border-b border-border bg-background/95 px-4 backdrop-blur md:px-6">
           <Button
@@ -613,9 +572,7 @@ export function ReviewPlatform() {
                 ⌘K
               </kbd>
             </button>
-            <Button variant="ghost" size="icon" title="Notifications">
-              <Bell />
-            </Button>
+            <NotificationBell />
             <Button
               variant="ghost"
               size="icon"
@@ -634,7 +591,7 @@ export function ReviewPlatform() {
           {view === "history" && <HistoryView />}
           {view === "rules" && <Rules />}
           {view === "company" && <Company />}
-          {view === "billing" && <Billing />}
+          {view === "billing" && (user?.role === "platform_admin" ? <PlatformBillingHub /> : <Billing />)}
           {view === "profile" && <Profile />}
           {view === "admin" && <Admin />}
           {view === "users" && <UsersView />}
@@ -642,8 +599,18 @@ export function ReviewPlatform() {
           {view === "payments" && <PaymentsView />}
           {view === "integrations" && <Integrations />}
           {view === "schedules" && <Schedules />}
+          {view === "findings" && <CrossReviewFindingsView />}
+          {view === "reports" && <ReportsView />}
+          {view === "settings" && <CompanySettingsView />}
+          {view === "admin-reviews" && <AdminReviewsView />}
+          {view === "activity" && <ActivityView />}
+          {view === "queues" && <QueuesView />}
+          {view === "webhooks" && <WebhooksEmailView />}
+          {view === "platform-settings" && <PlatformSettingsView />}
+          {view === "notifications" && <NotificationCenter />}
         </div>
       </main>
+      <NotificationToastHandler />
     </div>
   );
 }
@@ -705,6 +672,29 @@ function GitHubIntegrationWorkspace() {
       active = false;
     };
   }, [setApiResponse]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleMsg = (event: MessageEvent) => {
+      if (event.data?.type === "REVIEWX_GITHUB_CONNECTED") {
+        const { connectionId: id, githubUser: user } = event.data;
+        if (id) {
+          window.sessionStorage.setItem(STORAGE_KEYS.GITHUB_CONNECTION_ID, id);
+          setConnectionId(id);
+          if (user) setGithubUser(user);
+          setSelectedRepository("");
+          setError(null);
+          toast.success(user?.login ? `Connected to GitHub as @${user.login}!` : "GitHub connected successfully!");
+        }
+      } else if (event.data?.type === "REVIEWX_GITHUB_ERROR") {
+        const msg = event.data.message || "GitHub authorization failed";
+        setError(msg);
+        toast.error(msg);
+      }
+    };
+    window.addEventListener("message", handleMsg);
+    return () => window.removeEventListener("message", handleMsg);
+  }, []);
 
   useEffect(() => {
     if (!connectionId) {
@@ -897,7 +887,7 @@ function GitHubIntegrationWorkspace() {
               </p>
             </div>
           </div>
-          <Button onClick={() => void startGithubConnect().catch((connectError) => {
+          <Button onClick={() => void openGithubConnectPopup().catch((connectError) => {
             const message = connectError instanceof Error ? connectError.message : "Unable to start GitHub authorization";
             setError(message);
           })}>
@@ -1024,7 +1014,7 @@ function Integrations() {
         </div>
       </div>
       {githubAllowed ? (
-        <Button onClick={() => void startGithubConnect().catch((error) => {
+        <Button onClick={() => void openGithubConnectPopup().catch((error) => {
           toast.error(error instanceof Error ? error.message : "Unable to start GitHub authorization");
         })}>
           <Github className="size-4" /> Connect GitHub
@@ -1268,8 +1258,112 @@ function NewReview() {
     performance: true,
   });
   const [error, setError] = useState<string | null>(null);
+  const [githubUser, setGithubUser] = useState<{ login?: string; avatarUrl?: string | null; name?: string | null } | null>(null);
+  const [isConnectingGithub, setIsConnectingGithub] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const githubRepository = githubRepositories.find((item) => `${item.owner ?? ""}/${item.name}` === selectedGithubRepository);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "REVIEWX_GITHUB_CONNECTED") {
+        const { connectionId, githubUser: user } = event.data;
+        if (connectionId) {
+          window.sessionStorage.setItem(STORAGE_KEYS.GITHUB_CONNECTION_ID, connectionId);
+          setGithubConnectionId(connectionId);
+          if (user) setGithubUser(user);
+          setSelectedGithubRepository("");
+          setSelectedGithubBranch("");
+          setError(null);
+          setIsConnectingGithub(false);
+          toast.success(user?.login ? `Connected to GitHub as @${user.login}!` : "GitHub connected successfully!");
+        }
+      } else if (event.data?.type === "REVIEWX_GITHUB_ERROR") {
+        setIsConnectingGithub(false);
+        const msg = event.data.message || "GitHub authorization failed";
+        setError(msg);
+        toast.error(msg);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+
+    const params = new URLSearchParams(window.location.search);
+    const connId = params.get("connectionId") || params.get("githubConnectionId");
+    const ghError = params.get("githubError");
+    if (ghError) {
+      setError(ghError);
+      toast.error(ghError);
+      params.delete("githubError");
+      const newQuery = params.toString();
+      const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "") + window.location.hash;
+      window.history.replaceState({}, "", newUrl);
+    } else if (connId) {
+      window.sessionStorage.setItem(STORAGE_KEYS.GITHUB_CONNECTION_ID, connId);
+      setGithubConnectionId(connId);
+      setSourceMode("github");
+      params.delete("connectionId");
+      params.delete("githubConnectionId");
+      const newQuery = params.toString();
+      const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "") + window.location.hash;
+      window.history.replaceState({}, "", newUrl);
+      toast.success("GitHub connected successfully!");
+    }
+
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
+  useEffect(() => {
+    if (!githubConnectionId) {
+      void getGithubStatus()
+        .then((res) => {
+          if (res?.connected && res.connectionId) {
+            window.sessionStorage.setItem(STORAGE_KEYS.GITHUB_CONNECTION_ID, res.connectionId);
+            setGithubConnectionId(res.connectionId);
+            if (res.githubUser) setGithubUser(res.githubUser);
+          }
+        })
+        .catch(() => {});
+      return;
+    }
+    void getGithubConnectionUser(githubConnectionId)
+      .then((res) => {
+        if (res?.githubUser) setGithubUser(res.githubUser);
+      })
+      .catch(() => {});
+  }, [githubConnectionId]);
+
+  const handleConnectGithub = async () => {
+    setIsConnectingGithub(true);
+    setError(null);
+    try {
+      const popup = await openGithubConnectPopup();
+      if (popup) {
+        const timer = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(timer);
+            setIsConnectingGithub(false);
+          }
+        }, 800);
+      }
+    } catch (connectError) {
+      setIsConnectingGithub(false);
+      const message = connectError instanceof Error ? connectError.message : "Unable to start GitHub authorization";
+      setError(message);
+      toast.error(message);
+    }
+  };
+
+  const handleDisconnectGithub = () => {
+    void disconnectGithubApi().catch(() => {});
+    window.sessionStorage.removeItem(STORAGE_KEYS.GITHUB_CONNECTION_ID);
+    setGithubConnectionId("");
+    setGithubUser(null);
+    setSelectedGithubRepository("");
+    setSelectedGithubBranch("");
+    setGithubRepositories([]);
+    setGithubBranches([]);
+    toast.info("Disconnected GitHub account");
+  };
 
   const importGithubConnection = () => {
     try {
@@ -1529,50 +1623,93 @@ function NewReview() {
           {sourceMode === "github" ? (
             <div className="space-y-4 p-4">
               {!githubConnectionId ? (
-                <div className="space-y-3 rounded border border-border p-4">
-                  <p className="text-xs text-muted-foreground">Authorize GitHub, then paste the callback response to load your repositories.</p>
+                <div className="flex flex-col items-center justify-center space-y-4 rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
+                  <div className="grid size-12 place-items-center rounded-full bg-primary/10 text-primary">
+                    <Github className="size-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-semibold">Connect your GitHub account</h4>
+                    <p className="max-w-md text-xs text-muted-foreground">
+                      Authorize ReviewX to access your repositories so you can review code, pull requests, and branches directly.
+                    </p>
+                  </div>
                   <Button
-                    onClick={() => void startGithubConnect().catch((connectError) => {
-                      const message = connectError instanceof Error ? connectError.message : "Unable to start GitHub authorization";
-                      setError(message);
-                    })}
+                    onClick={() => void handleConnectGithub()}
+                    disabled={isConnectingGithub}
+                    className="gap-2"
                   >
-                    <Github className="size-4" /> Connect GitHub
+                    {isConnectingGithub ? <LoaderCircle className="size-4 animate-spin" /> : <Github className="size-4" />}
+                    {isConnectingGithub ? "Opening GitHub..." : "Connect GitHub"}
                   </Button>
-                  <textarea value={githubCallbackResponse} onChange={(event) => setGithubCallbackResponse(event.target.value)} placeholder="Paste GitHub callback response" aria-label="GitHub callback response" className="min-h-20 w-full rounded-md border border-input bg-background p-3 font-mono text-xs" />
-                  <Button variant="outline" onClick={importGithubConnection} disabled={!githubCallbackResponse.trim()}>Use connection</Button>
                 </div>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="space-y-1 text-xs">
-                    <span className="text-muted-foreground">Repository</span>
-                    <select
-                      aria-label="GitHub repository for review"
-                      value={selectedGithubRepository}
-                      onChange={(event) => setSelectedGithubRepository(event.target.value)}
-                      className="h-9 w-full rounded-md border border-input bg-background px-3"
-                    >
-                      <option value="">Choose a repository</option>
-                      {githubRepositories.map((item) => (
-                        <option key={item.id ?? `${item.owner}/${item.name}`} value={`${item.owner ?? ""}/${item.name}`}>
-                          {item.fullName ?? `${item.owner}/${item.name}`}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="space-y-1 text-xs">
-                    <span className="text-muted-foreground">Branch</span>
-                    <select
-                      aria-label="GitHub branch for review"
-                      value={selectedGithubBranch}
-                      onChange={(event) => setSelectedGithubBranch(event.target.value)}
-                      disabled={!githubBranches.length}
-                      className="h-9 w-full rounded-md border border-input bg-background px-3"
-                    >
-                      <option value="">Use default branch</option>
-                      {githubBranches.map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}
-                    </select>
-                  </label>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {githubUser?.avatarUrl ? (
+                        <img src={githubUser.avatarUrl} alt="" className="size-7 rounded-full border border-border" />
+                      ) : (
+                        <div className="grid size-7 place-items-center rounded-full bg-primary/10 text-primary">
+                          <Github className="size-4" />
+                        </div>
+                      )}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold">
+                            {githubUser?.name || "Connected to GitHub"}
+                          </span>
+                          {githubUser?.login && (
+                            <span className="font-mono text-[11px] text-muted-foreground">
+                              @{githubUser.login}
+                            </span>
+                          )}
+                          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-500">
+                            Connected
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {githubRepositories.length > 0
+                            ? `${githubRepositories.length} repositories loaded`
+                            : "Loading repositories..."}
+                        </p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={handleDisconnectGithub} className="text-xs text-muted-foreground hover:text-foreground">
+                      Disconnect
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1 text-xs">
+                      <span className="text-muted-foreground">Repository</span>
+                      <select
+                        aria-label="GitHub repository for review"
+                        value={selectedGithubRepository}
+                        onChange={(event) => setSelectedGithubRepository(event.target.value)}
+                        className="h-9 w-full rounded-md border border-input bg-background px-3"
+                      >
+                        <option value="">Choose a repository</option>
+                        {githubRepositories.map((item) => (
+                          <option key={item.id ?? `${item.owner}/${item.name}`} value={`${item.owner ?? ""}/${item.name}`}>
+                            {item.fullName ?? `${item.owner}/${item.name}`} {item.private ? "🔒" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-xs">
+                      <span className="text-muted-foreground">Branch</span>
+                      <select
+                        aria-label="GitHub branch for review"
+                        value={selectedGithubBranch}
+                        onChange={(event) => setSelectedGithubBranch(event.target.value)}
+                        disabled={!githubBranches.length}
+                        className="h-9 w-full rounded-md border border-input bg-background px-3"
+                      >
+                        <option value="">Use default branch</option>
+                        {githubBranches.map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}
+                      </select>
+                    </label>
+                  </div>
                 </div>
               )}
               <div className="flex justify-end border-t border-border pt-3">
@@ -2431,7 +2568,11 @@ function Dashboard() {
   const { setView, setSelectedFinding, setActiveReview, userName } = useReviewStore();
   const user = useAuthStore((s) => s.user);
   const metricsQuery = useDashboardMetricsQuery(user?.id);
+  const subscriptionQuery = useSubscriptionQuery(user?.id);
   const { data: metricsData } = metricsQuery;
+
+  const currentPlan = subscriptionQuery.data?.plan ?? "free";
+  const planMeta = PLAN_LIMITS[currentPlan] ?? PLAN_LIMITS.free;
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -2488,6 +2629,46 @@ function Dashboard() {
           <Button variant="outline" size="sm" onClick={() => void metricsQuery.refetch()}>Retry</Button>
         </div>
       )}
+
+      {/* ── Subscription Plan & Quota Overview ── */}
+      <div className="panel mb-6 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="grid size-9 shrink-0 place-items-center rounded bg-primary/10 text-primary">
+              <CreditCard className="size-4.5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-foreground">{planMeta.name} Plan</span>
+                <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-primary">
+                  {subscriptionQuery.data?.status ?? "active"}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {(subscriptionQuery.data?.monthlyReviews ?? planMeta.monthlyReviews).toLocaleString()} monthly reviews · {(subscriptionQuery.data?.aiAssistedReviews ?? planMeta.aiAssistedReviews).toLocaleString()} AI reviews · {(subscriptionQuery.data?.linesPerReview ?? planMeta.linesPerReview).toLocaleString()} lines/review
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right text-[11px] sm:block">
+              <span className="text-muted-foreground">AI Quota: </span>
+              <span className="font-mono font-medium text-primary">
+                {(subscriptionQuery.data?.aiAssistedReviews ?? planMeta.aiAssistedReviews).toLocaleString()} reviews
+              </span>
+            </div>
+            {currentPlan !== "enterprise" ? (
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => setView("billing")}>
+                <Sparkles className="size-3.5 text-primary" /> Upgrade plan
+              </Button>
+            ) : (
+              <Button size="sm" variant="ghost" className="text-xs" onClick={() => setView("billing")}>
+                Manage plan
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* ── KPI Grid ── */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -2899,9 +3080,13 @@ function CompanyDashboard() {
   const { setView, setActiveReview } = useReviewStore();
   const user = useAuthStore((s) => s.user);
   const metricsQuery = useDashboardMetricsQuery(user?.id);
+  const subscriptionQuery = useSubscriptionQuery(user?.id);
   const { data: metricsData } = metricsQuery;
   const { data: rules = [] } = useCompanyRulesQuery();
   const { data: members = [], isLoading: membersLoading } = useCompanyMembersQuery(user?.id);
+
+  const currentPlan = subscriptionQuery.data?.plan ?? "team";
+  const planMeta = PLAN_LIMITS[currentPlan] ?? PLAN_LIMITS.team;
 
   const teamAvg = metricsData?.averageScore ?? 0;
   const teamReviews = metricsData?.totalReviews ?? 0;
@@ -2947,6 +3132,37 @@ function CompanyDashboard() {
           <Button variant="outline" size="sm" onClick={() => void metricsQuery.refetch()}>Retry</Button>
         </div>
       )}
+
+      {/* ── Organization Subscription & Capacity ── */}
+      <div className="panel mb-6 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="grid size-9 shrink-0 place-items-center rounded bg-primary/10 text-primary">
+              <CreditCard className="size-4.5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-foreground">{planMeta.name} Plan</span>
+                <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-primary">
+                  {subscriptionQuery.data?.status ?? "active"}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  ({members.length} / {subscriptionQuery.data?.seats ?? planMeta.seats} seats occupied)
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {(subscriptionQuery.data?.monthlyReviews ?? planMeta.monthlyReviews).toLocaleString()} monthly reviews capacity · {(subscriptionQuery.data?.aiAssistedReviews ?? planMeta.aiAssistedReviews).toLocaleString()} AI reviews · {(subscriptionQuery.data?.linesPerReview ?? planMeta.linesPerReview).toLocaleString()} lines/review
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="text-xs" onClick={() => setView("billing")}>
+              <Sparkles className="size-3.5 text-primary" /> Manage billing & upgrades
+            </Button>
+          </div>
+        </div>
+      </div>
 
       {/* ── KPI cards ── */}
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -3447,30 +3663,7 @@ function CompaniesView() {
 }
 
 function PaymentsView() {
-  const { data: statsData } = useAdminStatsQuery();
-  const totalUsers = statsData?.kpis?.totalUsers ?? 0;
-
-  return (
-    <>
-      <PageHeading
-        title="Billing & Subscriptions"
-        subtitle="Gateway status, subscription tiers, and developer licensing."
-      />
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Active accounts" value={totalUsers.toString()} delta="all tenants" icon={Users} />
-        <Stat label="Payment gateway" value="Chapa" delta="Test mode" icon={CreditCard} />
-        <Stat label="Billing frequency" value="Monthly" delta="ETB / USD" icon={CircleDollarSign} />
-        <Stat label="Gateway status" value="Active" delta="Webhooks enabled" icon={CheckCircle2} />
-      </div>
-      <div className="panel p-12 text-center">
-        <CreditCard className="mx-auto size-10 text-muted-foreground/40 mb-3" />
-        <h3 className="text-sm font-semibold text-foreground">No billing transactions recorded yet</h3>
-        <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
-          The Chapa payment gateway integration is configured in development mode. As users upgrade from the Free tier to Pro or Enterprise plans, verified checkout sessions and invoices will be listed here.
-        </p>
-      </div>
-    </>
-  );
+  return <PlatformBillingHub />;
 }
 
 function HistoryView() {
@@ -3999,27 +4192,40 @@ function RuleModal({
   );
 }
 function InviteMemberModal({ onClose }: { onClose: () => void }) {
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("member");
+  const [created, setCreated] = useState<{ inviteUrl: string; emailSent: boolean; emailError?: string | null } | null>(null);
+  const [copied, setCopied] = useState(false);
   const inviteMutation = useInviteCompanyMemberMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim()) {
-      toast.error("Please enter a name and email.");
+    if (!email.trim()) {
+      toast.error("Please enter an email address.");
       return;
     }
     try {
-      await inviteMutation.mutateAsync({
-        name: name.trim(),
-        email: email.trim(),
-        role,
-      });
-      toast.success(`Invited ${name.trim()} successfully!`);
-      onClose();
+      const result = await inviteMutation.mutateAsync({ email: email.trim() });
+      setCreated({ inviteUrl: result.inviteUrl, emailSent: result.emailSent, emailError: result.emailError });
+      if (result.emailSent) {
+        toast.success(`Invitation sent to ${email.trim()}!`);
+      } else {
+        toast.message("Invitation created", {
+          description: "Email delivery could not be sent. Copy the invite link below to share it manually.",
+        });
+      }
     } catch (err: any) {
-      toast.error(err.message || "Failed to invite member");
+      toast.error(err.message || "Failed to create invitation");
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!created) return;
+    try {
+      await navigator.clipboard.writeText(created.inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy — select the link and copy manually.");
     }
   };
 
@@ -4032,48 +4238,61 @@ function InviteMemberModal({ onClose }: { onClose: () => void }) {
             <X className="size-4" />
           </Button>
         </div>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label className="text-xs font-medium text-foreground">Full name</label>
-            <Input
-              required
-              placeholder="e.g. Alex Morgan"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1"
-            />
+
+        {created ? (
+          <div className="mt-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {created.emailSent
+                ? "An invitation email is on its way. You can also share this link directly:"
+                : "Email delivery was not sent directly. Share this link with your teammate:"}
+            </p>
+            {created.emailError && !created.emailSent && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-500">
+                <span className="font-semibold">Delivery notice:</span> {created.emailError.includes("Resend API error 403") ? "Resend test domain only allows sending to the account owner. Verify a custom domain on Resend to send to external inboxes." : created.emailError}
+              </div>
+            )}
+            <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+              <code className="min-w-0 flex-1 truncate text-xs text-foreground">{created.inviteUrl}</code>
+              <Button variant="outline" size="sm" type="button" onClick={handleCopy}>
+                {copied ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The link expires in 7 days and can only be used once.
+            </p>
+            <div className="flex justify-end gap-2 border-t border-border pt-3">
+              <Button type="button" onClick={onClose}>
+                Done
+              </Button>
+            </div>
           </div>
-          <div>
-            <label className="text-xs font-medium text-foreground">Email address</label>
-            <Input
-              required
-              type="email"
-              placeholder="e.g. alex@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-foreground">Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="mt-1 w-full rounded border border-border bg-background px-3 py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="member">Member (can submit reviews and view team dashboard)</option>
-              <option value="company_admin">Company admin (can manage team and rules)</option>
-            </select>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" type="button" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={inviteMutation.isPending}>
-              {inviteMutation.isPending ? "Inviting..." : "Send invite"}
-            </Button>
-          </div>
-        </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+            <div>
+              <label className="text-xs font-medium text-foreground">Email address</label>
+              <Input
+                required
+                type="email"
+                placeholder="e.g. alex@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              They'll receive an email with a private link to join as a member. If they already
+              have a ReviewX account, they'll just sign in and accept.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" type="button" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={inviteMutation.isPending}>
+                {inviteMutation.isPending ? "Sending..." : "Send invite"}
+              </Button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -4081,9 +4300,15 @@ function InviteMemberModal({ onClose }: { onClose: () => void }) {
 
 function Company() {
   const user = useAuthStore((s) => s.user);
+  const role = useReviewStore((s) => s.role);
+  const isCompanyAdmin = role === "company" || user?.role === "company_admin";
   const { data: members = [], isLoading: membersLoading } = useCompanyMembersQuery(user?.id);
   const { data: metricsData } = useDashboardMetricsQuery(user?.id);
+  const { data: invitations = [], isLoading: invitationsLoading } = useInvitationsQuery(isCompanyAdmin);
+  const revokeMutation = useRevokeInvitationMutation();
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+
+  const pendingInvitations = invitations.filter((inv) => inv.status === "pending");
 
   return (
     <>
@@ -4121,7 +4346,14 @@ function Company() {
                 <p className="text-xs font-medium">{m.name}</p>
                 <p className="text-[10px] text-muted-foreground">{m.email}</p>
               </div>
-              <span className="rounded border border-border px-2 py-1 text-[10px]">
+              <span className={cn(
+                "rounded border px-2 py-0.5 font-mono text-[10px] font-medium",
+                m.role === "Owner"
+                  ? "border-purple-500/30 bg-purple-500/10 text-purple-400"
+                  : m.role === "Admin"
+                  ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+                  : "border-border text-muted-foreground"
+              )}>
                 {m.role}
               </span>
               <span className="status-dot">Active</span>
@@ -4130,26 +4362,173 @@ function Company() {
         )}
       </section>
 
+      {isCompanyAdmin && (
+        <section className="panel mt-4 overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border p-4 text-sm font-semibold">
+            <span>Pending invitations ({pendingInvitations.length})</span>
+            {invitationsLoading && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+          </div>
+          {pendingInvitations.length === 0 ? (
+            <div className="p-6 text-center text-xs text-muted-foreground">
+              No pending invitations.
+            </div>
+          ) : (
+            pendingInvitations.map((inv) => (
+              <div className="flex items-center gap-3 border-b border-border p-4 last:border-0" key={inv.id}>
+                <div className="flex-1">
+                  <p className="text-xs font-medium">{inv.email}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Invited {new Date(inv.createdAt).toLocaleDateString()} · Expires {new Date(inv.expiresAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-500">
+                  Pending
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={revokeMutation.isPending}
+                  onClick={async () => {
+                    try {
+                      await revokeMutation.mutateAsync(inv.id);
+                      toast.success(`Revoked invitation for ${inv.email}`);
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to revoke invitation");
+                    }
+                  }}
+                  className="text-xs text-destructive hover:bg-destructive/10"
+                >
+                  Revoke
+                </Button>
+              </div>
+            ))
+          )}
+        </section>
+      )}
+
       {inviteModalOpen && (
         <InviteMemberModal onClose={() => setInviteModalOpen(false)} />
       )}
     </>
   );
 }
+// ── Upgrade-request helper components (used inside Billing) ──────────────────
+
+function RequestUpgradeButtonInline({
+  pendingRequest,
+}: {
+  pendingRequest?: { exists: boolean; createdAt?: string } | null;
+}) {
+  const mutation = useUpgradeRequestMutation();
+  const isPending = pendingRequest?.exists === true;
+  return (
+    <div className="space-y-1.5">
+      <Button
+        variant="outline"
+        className="w-full"
+        disabled={isPending || mutation.isPending}
+        onClick={() => mutation.mutate({ message: "" })}
+      >
+        {isPending
+          ? "Request sent ✓"
+          : mutation.isPending
+          ? "Sending…"
+          : "Request upgrade"}
+      </Button>
+      {isPending && (
+        <p className="text-center text-[10px] text-muted-foreground">
+          A request is already pending. The owner has been notified.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function UpgradeRequestsList() {
+  const requestsQuery = useUpgradeRequestsQuery();
+  const acknowledgeMutation = useAcknowledgeUpgradeRequestMutation();
+  const [expanded, setExpanded] = React.useState(false);
+
+  const requests = requestsQuery.data ?? [];
+  if (requests.length === 0) return null;
+
+  return (
+    <section className="panel mb-6 p-5">
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="flex w-full items-center justify-between text-sm font-semibold text-foreground"
+      >
+        <span className="flex items-center gap-2">
+          <span className="inline-flex size-5 items-center justify-center rounded-full bg-amber-500/20 font-mono text-[10px] font-bold text-amber-400">
+            {requests.length}
+          </span>
+          Pending upgrade requests
+        </span>
+        <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+      </button>
+
+      {expanded && (
+        <ul className="mt-3 space-y-2 border-t border-border pt-3">
+          {requests.map((req) => {
+            const requester =
+              typeof req.requesterId === "object" && req.requesterId !== null
+                ? req.requesterId
+                : null;
+            return (
+              <li
+                key={req._id}
+                className="flex items-start justify-between gap-3 rounded border border-border bg-surface-raised p-3 text-xs"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground">
+                    {requester?.name ?? "Team member"}
+                    <span className="ml-1 text-muted-foreground">{requester?.email ? `<${requester.email}>` : ""}</span>
+                  </p>
+                  {req.message && (
+                    <p className="mt-0.5 text-muted-foreground">{req.message}</p>
+                  )}
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {new Date(req.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 h-6 text-[10px]"
+                  disabled={acknowledgeMutation.isPending}
+                  onClick={() => acknowledgeMutation.mutate(req._id)}
+                >
+                  Acknowledge
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function Billing() {
   const user = useAuthStore((state) => state.user);
-  const role = useReviewStore((state) => state.role);
+  // isOwner is computed server-side and checked via activeWorkspace / user metadata
+  const isOwner =
+    user?.isOwner === true ||
+    user?.activeWorkspace?.role === "owner" ||
+    user?.companyRole === "owner" ||
+    (user?.activeWorkspace?.type === "personal" && user?.role !== "platform_admin");
   const setApiResponse = useReviewStore((state) => state.setApiResponse);
   const subscription = useSubscriptionQuery(user?.id);
-  const [pendingPlan, setPendingPlan] = useState<"pro" | "enterprise" | null>(null);
+  const [pendingPlan, setPendingPlan] = useState<"pro" | "team" | "enterprise" | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const currentPlan = subscription.data?.plan ?? "free";
-  const planRank: Record<SubscriptionTier, number> = { free: 0, pro: 1, enterprise: 2 };
+  const planRank: Record<SubscriptionTier, number> = { free: 0, pro: 1, team: 2, enterprise: 3 };
 
-  const startCheckout = async (plan: "pro" | "enterprise") => {
+  const startCheckout = async (plan: "pro" | "team" | "enterprise") => {
     setPendingPlan(plan);
     setPaymentError(null);
-    const endpoint = plan === "pro" ? "/payment/pro/initiate" : "/payment/enterprise/initiate";
+    const endpoint = `/payment/${plan}/initiate`;
     try {
       const payment = await initiateSubscriptionPayment(plan);
       setApiResponse(`POST ${endpoint}`, {
@@ -4169,14 +4548,28 @@ function Billing() {
     }
   };
 
+  const currentPlanMeta = PLAN_LIMITS[currentPlan] ?? PLAN_LIMITS.free;
+
   return (
     <>
       <PageHeading
-        title={role === "member" ? "Upgrade your plan" : "Plans & billing"}
-        subtitle={role === "member"
-          ? "Choose a subscription upgrade and complete payment securely with Chapa."
-          : "Subscription details retrieved from your ReviewX account."}
+        title="Plans & Billing"
+        subtitle="Manage your subscription tier, resource quotas, and Chapa payment checkout."
       />
+
+      {/* Owner: show pending upgrade requests from team members */}
+      {isOwner && <UpgradeRequestsList />}
+
+      {/* Admin/member: read-only notice */}
+      {!isOwner && (
+        <div className="mb-4 flex items-center gap-2 rounded border border-border bg-surface-raised px-3 py-2 text-xs text-muted-foreground">
+          <CreditCard className="size-4 shrink-0 text-muted-foreground" />
+          <span>
+            You are viewing billing in read-only mode. Contact the workspace owner to change the plan or cancel.
+          </span>
+        </div>
+      )}
+
       {paymentError && (
         <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
           <span>{paymentError}</span>
@@ -4185,7 +4578,9 @@ function Billing() {
           </button>
         </div>
       )}
-      <section className="panel max-w-2xl p-5">
+
+      {/* ── Current Active Plan & Quotas ── */}
+      <section className="panel mb-6 p-5">
         {subscription.isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <LoaderCircle className="size-4 animate-spin" /> Loading subscription…
@@ -4198,33 +4593,83 @@ function Billing() {
           </div>
         ) : subscription.data ? (
           <>
-            <div className="flex items-center gap-3">
-              <CreditCard className="size-5 text-primary" />
-              <div>
-                <p className="text-xs text-muted-foreground">Current plan</p>
-                <h2 className="text-lg font-semibold capitalize">{subscription.data.plan}</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="grid size-10 place-items-center rounded bg-primary/10 text-primary">
+                  <CreditCard className="size-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold capitalize text-foreground">{currentPlanMeta.name} Plan</h2>
+                    <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] capitalize text-primary">
+                      {subscription.data.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{currentPlanMeta.description}</p>
+                </div>
               </div>
-              <span className="ml-auto rounded border border-border px-2 py-1 text-xs capitalize">
-                {subscription.data.status}
-              </span>
+              <div className="text-right">
+                <span className="font-mono text-xl font-bold text-foreground">
+                  {currentPlanMeta.price === 0 ? "Free" : `${currentPlanMeta.price.toLocaleString()} ETB`}
+                </span>
+                {currentPlanMeta.price > 0 && <span className="text-xs text-muted-foreground"> / month</span>}
+              </div>
             </div>
-            <dl className="mt-5 grid gap-3 border-t border-border pt-4 text-xs sm:grid-cols-2">
+
+            {/* Quota Specs Grid */}
+            <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+              <div className="rounded border border-border/60 bg-surface-raised p-2.5">
+                <span className="text-[10px] text-muted-foreground">Monthly Reviews</span>
+                <p className="mt-1 font-mono text-sm font-semibold text-foreground">
+                  {(subscription.data.monthlyReviews ?? currentPlanMeta.monthlyReviews).toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded border border-border/60 bg-surface-raised p-2.5">
+                <span className="text-[10px] text-muted-foreground">AI Quota</span>
+                <p className="mt-1 font-mono text-sm font-semibold text-primary">
+                  {(subscription.data.aiAssistedReviews ?? currentPlanMeta.aiAssistedReviews).toLocaleString()} reviews
+                </p>
+              </div>
+              <div className="rounded border border-border/60 bg-surface-raised p-2.5">
+                <span className="text-[10px] text-muted-foreground">Max Lines / Review</span>
+                <p className="mt-1 font-mono text-sm font-semibold text-foreground">
+                  {(subscription.data.linesPerReview ?? currentPlanMeta.linesPerReview).toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded border border-border/60 bg-surface-raised p-2.5">
+                <span className="text-[10px] text-muted-foreground">Max Files / Review</span>
+                <p className="mt-1 font-mono text-sm font-semibold text-foreground">
+                  {(subscription.data.filesPerReview ?? currentPlanMeta.filesPerReview).toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded border border-border/60 bg-surface-raised p-2.5">
+                <span className="text-[10px] text-muted-foreground">History Retention</span>
+                <p className="mt-1 font-mono text-sm font-semibold text-foreground">
+                  {subscription.data.historyRetentionDays ?? currentPlanMeta.historyRetentionDays} days
+                </p>
+              </div>
+              <div className="rounded border border-border/60 bg-surface-raised p-2.5">
+                <span className="text-[10px] text-muted-foreground">Team Seats</span>
+                <p className="mt-1 font-mono text-sm font-semibold text-foreground">
+                  {subscription.data.seats ?? currentPlanMeta.seats}
+                </p>
+              </div>
+            </div>
+
+            <dl className="mt-4 flex flex-wrap items-center gap-6 text-[11px] text-muted-foreground">
               <div>
-                <dt className="text-muted-foreground">Started</dt>
-                <dd className="mt-1">{new Date(subscription.data.startedAt).toLocaleString()}</dd>
+                <span>Activated: </span>
+                <strong className="text-foreground">{new Date(subscription.data.startedAt).toLocaleDateString()}</strong>
               </div>
               <div>
-                <dt className="text-muted-foreground">Expires</dt>
-                <dd className="mt-1">
+                <span>Renews / Expires: </span>
+                <strong className="text-foreground">
                   {subscription.data.expiresAt
-                    ? new Date(subscription.data.expiresAt).toLocaleString()
+                    ? new Date(subscription.data.expiresAt).toLocaleDateString()
                     : "No expiration date"}
-                </dd>
+                </strong>
               </div>
             </dl>
-            <p className="mt-4 text-xs text-muted-foreground">
-              Plan changes are managed by the subscription service. This workspace only displays the plan currently assigned to your account.
-            </p>
           </>
         ) : (
           <p className="text-sm text-muted-foreground">No subscription details were returned for this account.</p>
@@ -4235,58 +4680,120 @@ function Billing() {
           </Button>
         )}
       </section>
-      {role === "member" && !subscription.isLoading && !subscription.isError && subscription.data && (
-        <section className="mt-5 space-y-4">
+
+      {/* ── Available Upgrade Tiers ── */}
+      {!subscription.isLoading && !subscription.isError && subscription.data && (
+        <section className="space-y-4">
           <div>
-            <h2 className="text-sm font-semibold">Available upgrades</h2>
+            <h2 className="text-sm font-semibold text-foreground">Available Subscription Plans</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Plan pricing and currency are supplied by the backend at checkout. Your subscription changes only after Chapa confirms payment.
+              Upgrade instantly with Chapa secure gateway. Your subscription updates immediately upon transaction verification.
             </p>
           </div>
-          {planRank[currentPlan] === planRank.enterprise ? (
-            <div className="panel flex items-start gap-3 p-5">
-              <CheckCircle2 className="mt-0.5 size-5 text-success" />
-              <div>
-                <h3 className="text-sm font-semibold">You’re on the highest available plan</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Your Enterprise subscription is active. No further upgrade is available.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {([
-                {
-                  plan: "pro",
-                  title: "Pro",
-                  description: "For individual developers who need expanded review capabilities.",
-                  features: ["Higher review limits", "AI-assisted analysis", "Archive uploads"],
-                },
-                {
-                  plan: "enterprise",
-                  title: "Enterprise",
-                  description: "For teams using GitHub integration and advanced workspace features.",
-                  features: ["Enterprise review capacity", "GitHub integration", "Scheduled reviews"],
-                },
-              ] as const)
-                .filter(({ plan }) => planRank[plan] > planRank[currentPlan])
-                .map(({ plan, title, description, features }) => (
-                  <article key={plan} className="panel flex flex-col p-5">
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {([
+              {
+                plan: "pro",
+                title: "Pro",
+                price: "500 ETB / mo",
+                badge: "Popular",
+                description: "For active developers shipping multiple changes each week.",
+                features: [
+                  "500 reviews / month",
+                  "20 AI-assisted reviews",
+                  "5,000 lines / 100 files per review",
+                  "90-day history retention",
+                  "10 team seats",
+                  "ZIP Archive uploads",
+                  "Interactive HTML reports",
+                ],
+              },
+              {
+                plan: "team",
+                title: "Team",
+                price: "2,000 ETB / mo",
+                badge: "Collaboration",
+                description: "For growing teams collaborating with company rules & GitHub sync.",
+                features: [
+                  "5,000 reviews / month",
+                  "100 AI-assisted reviews",
+                  "10,000 lines / 200 files per review",
+                  "180-day history retention",
+                  "GitHub repository integration",
+                  "Custom company rules & enforcement",
+                  "Scheduled automated scans",
+                ],
+              },
+              {
+                plan: "enterprise",
+                title: "Enterprise",
+                price: "5,000 ETB / mo",
+                badge: "Maximum scale",
+                description: "For engineering organisations requiring peak volume and audit controls.",
+                features: [
+                  "100,000 reviews / month",
+                  "500 AI-assisted reviews",
+                  "50,000 lines / 500 files per review",
+                  "365-day history retention",
+                  "Up to 100 team seats",
+                  "Dedicated audit policies",
+                  "Full cross-tenant access",
+                ],
+              },
+            ] as const).map(({ plan, title, price, badge, description, features }) => {
+              const isCurrent = currentPlan === plan;
+              const isLower = planRank[plan] < planRank[currentPlan];
+              const isHigher = planRank[plan] > planRank[currentPlan];
+
+              return (
+                <article
+                  key={plan}
+                  className={cn(
+                    "panel flex flex-col p-5 transition-all",
+                    isCurrent && "border-primary/50 bg-primary/[0.03]",
+                  )}
+                >
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <CircleDollarSign className="size-5 text-primary" />
-                      <h3 className="text-sm font-semibold">{title}</h3>
-                      {plan === "pro" && <span className="ml-auto rounded border border-border px-2 py-0.5 text-[9px] uppercase text-muted-foreground">Popular</span>}
+                      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
                     </div>
-                    <p className="mt-3 min-h-10 text-xs leading-5 text-muted-foreground">{description}</p>
-                    <ul className="my-4 flex-1 space-y-2">
-                      {features.map((feature) => (
-                        <li key={feature} className="flex items-center gap-2 text-xs">
-                          <Check className="size-3.5 text-success" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
+                    {isCurrent ? (
+                      <span className="rounded bg-primary/20 px-2 py-0.5 text-[9px] font-semibold uppercase text-primary">
+                        Current Plan
+                      </span>
+                    ) : (
+                      <span className="rounded border border-border px-2 py-0.5 text-[9px] uppercase text-muted-foreground">
+                        {badge}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-3">
+                    <span className="font-mono text-xl font-bold text-foreground">{price}</span>
+                  </div>
+                  <p className="mt-2 min-h-10 text-xs leading-5 text-muted-foreground">{description}</p>
+                  <ul className="my-4 flex-1 space-y-2 border-t border-border pt-3">
+                    {features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-2 text-xs text-foreground/90">
+                        <Check className="size-3.5 shrink-0 text-success" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {isCurrent ? (
+                    <Button variant="outline" className="w-full" disabled>
+                      <CheckCircle2 className="size-4 text-success" /> Active Plan
+                    </Button>
+                  ) : isLower ? (
+                    <Button variant="outline" className="w-full" disabled>
+                      Included in current tier
+                    </Button>
+                  ) : isOwner ? (
                     <Button
                       className="w-full"
-                      disabled={pendingPlan !== null || currentPlan === plan}
+                      disabled={pendingPlan !== null}
                       onClick={() => void startCheckout(plan)}
                     >
                       {pendingPlan === plan ? (
@@ -4299,14 +4806,19 @@ function Billing() {
                         </>
                       )}
                     </Button>
-                  </article>
-                ))}
-            </div>
-          )}
+                  ) : (
+                    // Non-owner (admin / member) — request upgrade via owner
+                    <RequestUpgradeButtonInline pendingRequest={subscription.data?.pendingRequest ?? null} />
+                  )}
+                </article>
+              );
+            })}
+          </div>
+
           <div className="flex items-start gap-2 rounded border border-border bg-surface-raised p-3 text-[11px] leading-5 text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
             <p>
-              Checkout is handled by Chapa. The backend verifies the payment before changing your subscription; closing or returning from checkout does not itself mark a payment successful.
+              Payments are processed securely via the Chapa payment gateway. ReviewX verifies each transaction with cryptographic webhook signatures before upgrading your account.
             </p>
           </div>
         </section>
@@ -4363,7 +4875,57 @@ function Profile() {
           </div>
         </div>
       </div>
+      {/* ── Sessions / Security (platform_admin only) ── */}
+      {role === "platform" && (
+        <div className="panel max-w-4xl p-5 mt-0">
+          <h2 className="mb-4 text-sm font-semibold">Sessions &amp; Security</h2>
+          <div className="space-y-3">
+            <div className="rounded border border-border p-3 text-xs">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium text-foreground">Current Session</div>
+                  <div className="mt-0.5 text-muted-foreground">Active — this browser session</div>
+                </div>
+                <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">Active</span>
+              </div>
+            </div>
+            <RevokeSessionsButton />
+            <div className="rounded border border-dashed border-border p-3 text-[11px] text-muted-foreground">
+              Multi-factor authentication (MFA/TOTP) coming in a future release.
+            </div>
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+function RevokeSessionsButton() {
+  const revokeMutation = useRevokeOtherSessionsMutation();
+  const { setAuth } = useAuthStore();
+
+  const handleRevoke = () => {
+    revokeMutation.mutate(undefined, {
+      onSuccess: (data) => {
+        if (data.token && data.user) {
+          setAuth(data.user, data.token);
+        }
+        toast.success("All other sessions have been revoked. A fresh token has been issued.");
+      },
+      onError: () => toast.error("Failed to revoke sessions"),
+    });
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleRevoke}
+      disabled={revokeMutation.isPending}
+      className="flex w-full items-center gap-2 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+    >
+      <ShieldAlert className="size-3.5 shrink-0" />
+      {revokeMutation.isPending ? "Revoking…" : "Sign out all other sessions"}
+    </button>
   );
 }
 function Field({ label, value }: { label: string; value: string }) {
@@ -4644,5 +5206,2404 @@ function Admin() {
         </section>
       </div>
     </>
+  );
+}
+
+function CrossReviewFindingsView() {
+  const user = useAuthStore((s) => s.user);
+  const { setView, setSelectedFinding } = useReviewStore();
+  const metricsQuery = useDashboardMetricsQuery(user?.id);
+
+  const [severityFilter, setSeverityFilter] = useState<string>("All");
+  const [categoryFilter, setCategoryFilter] = useState<string>("All");
+  const [search, setSearch] = useState<string>("");
+
+  const rawFindings = metricsQuery.data?.openFindings ?? [];
+
+  const filteredFindings = useMemo(() => {
+    return rawFindings.filter((f) => {
+      if (severityFilter !== "All" && f.severity?.toLowerCase() !== severityFilter.toLowerCase()) {
+        return false;
+      }
+      if (categoryFilter !== "All" && f.category?.toLowerCase() !== categoryFilter.toLowerCase()) {
+        return false;
+      }
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const matchTitle = f.title?.toLowerCase().includes(q);
+        const matchFile = f.file?.toLowerCase().includes(q);
+        if (!matchTitle && !matchFile) return false;
+      }
+      return true;
+    });
+  }, [rawFindings, severityFilter, categoryFilter, search]);
+
+  return (
+    <>
+      <PageHeading
+        title="Cross-Review Findings"
+        subtitle="Consolidated analysis of security, bugs, quality, and performance findings across all company reviews."
+      />
+
+      <div className="panel mb-4 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-50">
+            <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search findings by title or file…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 text-xs"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Filter className="size-3" /> Severity:
+            </span>
+            <Select value={severityFilter} onValueChange={setSeverityFilter}>
+              <SelectTrigger className="w-28 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {["All", "Critical", "High", "Medium", "Low"].map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Category:</span>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-32 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {["All", "Security", "Bug", "Quality", "Performance"].map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      <section className="panel overflow-hidden">
+        <div className="border-b border-border p-4 flex items-center justify-between">
+          <span className="text-sm font-semibold">Findings ({filteredFindings.length})</span>
+          {metricsQuery.isLoading && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+        </div>
+
+        {filteredFindings.length === 0 ? (
+          <div className="p-12 text-center text-xs text-muted-foreground">
+            <ShieldCheck className="mx-auto size-8 text-emerald-500 mb-2" />
+            <p className="font-medium text-foreground">No matching findings found</p>
+            <p className="mt-1">All code reviews have passed with no open findings for this filter.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {filteredFindings.map((f, i) => (
+              <div key={f.id || i} className="p-4 flex items-start gap-3 hover:bg-accent/30 transition-colors">
+                <SeverityBadge severity={(f.severity as Severity) || "medium"} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium text-foreground truncate">{f.title}</p>
+                    {f.category && (
+                      <span className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground uppercase font-mono">
+                        {f.category}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] font-mono text-muted-foreground mt-1">
+                    {f.file}
+                  </p>
+                </div>
+                {f.id && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => {
+                      setSelectedFinding(f.id);
+                      setView("finding");
+                    }}
+                  >
+                    Inspect
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+function ReportsView() {
+  const user = useAuthStore((s) => s.user);
+  const reviewsQuery = useReviewsQuery(20, user?.id);
+  const setApiResponse = useReviewStore((s) => s.setApiResponse);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  const reviews = reviewsQuery.data ?? [];
+
+  const handleDownload = async (reviewId: string, format: "json" | "pdf") => {
+    setDownloadingId(`${reviewId}-${format}`);
+    try {
+      toast.info(`Generating ${format.toUpperCase()} report…`);
+      const report = await createReport(reviewId, format);
+      setApiResponse(`POST /reviews/${reviewId}/reports`, {
+        request: { reviewId, format },
+        response: report,
+      });
+
+      if (format === "json") {
+        const jsonContent = JSON.stringify(report, null, 2);
+        const blob = new Blob([jsonContent], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `review-${reviewId.slice(0, 8)}-report.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success("JSON report downloaded");
+      } else {
+        toast.success("PDF report generated successfully");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate report");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  return (
+    <>
+      <PageHeading
+        title="Reports & Exports"
+        subtitle="Generate and download audit reports in JSON and PDF format across company code reviews."
+      />
+
+      <section className="panel overflow-hidden">
+        <div className="border-b border-border p-4 flex items-center justify-between">
+          <span className="text-sm font-semibold">Available Reports ({reviews.length})</span>
+          {reviewsQuery.isLoading && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+        </div>
+
+        {reviews.length === 0 ? (
+          <div className="p-12 text-center text-xs text-muted-foreground">
+            <FileText className="mx-auto size-8 text-muted-foreground mb-2" />
+            <p className="font-medium text-foreground">No reports available yet</p>
+            <p className="mt-1">Complete a code review to generate exportable audit reports.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {reviews.map((r) => (
+              <div key={r.reviewId} className="p-4 flex items-center gap-4 hover:bg-accent/30 transition-colors">
+                <div className="grid size-9 place-items-center rounded bg-accent text-xs font-semibold">
+                  <FileText className="size-4 text-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium text-foreground truncate">
+                      {r.name || `Review #${r.reviewId.slice(0, 8)}`}
+                    </p>
+                    <span className="rounded border border-border px-1.5 py-0.5 text-[10px] capitalize text-muted-foreground">
+                      {r.status}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {r.langBadge || "Multi-language"} · Score: {r.score ?? "N/A"}/100 · {r.date || (r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "Recent")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    disabled={downloadingId === `${r.reviewId}-json`}
+                    onClick={() => handleDownload(r.reviewId, "json")}
+                  >
+                    <Download className="size-3 mr-1" />
+                    JSON
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    disabled={downloadingId === `${r.reviewId}-pdf`}
+                    onClick={() => handleDownload(r.reviewId, "pdf")}
+                  >
+                    <Download className="size-3 mr-1" />
+                    PDF
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+function CompanySettingsView() {
+  const user = useAuthStore((s) => s.user);
+  const isOwner =
+    user?.isOwner === true ||
+    user?.activeWorkspace?.role === "owner" ||
+    user?.companyRole === "owner";
+  const canEditBasicInfo =
+    isOwner ||
+    user?.activeWorkspace?.role === "admin" ||
+    user?.role === "company_admin";
+  const { data: company } = useCompanyProfileQuery(Boolean(user?.company));
+  const updateMutation = useUpdateCompanyProfileMutation();
+
+  const [companyName, setCompanyName] = useState(company?.name ?? "");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (company?.name) {
+      setCompanyName(company.name);
+    }
+  }, [company?.name]);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!companyName.trim()) {
+      toast.error("Company name cannot be empty");
+      return;
+    }
+    try {
+      await updateMutation.mutateAsync({ name: companyName.trim() });
+      toast.success("Company settings updated successfully");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update company settings");
+    }
+  };
+
+  return (
+    <>
+      <PageHeading
+        title="Company Settings"
+        subtitle="Manage your company workspace identity, details, and ownership settings."
+      />
+
+      <div className="max-w-2xl space-y-6">
+        <section className="panel p-5">
+          <h2 className="text-sm font-semibold mb-1">Organization Profile</h2>
+          <p className="text-xs text-muted-foreground mb-4">
+            Update your company workspace name and view your organization credentials.
+          </p>
+
+          <form onSubmit={handleSave} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                Company Name
+              </label>
+              <Input
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="e.g. Acme Corporation"
+                disabled={!canEditBasicInfo}
+                className="text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                Organization Slug (Read-only)
+              </label>
+              <Input
+                value={company?.slug ?? "loading…"}
+                disabled
+                className="text-xs font-mono bg-muted/30"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border text-xs">
+              <div>
+                <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Active Seats</span>
+                <span className="text-foreground font-medium mt-0.5 block">{company?.membersCount ?? 1} members</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Workspace Created</span>
+                <span className="text-foreground font-medium mt-0.5 block">
+                  {company?.createdAt ? new Date(company.createdAt).toLocaleDateString() : "Active"}
+                </span>
+              </div>
+            </div>
+
+            {canEditBasicInfo && (
+              <div className="flex justify-end pt-2">
+                <Button type="submit" disabled={updateMutation.isPending || companyName === company?.name}>
+                  {updateMutation.isPending && <LoaderCircle className="size-4 animate-spin mr-1" />}
+                  {saved ? "Saved!" : "Save Changes"}
+                </Button>
+              </div>
+            )}
+          </form>
+        </section>
+
+        {isOwner && (
+          <section className="panel border-destructive/30 p-5">
+            <h2 className="text-sm font-semibold text-destructive mb-1">Danger Zone</h2>
+            <p className="text-xs text-muted-foreground mb-4">
+              Permanent actions that impact the workspace and all team members.
+            </p>
+
+            <div className="flex items-center justify-between pt-2">
+              <div>
+                <p className="text-xs font-medium text-foreground">Transfer Ownership or Close Workspace</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Ownership transfer or company deletion requires contacting ReviewX platform support.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs text-destructive hover:bg-destructive/10"
+                onClick={() => toast.info("Contact platform support at support@reviewx.io to request workspace closure.")}
+              >
+                Request Close
+              </Button>
+            </div>
+          </section>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM › Reviews (monitoring only)
+// ─────────────────────────────────────────────────────────────────────────────
+function AdminReviewsView() {
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  const { data, isLoading } = useAdminReviewsQuery({
+    status: statusFilter,
+    ...(search ? { search } : {}),
+    page,
+    limit: 20,
+  });
+
+  const statusBadge = (s: string) => {
+    const map: Record<string, string> = {
+      completed: "bg-emerald-500/15 text-emerald-400",
+      failed: "bg-red-500/15 text-red-400",
+      pending: "bg-amber-500/15 text-amber-400",
+      processing: "bg-blue-500/15 text-blue-400",
+      queued: "bg-sky-500/15 text-sky-400",
+    };
+    return map[s] ?? "bg-muted text-muted-foreground";
+  };
+
+  return (
+    <>
+      <PageHeading
+        title="Platform Reviews"
+        subtitle="All code reviews across every workspace — monitoring only."
+      />
+      <div className="panel overflow-hidden">
+        <div className="flex flex-wrap gap-2 border-b border-border p-3">
+          <div className="relative min-w-56 flex-1">
+            <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+            <Input
+              className="pl-8"
+              placeholder="Search by review ID or user ID…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="processing">Processing</SelectItem>
+              <SelectItem value="queued">Queued</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-border bg-muted/30 text-muted-foreground">
+                <th className="p-3 font-medium">Review ID</th>
+                <th className="p-3 font-medium">User</th>
+                <th className="p-3 font-medium">Status</th>
+                <th className="p-3 font-medium">Score</th>
+                <th className="p-3 font-medium">Language</th>
+                <th className="p-3 font-medium">Created</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                    <RefreshCw className="size-5 animate-spin mx-auto" />
+                  </td>
+                </tr>
+              ) : data?.reviews?.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                    No reviews found.
+                  </td>
+                </tr>
+              ) : (
+                data?.reviews?.map((rev) => (
+                  <tr key={rev.id} className="hover:bg-accent/40 transition-colors">
+                    <td className="p-3 font-mono text-[11px] text-primary">
+                      {String(rev.reviewId || rev.id).slice(-8).toUpperCase()}
+                    </td>
+                    <td className="p-3">
+                      <div className="text-xs font-medium">{rev.userInfo?.name ?? "—"}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {rev.userInfo?.email ?? (rev.userId || rev.ownerId || "—")}
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <span className={cn("rounded px-1.5 py-0.5 font-mono text-[10px] font-medium", statusBadge(rev.status))}>
+                        {rev.status}
+                      </span>
+                    </td>
+                    <td className="p-3 font-mono text-xs">
+                      {typeof rev.score === "number" ? rev.score : "—"}
+                    </td>
+                    <td className="p-3 text-xs text-muted-foreground">{rev.language ?? "—"}</td>
+                    <td className="p-3 text-[11px] text-muted-foreground">
+                      {rev.createdAt ? new Date(rev.createdAt).toLocaleString() : "—"}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {data && data.totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border p-3 text-xs text-muted-foreground">
+            <span>{data.total} total reviews</span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+              >
+                ← Prev
+              </Button>
+              <span className="font-mono">
+                Page {page} / {data.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
+                disabled={page >= data.totalPages}
+              >
+                Next →
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM › Activity / Audit Log
+// ─────────────────────────────────────────────────────────────────────────────
+function ActivityView() {
+  const [actionFilter, setActionFilter] = useState("all");
+  const [resourceFilter, setResourceFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+
+  const { data, isLoading } = useAuditLogsQuery({
+    action: actionFilter,
+    resourceType: resourceFilter,
+    status: statusFilter,
+    page,
+    limit: 25,
+  });
+
+  return (
+    <>
+      <PageHeading
+        title="Activity / Audit Log"
+        subtitle="Full platform audit trail — all administrative actions."
+      />
+      <div className="panel overflow-hidden">
+        <div className="flex flex-wrap gap-2 border-b border-border p-3">
+          <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Action prefix" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All actions</SelectItem>
+              <SelectItem value="BILLING_">Billing</SelectItem>
+              <SelectItem value="REVIEW_">Reviews</SelectItem>
+              <SelectItem value="USER_">Users</SelectItem>
+              <SelectItem value="COMPANY_">Companies</SelectItem>
+              <SelectItem value="AUTH_">Auth</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={resourceFilter} onValueChange={(v) => { setResourceFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Resource type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All resources</SelectItem>
+              <SelectItem value="Subscription">Subscription</SelectItem>
+              <SelectItem value="Payment">Payment</SelectItem>
+              <SelectItem value="Plan">Plan</SelectItem>
+              <SelectItem value="User">User</SelectItem>
+              <SelectItem value="Review">Review</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-36">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="success">Success</SelectItem>
+              <SelectItem value="failure">Failure</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-border bg-muted/30 text-muted-foreground">
+                <th className="p-3 font-medium">Timestamp</th>
+                <th className="p-3 font-medium">Actor</th>
+                <th className="p-3 font-medium">Action</th>
+                <th className="p-3 font-medium">Resource</th>
+                <th className="p-3 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center">
+                    <RefreshCw className="size-5 animate-spin mx-auto text-muted-foreground" />
+                  </td>
+                </tr>
+              ) : data?.logs?.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                    No audit log entries found.
+                  </td>
+                </tr>
+              ) : (
+                data?.logs?.map((log) => (
+                  <tr key={log._id} className="hover:bg-accent/40 transition-colors">
+                    <td className="p-3 font-mono text-[11px] text-muted-foreground">
+                      {new Date(log.createdAt).toLocaleString()}
+                    </td>
+                    <td className="p-3">
+                      <div className="text-xs font-medium">
+                        {log.actorId?.name ?? (log.metadata?.["actorName"] as string) ?? "System"}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {log.actorId?.email ?? (log.metadata?.["actorEmail"] as string) ?? ""}
+                      </div>
+                    </td>
+                    <td className="p-3 font-mono text-[11px] text-foreground">{log.action}</td>
+                    <td className="p-3 text-xs">
+                      <span className="text-muted-foreground">{log.resourceType}</span>
+                      {log.resourceId && (
+                        <span className="ml-1 font-mono text-[10px] text-muted-foreground">
+                          #{String(log.resourceId).slice(-6)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
+                          log.status === "success"
+                            ? "bg-emerald-500/15 text-emerald-400"
+                            : "bg-red-500/15 text-red-400",
+                        )}
+                      >
+                        {log.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {data && data.totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border p-3 text-xs text-muted-foreground">
+            <span>{data.total} total entries</span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+              >
+                ← Prev
+              </Button>
+              <span className="font-mono">
+                Page {page} / {data.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
+                disabled={page >= data.totalPages}
+              >
+                Next →
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM › Queues & Jobs
+// ─────────────────────────────────────────────────────────────────────────────
+function QueuesView() {
+  const { data: summary, isLoading: summaryLoading } = useQueuesSummaryQuery();
+  const { data: detail, isLoading: detailLoading } = useQueuesDetailQuery();
+  const retryMutation = useRetryFailedJobsMutation();
+
+  const handleRetry = (queueName: string) => {
+    retryMutation.mutate(queueName, {
+      onSuccess: (res) =>
+        toast.success(`Retried ${res.retried} failed job(s) in ${queueName} queue`),
+      onError: () => toast.error("Failed to retry jobs"),
+    });
+  };
+
+  const queueKeys = ["review", "report", "cleanup"] as const;
+
+  return (
+    <>
+      <PageHeading
+        title="Queues & Jobs"
+        subtitle="BullMQ queue health, job counters, and failed job management."
+      />
+
+      {/* Queue Cards */}
+      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+        {queueKeys.map((key) => {
+          const q = summary?.queues?.[key];
+          const isUnreachable = !!(q as { error?: string })?.error;
+          const failedCount = q?.failed ?? 0;
+          return (
+            <div key={key} className="panel p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {key} queue
+                </span>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    isUnreachable
+                      ? "bg-zinc-500/20 text-zinc-400"
+                      : failedCount > 0
+                        ? "bg-red-500/20 text-red-400"
+                        : "bg-emerald-500/20 text-emerald-400",
+                  )}
+                >
+                  {isUnreachable ? "unreachable" : failedCount > 0 ? "degraded" : "healthy"}
+                </span>
+              </div>
+              {summaryLoading ? (
+                <div className="mt-3 text-muted-foreground text-xs">Loading…</div>
+              ) : (
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">Waiting</span>
+                  <span className="font-mono text-foreground text-right">{q?.waiting ?? 0}</span>
+                  <span className="text-muted-foreground">Active</span>
+                  <span className="font-mono text-foreground text-right">{q?.active ?? 0}</span>
+                  <span className="text-muted-foreground">Completed</span>
+                  <span className="font-mono text-emerald-400 text-right">{q?.completed ?? 0}</span>
+                  <span className="text-muted-foreground">Failed</span>
+                  <span
+                    className={cn(
+                      "font-mono text-right",
+                      failedCount > 0 ? "text-red-400" : "text-foreground",
+                    )}
+                  >
+                    {failedCount}
+                  </span>
+                  <span className="text-muted-foreground">Delayed</span>
+                  <span className="font-mono text-amber-400 text-right">{q?.delayed ?? 0}</span>
+                </div>
+              )}
+              {failedCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 h-7 w-full text-xs"
+                  onClick={() => handleRetry(key)}
+                  disabled={retryMutation.isPending}
+                >
+                  <RefreshCw className="size-3 mr-1.5" />
+                  Retry {failedCount} failed
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Failed Jobs Table */}
+      <div className="panel overflow-hidden">
+        <div className="border-b border-border p-3">
+          <h3 className="text-xs font-semibold text-foreground">Recent Failed Jobs</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Up to 20 most recent failures per queue.
+          </p>
+        </div>
+        {detailLoading ? (
+          <div className="p-8 text-center">
+            <RefreshCw className="size-5 animate-spin mx-auto text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/30 text-muted-foreground">
+                  <th className="p-3 font-medium">Queue</th>
+                  <th className="p-3 font-medium">Job ID</th>
+                  <th className="p-3 font-medium">Job Name</th>
+                  <th className="p-3 font-medium">Error</th>
+                  <th className="p-3 font-medium">Attempts</th>
+                  <th className="p-3 font-medium">Failed At</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {(() => {
+                  const allFailed = queueKeys.flatMap((key) =>
+                    (detail?.queues?.[key]?.failedJobs ?? []).map((job) => ({
+                      ...job,
+                      queueName: key,
+                    })),
+                  );
+                  if (allFailed.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                          No failed jobs. All queues are healthy. ✓
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return allFailed.map((job) => (
+                    <tr key={`${job.queueName}-${job.id}`} className="hover:bg-accent/40">
+                      <td className="p-3">
+                        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                          {job.queueName}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono text-[11px] text-muted-foreground">{job.id}</td>
+                      <td className="p-3 text-xs">{job.name}</td>
+                      <td
+                        className="p-3 max-w-xs truncate text-xs text-red-400"
+                        title={job.failedReason}
+                      >
+                        {job.failedReason}
+                      </td>
+                      <td className="p-3 font-mono text-xs text-center">{job.attemptsMade}</td>
+                      <td className="p-3 font-mono text-[11px] text-muted-foreground">
+                        {job.finishedOn ? new Date(job.finishedOn).toLocaleString() : "—"}
+                      </td>
+                    </tr>
+                  ));
+                })()}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM › Webhooks & Email
+// ─────────────────────────────────────────────────────────────────────────────
+function WebhooksEmailView() {
+  const [subTab, setSubTab] = useState<"webhooks" | "email">("webhooks");
+  const [emailStatusFilter, setEmailStatusFilter] = useState("all");
+  const [webhookPage, setWebhookPage] = useState(1);
+  const [emailPage, setEmailPage] = useState(1);
+
+  const { data: webhookData, isLoading: webhookLoading } = useWebhookLogsQuery({
+    page: webhookPage,
+    limit: 25,
+  });
+  const replayMutation = useReplayWebhookMutation();
+  const { data: emailData, isLoading: emailLoading } = useEmailLogsQuery({
+    status: emailStatusFilter,
+    page: emailPage,
+    limit: 25,
+  });
+
+  const handleReplay = (id: string) => {
+    replayMutation.mutate(id, {
+      onSuccess: () => toast.success("Webhook replayed successfully"),
+      onError: () => toast.error("Failed to replay webhook"),
+    });
+  };
+
+  return (
+    <>
+      <PageHeading
+        title="Webhooks & Email"
+        subtitle="Chapa payment webhook logs and Resend email delivery logs."
+      />
+
+      {/* Sub-tabs */}
+      <div className="mb-4 flex gap-1 rounded-lg border border-border bg-card p-1 w-fit">
+        {(["webhooks", "email"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setSubTab(tab)}
+            className={cn(
+              "rounded px-4 py-1.5 text-xs font-medium transition-all",
+              subTab === tab
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-accent",
+            )}
+          >
+            {tab === "webhooks" ? "Chapa Webhooks" : "Email Logs"}
+          </button>
+        ))}
+      </div>
+
+      {subTab === "webhooks" && (
+        <div className="panel overflow-hidden">
+          <div className="border-b border-border p-3">
+            <h3 className="text-xs font-semibold">Chapa Webhook Events</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Incoming payment callbacks from Chapa. Replay to reprocess failed events.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/30 text-muted-foreground">
+                  <th className="p-3 font-medium">Received</th>
+                  <th className="p-3 font-medium">Tx Ref</th>
+                  <th className="p-3 font-medium">Signature</th>
+                  <th className="p-3 font-medium">Status</th>
+                  <th className="p-3 font-medium">Replayed</th>
+                  <th className="p-3 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {webhookLoading ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center">
+                      <RefreshCw className="size-5 animate-spin mx-auto text-muted-foreground" />
+                    </td>
+                  </tr>
+                ) : webhookData?.logs?.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                      No webhook events recorded yet.
+                    </td>
+                  </tr>
+                ) : (
+                  webhookData?.logs?.map((wh) => (
+                    <tr key={wh._id} className="hover:bg-accent/40">
+                      <td className="p-3 font-mono text-[11px] text-muted-foreground">
+                        {new Date(wh.createdAt).toLocaleString()}
+                      </td>
+                      <td className="p-3 font-mono text-[11px]">{wh.txRef ?? "—"}</td>
+                      <td className="p-3">
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                            wh.signatureValid
+                              ? "bg-emerald-500/15 text-emerald-400"
+                              : "bg-red-500/15 text-red-400",
+                          )}
+                        >
+                          {wh.signatureValid ? "valid" : "invalid"}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.5 font-mono text-[10px]",
+                            wh.processingStatus === "processed"
+                              ? "bg-emerald-500/15 text-emerald-400"
+                              : wh.processingStatus === "failed"
+                                ? "bg-red-500/15 text-red-400"
+                                : "bg-zinc-500/20 text-zinc-400",
+                          )}
+                        >
+                          {wh.processingStatus}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono text-[11px] text-muted-foreground">
+                        {wh.replayedAt ? new Date(wh.replayedAt).toLocaleString() : "—"}
+                      </td>
+                      <td className="p-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={() => handleReplay(wh._id)}
+                          disabled={replayMutation.isPending}
+                        >
+                          <RefreshCw className="size-3 mr-1" />
+                          Replay
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {webhookData && webhookData.totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-border p-3 text-xs text-muted-foreground">
+              <span>{webhookData.total} total events</span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setWebhookPage((p) => Math.max(1, p - 1))}
+                  disabled={webhookPage <= 1}
+                >
+                  ← Prev
+                </Button>
+                <span className="font-mono">
+                  Page {webhookPage} / {webhookData.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setWebhookPage((p) => Math.min(webhookData.totalPages, p + 1))}
+                  disabled={webhookPage >= webhookData.totalPages}
+                >
+                  Next →
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {subTab === "email" && (
+        <div className="panel overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border p-3">
+            <div>
+              <h3 className="text-xs font-semibold">Email Delivery Logs</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Transactional emails sent via Resend.
+              </p>
+            </div>
+            <Select
+              value={emailStatusFilter}
+              onValueChange={(v) => {
+                setEmailStatusFilter(v);
+                setEmailPage(1);
+              }}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="sent">Sent</SelectItem>
+                <SelectItem value="failed">Failed</SelectItem>
+                <SelectItem value="skipped">Skipped</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/30 text-muted-foreground">
+                  <th className="p-3 font-medium">Sent At</th>
+                  <th className="p-3 font-medium">To</th>
+                  <th className="p-3 font-medium">Subject</th>
+                  <th className="p-3 font-medium">Status</th>
+                  <th className="p-3 font-medium">Mode</th>
+                  <th className="p-3 font-medium">Error</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {emailLoading ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center">
+                      <RefreshCw className="size-5 animate-spin mx-auto text-muted-foreground" />
+                    </td>
+                  </tr>
+                ) : emailData?.logs?.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                      No email logs found.
+                    </td>
+                  </tr>
+                ) : (
+                  emailData?.logs?.map((em) => (
+                    <tr key={em._id} className="hover:bg-accent/40">
+                      <td className="p-3 font-mono text-[11px] text-muted-foreground">
+                        {new Date(em.createdAt).toLocaleString()}
+                      </td>
+                      <td className="p-3 text-xs">{em.to}</td>
+                      <td
+                        className="p-3 text-xs max-w-[200px] truncate"
+                        title={em.subject}
+                      >
+                        {em.subject}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.5 font-mono text-[10px]",
+                            em.status === "sent"
+                              ? "bg-emerald-500/15 text-emerald-400"
+                              : em.status === "failed"
+                                ? "bg-red-500/15 text-red-400"
+                                : "bg-zinc-500/20 text-zinc-400",
+                          )}
+                        >
+                          {em.status}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono text-[11px] text-muted-foreground">{em.mode}</td>
+                      <td
+                        className="p-3 text-[11px] text-red-400 max-w-[180px] truncate"
+                        title={em.errorMessage ?? ""}
+                      >
+                        {em.errorMessage ?? "—"}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {emailData && emailData.totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-border p-3 text-xs text-muted-foreground">
+              <span>{emailData.total} total emails</span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setEmailPage((p) => Math.max(1, p - 1))}
+                  disabled={emailPage <= 1}
+                >
+                  ← Prev
+                </Button>
+                <span className="font-mono">
+                  Page {emailPage} / {emailData.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setEmailPage((p) => Math.min(emailData.totalPages, p + 1))}
+                  disabled={emailPage >= emailData.totalPages}
+                >
+                  Next →
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM › Settings (Platform Admin — full interactive)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SettingsTab = "general" | "access" | "ai" | "reviewEngine" | "billing" | "integrations" | "admins";
+
+const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: "general", label: "General", icon: Settings },
+  { key: "access", label: "Access", icon: ShieldCheck },
+  { key: "ai", label: "AI Providers", icon: Bot },
+  { key: "reviewEngine", label: "Review Engine", icon: Code2 },
+  { key: "billing", label: "Billing", icon: CreditCard },
+  { key: "integrations", label: "Integrations", icon: Zap },
+  { key: "admins", label: "Admin Management", icon: Users },
+];
+
+const ALL_LANGUAGES = [
+  "javascript", "typescript", "python", "java",
+  "php", "go", "c", "cpp", "csharp",
+];
+
+/** Small confirm modal for dangerous actions */
+function DangerConfirmModal({
+  title,
+  description,
+  onConfirm,
+  onCancel,
+  confirmWord = "CONFIRM",
+  isPending = false,
+}: {
+  title: string;
+  description: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmWord?: string;
+  isPending?: boolean;
+}) {
+  const [typed, setTyped] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="panel w-full max-w-sm p-5 shadow-2xl border border-destructive/30 space-y-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="size-5 text-destructive shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5">
+            Type <span className="font-mono font-semibold text-destructive">{confirmWord}</span> to proceed:
+          </p>
+          <Input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={confirmWord}
+            className="font-mono text-xs"
+            autoFocus
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={isPending}>Cancel</Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={typed !== confirmWord || isPending}
+            onClick={onConfirm}
+          >
+            {isPending ? <RefreshCw className="size-3.5 animate-spin mr-1" /> : null}
+            Confirm
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Section save row — Save + Cancel buttons with a dirty indicator */
+function SectionActions({
+  dirty,
+  isPending,
+  onSave,
+  onReset,
+}: {
+  dirty: boolean;
+  isPending: boolean;
+  onSave: () => void;
+  onReset: () => void;
+}) {
+  if (!dirty) return null;
+  return (
+    <div className="flex items-center justify-between rounded border border-primary/20 bg-primary/5 px-3 py-2 mt-4">
+      <span className="text-[11px] text-primary font-medium">Unsaved changes</span>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onReset} disabled={isPending}>
+          Discard
+        </Button>
+        <Button size="sm" className="h-7 text-xs" onClick={onSave} disabled={isPending}>
+          {isPending ? <RefreshCw className="size-3 animate-spin mr-1" /> : null}
+          Save
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PlatformSettingsView() {
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const { data: settings, isLoading } = usePlatformSettingsFullQuery();
+  const updateMutation = useUpdatePlatformSettingsMutation();
+
+  if (isLoading || !settings) {
+    return (
+      <div className="panel flex min-h-[300px] items-center justify-center">
+        <RefreshCw className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const save = (section: string, updates: Record<string, unknown>) => {
+    updateMutation.mutate(
+      { section, updates },
+      {
+        onSuccess: () => toast.success("Settings saved"),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : "Failed to save settings"),
+      },
+    );
+  };
+
+  return (
+    <>
+      <PageHeading
+        title="Platform Settings"
+        subtitle="Platform-wide configuration. Every change is audit-logged."
+      />
+
+      {/* Tab bar */}
+      <div className="mb-6 flex flex-wrap gap-1.5 rounded-lg border border-border bg-card p-1 shadow-sm">
+        {SETTINGS_TABS.map((t) => {
+          const Icon = t.icon;
+          const isCurrent = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveTab(t.key)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                isCurrent
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <Icon className="size-3.5" />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === "general" && (
+        <GeneralTab settings={settings} save={save} isPending={updateMutation.isPending} />
+      )}
+      {activeTab === "access" && (
+        <AccessTab settings={settings} save={save} isPending={updateMutation.isPending} />
+      )}
+      {activeTab === "ai" && (
+        <AiTab settings={settings} save={save} isPending={updateMutation.isPending} />
+      )}
+      {activeTab === "reviewEngine" && (
+        <ReviewEngineTab settings={settings} save={save} isPending={updateMutation.isPending} />
+      )}
+      {activeTab === "billing" && (
+        <BillingSettingsTab settings={settings} save={save} isPending={updateMutation.isPending} />
+      )}
+      {activeTab === "integrations" && <IntegrationsTab />}
+      {activeTab === "admins" && <AdminManagementTab />}
+    </>
+  );
+}
+
+// ── General Tab ───────────────────────────────────────────────────────────────
+function GeneralTab({
+  settings,
+  save,
+  isPending,
+}: {
+  settings: import("@/lib/api").PlatformSettingsFull;
+  save: (section: string, updates: Record<string, unknown>) => void;
+  isPending: boolean;
+}) {
+  const g = settings.general;
+  const [platformName, setPlatformName] = useState(g.platformName);
+  const [supportEmail, setSupportEmail] = useState(g.supportEmail);
+  const [banner, setBanner] = useState(g.announcementBanner);
+  const [maintenanceMode, setMaintenanceMode] = useState(g.maintenanceMode);
+  const [confirmMaintenance, setConfirmMaintenance] = useState(false);
+  const [pendingMaintenance, setPendingMaintenance] = useState<boolean | null>(null);
+
+  const dirty =
+    platformName !== g.platformName ||
+    supportEmail !== g.supportEmail ||
+    banner !== g.announcementBanner;
+
+  const handleSave = () =>
+    save("general", { platformName, supportEmail, announcementBanner: banner });
+
+  const handleReset = () => {
+    setPlatformName(g.platformName);
+    setSupportEmail(g.supportEmail);
+    setBanner(g.announcementBanner);
+  };
+
+  const handleMaintenanceToggle = (val: boolean) => {
+    setPendingMaintenance(val);
+    setConfirmMaintenance(true);
+  };
+
+  const confirmMaintenanceSave = () => {
+    if (pendingMaintenance === null) return;
+    setMaintenanceMode(pendingMaintenance);
+    save("general", { maintenanceMode: pendingMaintenance });
+    setConfirmMaintenance(false);
+    setPendingMaintenance(null);
+  };
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-3">
+      {confirmMaintenance && (
+        <DangerConfirmModal
+          title={pendingMaintenance ? "Enable maintenance mode?" : "Disable maintenance mode?"}
+          description={
+            pendingMaintenance
+              ? "New reviews and payments will be blocked. Admins can still log in."
+              : "The platform will resume normal operations immediately."
+          }
+          onConfirm={confirmMaintenanceSave}
+          onCancel={() => { setConfirmMaintenance(false); setPendingMaintenance(null); }}
+          isPending={isPending}
+        />
+      )}
+
+      {/* Main Settings Column (2 Cols) */}
+      <div className="space-y-6 lg:col-span-2">
+        <div className="panel p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Platform Identity</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Brand name, user-facing support email, and platform banner announcements.</p>
+          </div>
+          <div className="space-y-4">
+            <label className="block text-xs font-medium text-foreground">
+              Platform name
+              <Input
+                className="mt-1.5"
+                value={platformName}
+                onChange={(e) => setPlatformName(e.target.value)}
+                maxLength={80}
+              />
+            </label>
+            <label className="block text-xs font-medium text-foreground">
+              Support email
+              <Input
+                className="mt-1.5"
+                type="email"
+                value={supportEmail}
+                onChange={(e) => setSupportEmail(e.target.value)}
+                placeholder="support@example.com"
+              />
+            </label>
+            <label className="block text-xs font-medium text-foreground">
+              <span className="flex items-center justify-between">
+                <span>Announcement banner</span>
+                <span className="text-[10px] text-muted-foreground font-normal">Leave empty to hide</span>
+              </span>
+              <textarea
+                className="mt-1.5 w-full rounded-md border border-input bg-transparent p-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none leading-relaxed"
+                rows={3}
+                maxLength={500}
+                value={banner}
+                onChange={(e) => setBanner(e.target.value)}
+                placeholder="e.g. Scheduled maintenance on Saturday 02:00–04:00 UTC…"
+              />
+              <span className="text-[10px] text-muted-foreground float-right mt-1">{banner.length}/500</span>
+            </label>
+          </div>
+          <SectionActions dirty={dirty} isPending={isPending} onSave={handleSave} onReset={handleReset} />
+        </div>
+
+        {/* Maintenance mode card */}
+        <div className="panel p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">System Availability</h3>
+                <span className={cn(
+                  "rounded px-2 py-0.5 text-[10px] font-mono font-semibold",
+                  maintenanceMode ? "bg-destructive/15 text-destructive" : "bg-success/15 text-success",
+                )}>
+                  {maintenanceMode ? "MAINTENANCE ON" : "OPERATIONAL"}
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-foreground mt-1">Maintenance Mode</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                When enabled, new code reviews and payment checkouts are temporarily blocked. Administrators retain full access.
+              </p>
+            </div>
+            <Switch
+              checked={maintenanceMode}
+              onCheckedChange={handleMaintenanceToggle}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Right Column (1 Col): Runtime Environment & Info */}
+      <div className="space-y-6 lg:col-span-1">
+        <div className="panel p-5 space-y-3">
+          <div className="border-b border-border pb-2.5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Runtime Environment</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Read-only server & cluster infrastructure</p>
+          </div>
+          <div className="space-y-2 text-xs divide-y divide-border/40">
+            {([
+              ["App URL", settings._env.appUrl],
+              ["API URL", settings._env.apiUrl],
+              ["CORS origin", settings._env.corsOrigin],
+              ["Node.js", settings._env.nodeVersion],
+              ["Environment", settings._env.nodeEnv],
+              ["Version", settings._env.appVersion],
+              ["Uptime", `${Math.floor(settings._env.uptimeSeconds / 3600)}h ${Math.floor((settings._env.uptimeSeconds % 3600) / 60)}m`],
+            ] as [string, string][]).map(([k, v]) => (
+              <div key={k} className="flex items-center justify-between pt-2 first:pt-0">
+                <span className="text-muted-foreground text-[11px]">{k}</span>
+                <span className="font-mono text-[11px] text-foreground truncate max-w-[180px]">{v || "—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel p-4 bg-muted/20 border-dashed space-y-2.5">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <ShieldCheck className="size-4 text-primary" />
+            Audit Governance
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            All modifications made to platform settings are immediately sealed into the immutable administrative audit trail with actor IDs, IP, and reason.
+          </p>
+          {settings._meta?.updatedAt && (
+            <div className="pt-2 border-t border-border/50 text-[10px] font-mono text-muted-foreground">
+              Last modified: {new Date(settings._meta.updatedAt).toLocaleString()}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Access Tab ────────────────────────────────────────────────────────────────
+function AccessTab({
+  settings,
+  save,
+  isPending,
+}: {
+  settings: import("@/lib/api").PlatformSettingsFull;
+  save: (section: string, updates: Record<string, unknown>) => void;
+  isPending: boolean;
+}) {
+  const a = settings.access;
+  const [allowSignup, setAllowSignup] = useState(a.allowPublicSignup);
+  const [requireVerification, setRequireVerification] = useState(a.requireEmailVerification);
+  const [confirmDisableSignup, setConfirmDisableSignup] = useState(false);
+
+  const dirty = allowSignup !== a.allowPublicSignup || requireVerification !== a.requireEmailVerification;
+
+  const handleSignupToggle = (val: boolean) => {
+    if (!val) {
+      setConfirmDisableSignup(true);
+    } else {
+      setAllowSignup(true);
+      save("access", { allowPublicSignup: true, requireEmailVerification: requireVerification });
+    }
+  };
+
+  const handleSave = () =>
+    save("access", { allowPublicSignup: allowSignup, requireEmailVerification: requireVerification });
+
+  const handleReset = () => {
+    setAllowSignup(a.allowPublicSignup);
+    setRequireVerification(a.requireEmailVerification);
+  };
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-3">
+      {confirmDisableSignup && (
+        <DangerConfirmModal
+          title="Disable public signup?"
+          description="New users will not be able to create accounts. Existing users and invitees are unaffected."
+          onConfirm={() => {
+            setAllowSignup(false);
+            save("access", { allowPublicSignup: false, requireEmailVerification: requireVerification });
+            setConfirmDisableSignup(false);
+          }}
+          onCancel={() => setConfirmDisableSignup(false)}
+          isPending={isPending}
+        />
+      )}
+
+      {/* Main Settings Column (2 Cols) */}
+      <div className="space-y-6 lg:col-span-2">
+        <div className="panel p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Registration & Access Control</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Control how new users and developers join your ReviewX installation.</p>
+          </div>
+
+          <div className="divide-y divide-border">
+            <div className="flex items-center justify-between py-3.5">
+              <div className="pr-4">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-semibold text-foreground">Allow Public Signup</p>
+                  <span className={cn(
+                    "rounded px-2 py-0.5 text-[10px] font-mono font-medium",
+                    allowSignup ? "bg-success/15 text-success" : "bg-amber-500/15 text-amber-500",
+                  )}>
+                    {allowSignup ? "PUBLIC ACCESS" : "INVITE ONLY"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  When enabled, any visitor can register an account. Turn off to restrict platform access strictly to company email invitations.
+                </p>
+              </div>
+              <Switch checked={allowSignup} onCheckedChange={handleSignupToggle} />
+            </div>
+
+            <div className="flex items-center justify-between py-3.5">
+              <div className="pr-4">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-semibold text-foreground">Require Email Verification</p>
+                  <span className={cn(
+                    "rounded px-2 py-0.5 text-[10px] font-mono font-medium",
+                    requireVerification ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                  )}>
+                    {requireVerification ? "VERIFICATION ENFORCED" : "OPTIONAL"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Users must verify their email address via confirmation token before submitting code reviews or executing payment checkouts.
+                </p>
+              </div>
+              <Switch
+                checked={requireVerification}
+                onCheckedChange={(val) => setRequireVerification(val)}
+              />
+            </div>
+          </div>
+
+          <SectionActions dirty={dirty} isPending={isPending} onSave={handleSave} onReset={handleReset} />
+        </div>
+      </div>
+
+      {/* Right Column (1 Col): Security Guidance */}
+      <div className="space-y-6 lg:col-span-1">
+        <div className="panel p-5 space-y-3">
+          <div className="border-b border-border pb-2.5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Access Security Policies</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Onboarding recommendations</p>
+          </div>
+          <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
+            <p>
+              <strong className="text-foreground">Invite-Only Mode:</strong> Recommended for private company workspaces where accounts are provisioned exclusively by team administrators.
+            </p>
+            <p>
+              <strong className="text-foreground">Email Deliverability:</strong> Check the Integrations tab to confirm the Resend email service is configured so confirmation tokens reach users without delay.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AI Tab ────────────────────────────────────────────────────────────────────
+function AiTab({
+  settings,
+  save,
+  isPending,
+}: {
+  settings: import("@/lib/api").PlatformSettingsFull;
+  save: (section: string, updates: Record<string, unknown>) => void;
+  isPending: boolean;
+}) {
+  const ai = settings.ai;
+  const { data: integrations } = useIntegrationStatusesQuery();
+
+  const [killSwitch, setKillSwitch] = useState(ai.killSwitch);
+  const [provider, setProvider] = useState(ai.activeProvider);
+  const [model, setModel] = useState(ai.activeModel);
+  const [cost, setCost] = useState(String(ai.estimatedCostPerCallETB));
+  const [confirmKill, setConfirmKill] = useState(false);
+  const [pendingKill, setPendingKill] = useState<boolean | null>(null);
+
+  const dirty =
+    provider !== ai.activeProvider ||
+    model !== ai.activeModel ||
+    Number(cost) !== ai.estimatedCostPerCallETB;
+
+  const handleKillToggle = (val: boolean) => {
+    setPendingKill(val);
+    setConfirmKill(true);
+  };
+
+  const handleSave = () =>
+    save("ai", { activeProvider: provider, activeModel: model, estimatedCostPerCallETB: Number(cost) });
+
+  const handleReset = () => {
+    setProvider(ai.activeProvider);
+    setModel(ai.activeModel);
+    setCost(String(ai.estimatedCostPerCallETB));
+  };
+
+  const StatusPill = ({ ok, label }: { ok: boolean; label: string }) => (
+    <div className="flex items-center justify-between py-1.5 text-xs border-b border-border last:border-0">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={cn(
+        "rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
+        ok ? "bg-emerald-500/15 text-emerald-400" : "bg-zinc-500/20 text-zinc-400",
+      )}>
+        {ok ? "configured" : "not configured"}
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-3">
+      {confirmKill && (
+        <DangerConfirmModal
+          title={pendingKill ? "Enable AI kill switch?" : "Disable AI kill switch?"}
+          description={
+            pendingKill
+              ? "AI analysis will be disabled globally. Reviews will continue with deterministic static analysis only."
+              : "AI analysis will be re-enabled globally for all eligible plans."
+          }
+          onConfirm={() => {
+            if (pendingKill !== null) {
+              setKillSwitch(pendingKill);
+              save("ai", { killSwitch: pendingKill });
+            }
+            setConfirmKill(false);
+            setPendingKill(null);
+          }}
+          onCancel={() => { setConfirmKill(false); setPendingKill(null); }}
+          isPending={isPending}
+        />
+      )}
+
+      {/* Main Settings Column (2 Cols) */}
+      <div className="space-y-6 lg:col-span-2">
+        {/* Kill switch card */}
+        <div className="panel p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Emergency Controls</h3>
+                <span className={cn(
+                  "rounded px-2 py-0.5 text-[10px] font-mono font-semibold",
+                  killSwitch ? "bg-destructive/15 text-destructive" : "bg-success/15 text-success",
+                )}>
+                  {killSwitch ? "AI MUTED" : "AI ENGINE ACTIVE"}
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-foreground mt-1">Global AI Kill Switch</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Immediately bypasses external LLM inference platform-wide. Code reviews proceed uninterrupted with AST rules and deterministic linters.
+              </p>
+            </div>
+            <Switch checked={killSwitch} onCheckedChange={handleKillToggle} />
+          </div>
+        </div>
+
+        {/* Provider config */}
+        <div className="panel p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inference Provider Configuration</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Configure active LLM backends, model routing, and unit cost baselines.</p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-xs font-medium text-foreground sm:col-span-1">
+              Active Provider
+              <Select value={provider} onValueChange={(v) => setProvider(v as "groq" | "openai")}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="groq">Groq (Ultra-low latency)</SelectItem>
+                  <SelectItem value="openai">OpenAI (GPT Models)</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+
+            <label className="block text-xs font-medium text-foreground sm:col-span-1">
+              Model Identifier
+              <Input
+                className="mt-1.5 font-mono text-xs"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder={provider === "groq" ? "llama-3.3-70b-versatile" : "gpt-4o-mini"}
+              />
+            </label>
+
+            <label className="block text-xs font-medium text-foreground sm:col-span-2">
+              Estimated Provider Cost per Call (ETB)
+              <Input
+                className="mt-1.5 font-mono text-xs"
+                type="number"
+                min={0}
+                max={1000}
+                step={0.5}
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+              />
+              <span className="text-[11px] text-muted-foreground mt-1 block">
+                Benchmark value used in the Platform Billing Hub's AI Inference Margin Tracker.
+              </span>
+            </label>
+          </div>
+
+          <SectionActions dirty={dirty} isPending={isPending} onSave={handleSave} onReset={handleReset} />
+        </div>
+      </div>
+
+      {/* Right Column (1 Col): Provider Status */}
+      <div className="space-y-6 lg:col-span-1">
+        {integrations && (
+          <div className="panel p-5 space-y-3">
+            <div className="border-b border-border pb-2.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Provider Credentials Status</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Detected from environment keys</p>
+            </div>
+            <StatusPill ok={integrations.ai.groq.configured} label="Groq API Key" />
+            <StatusPill ok={integrations.ai.openai.configured} label="OpenAI API Key" />
+          </div>
+        )}
+
+        <div className="panel p-4 bg-muted/20 border-dashed space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Bot className="size-4 text-primary" />
+            Quota Enforcement
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Subscription tiers restrict AI-assisted review counts per billing period. When quotas deplete, reviews automatically fall back gracefully without failing.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Review Engine Tab ─────────────────────────────────────────────────────────
+function ReviewEngineTab({
+  settings,
+  save,
+  isPending,
+}: {
+  settings: import("@/lib/api").PlatformSettingsFull;
+  save: (section: string, updates: Record<string, unknown>) => void;
+  isPending: boolean;
+}) {
+  const re = settings.reviewEngine;
+  const [langs, setLangs] = useState<string[]>(re.enabledLanguages);
+  const [maxLines, setMaxLines] = useState(String(re.globalMaxLinesPerReview));
+  const [maxFileSize, setMaxFileSize] = useState(String(re.globalMaxFileSizeBytes));
+
+  const dirty =
+    JSON.stringify([...langs].sort()) !== JSON.stringify([...re.enabledLanguages].sort()) ||
+    Number(maxLines) !== re.globalMaxLinesPerReview ||
+    Number(maxFileSize) !== re.globalMaxFileSizeBytes;
+
+  const toggleLang = (lang: string) => {
+    setLangs((prev) =>
+      prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang],
+    );
+  };
+
+  const handleSave = () => {
+    if (langs.length === 0) {
+      toast.error("At least one language must be enabled");
+      return;
+    }
+    save("reviewEngine", {
+      enabledLanguages: langs,
+      globalMaxLinesPerReview: Number(maxLines),
+      globalMaxFileSizeBytes: Number(maxFileSize),
+    });
+  };
+
+  const handleReset = () => {
+    setLangs(re.enabledLanguages);
+    setMaxLines(String(re.globalMaxLinesPerReview));
+    setMaxFileSize(String(re.globalMaxFileSizeBytes));
+  };
+
+  const fileSizeMB = (Number(maxFileSize) / 1048576).toFixed(1);
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-3">
+      {/* Main Settings Column (2 Cols) */}
+      <div className="space-y-6 lg:col-span-2">
+        <div className="panel p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Supported Programming Languages</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Select which source languages are parsed and evaluated by the AST engine.</p>
+              </div>
+              <span className="font-mono text-xs text-primary font-semibold">
+                {langs.length} of {ALL_LANGUAGES.length} enabled
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {ALL_LANGUAGES.map((lang) => {
+              const enabled = langs.includes(lang);
+              return (
+                <button
+                  key={lang}
+                  type="button"
+                  onClick={() => toggleLang(lang)}
+                  className={cn(
+                    "flex items-center justify-between rounded-md border p-2.5 text-xs font-mono font-medium transition-all text-left",
+                    enabled
+                      ? "border-primary/40 bg-primary/10 text-primary shadow-xs"
+                      : "border-border bg-surface-raised text-muted-foreground hover:border-border/80 opacity-60",
+                  )}
+                >
+                  <span className="capitalize">{lang}</span>
+                  <span className={cn(
+                    "size-2 rounded-full",
+                    enabled ? "bg-primary" : "bg-muted-foreground/40",
+                  )} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="panel p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Global Review Payload Caps</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Upper ceiling safety limits across all tenant submissions.</p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-xs font-medium text-foreground">
+              Max Lines per Review (100 – 100,000)
+              <Input
+                className="mt-1.5 font-mono text-xs"
+                type="number"
+                min={100}
+                max={100000}
+                value={maxLines}
+                onChange={(e) => setMaxLines(e.target.value)}
+              />
+            </label>
+
+            <label className="block text-xs font-medium text-foreground">
+              Max File Size (1 KB – 100 MB)
+              <Input
+                className="mt-1.5 font-mono text-xs"
+                type="number"
+                min={1024}
+                max={104857600}
+                value={maxFileSize}
+                onChange={(e) => setMaxFileSize(e.target.value)}
+              />
+              <span className="text-[10px] text-muted-foreground mt-1 block font-mono">
+                Equivalent to {fileSizeMB} MB per file
+              </span>
+            </label>
+          </div>
+
+          <SectionActions dirty={dirty} isPending={isPending} onSave={handleSave} onReset={handleReset} />
+        </div>
+      </div>
+
+      {/* Right Column (1 Col): Engine Architecture */}
+      <div className="space-y-6 lg:col-span-1">
+        <div className="panel p-5 space-y-3">
+          <div className="border-b border-border pb-2.5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Analysis Architecture</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Review pipeline mechanics</p>
+          </div>
+          <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
+            <p>
+              <strong className="text-foreground">AST Parsers:</strong> Native Tree-sitter parsers build syntax trees to extract symbols, dependencies, and code complexity metrics.
+            </p>
+            <p>
+              <strong className="text-foreground">Deterministic Linters:</strong> Rules evaluate syntax nodes directly before any optional AI enrichment is invoked.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Billing Settings Tab ──────────────────────────────────────────────────────
+function BillingSettingsTab({
+  settings,
+  save,
+  isPending,
+}: {
+  settings: import("@/lib/api").PlatformSettingsFull;
+  save: (section: string, updates: Record<string, unknown>) => void;
+  isPending: boolean;
+}) {
+  const b = settings.billing;
+  const [graceDays, setGraceDays] = useState(String(b.gracePeriodDays));
+  const [companyName, setCompanyName] = useState(b.receiptCompanyName);
+  const [address, setAddress] = useState(b.receiptAddress);
+  const [taxId, setTaxId] = useState(b.receiptTaxId);
+
+  const dirty =
+    Number(graceDays) !== b.gracePeriodDays ||
+    companyName !== b.receiptCompanyName ||
+    address !== b.receiptAddress ||
+    taxId !== b.receiptTaxId;
+
+  const handleSave = () =>
+    save("billing", {
+      gracePeriodDays: Number(graceDays),
+      receiptCompanyName: companyName,
+      receiptAddress: address,
+      receiptTaxId: taxId,
+    });
+
+  const handleReset = () => {
+    setGraceDays(String(b.gracePeriodDays));
+    setCompanyName(b.receiptCompanyName);
+    setAddress(b.receiptAddress);
+    setTaxId(b.receiptTaxId);
+  };
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-3">
+      {/* Main Settings Column (2 Cols) */}
+      <div className="space-y-6 lg:col-span-2">
+        <div className="panel p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Subscription Grace Period</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Configure payment retry tolerance before downgrading past-due subscriptions.</p>
+          </div>
+
+          <label className="block text-xs font-medium text-foreground max-w-xs">
+            Past-due grace period (1–30 days)
+            <Input
+              className="mt-1.5 font-mono text-xs"
+              type="number"
+              min={1}
+              max={30}
+              value={graceDays}
+              onChange={(e) => setGraceDays(e.target.value)}
+            />
+            <span className="block text-[11px] text-muted-foreground mt-1">
+              Workspaces remain fully active during this window while awaiting Chapa payment settlement.
+            </span>
+          </label>
+        </div>
+
+        <div className="panel p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Receipt & Invoice Metadata</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Information printed on downloadable PDF and customer payment receipts.</p>
+          </div>
+
+          <div className="space-y-4">
+            <label className="block text-xs font-medium text-foreground">
+              Issuer Company Name
+              <Input className="mt-1.5" value={companyName} onChange={(e) => setCompanyName(e.target.value)} maxLength={200} placeholder="ReviewX Inc." />
+            </label>
+            <label className="block text-xs font-medium text-foreground">
+              Official Registered Address
+              <textarea
+                className="mt-1.5 w-full rounded-md border border-input bg-transparent p-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none leading-relaxed"
+                rows={3}
+                maxLength={500}
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Street address, City, Country…"
+              />
+            </label>
+            <label className="block text-xs font-medium text-foreground">
+              Tax ID / VAT Registration Number
+              <Input className="mt-1.5 font-mono text-xs" value={taxId} onChange={(e) => setTaxId(e.target.value)} maxLength={100} placeholder="ET-TIN-XXXXXXXX" />
+            </label>
+          </div>
+
+          <SectionActions dirty={dirty} isPending={isPending} onSave={handleSave} onReset={handleReset} />
+        </div>
+      </div>
+
+      {/* Right Column (1 Col): Billing Info */}
+      <div className="space-y-6 lg:col-span-1">
+        <div className="panel p-5 space-y-3">
+          <div className="border-b border-border pb-2.5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Billing Policies</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Chapa integration & receipts</p>
+          </div>
+          <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
+            <p>
+              <strong className="text-foreground">Payment Reconciliation:</strong> Completed Chapa transactions verify against webhook events and instantly issue receipt numbers.
+            </p>
+            <p>
+              <strong className="text-foreground">Catalogue Tiers:</strong> Pricing and limits for Free, Pro, Team, and Enterprise plans are managed dynamically in the Platform Billing Hub.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Integrations Tab ──────────────────────────────────────────────────────────
+function IntegrationsTab() {
+  const { data: statuses, isLoading } = useIntegrationStatusesQuery();
+  const sendTestMutation = useSendTestEmailMutation();
+
+  const handleTestEmail = () => {
+    sendTestMutation.mutate(undefined, {
+      onSuccess: (res) => {
+        if (res.sent) {
+          toast.success(`Test email sent to ${res.recipientEmail}`);
+        } else {
+          toast.error(`Email not sent (mode: ${res.mode})${res.error ? ` — ${res.error}` : ""}`);
+        }
+      },
+      onError: () => toast.error("Failed to send test email"),
+    });
+  };
+
+  if (isLoading || !statuses) {
+    return (
+      <div className="panel flex min-h-[200px] items-center justify-center">
+        <RefreshCw className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const StatusCard = ({
+    title,
+    items,
+    extra,
+  }: {
+    title: string;
+    items: { label: string; value: string; ok?: boolean }[];
+    extra?: React.ReactNode;
+  }) => (
+    <div className="panel p-4 flex flex-col justify-between">
+      <div>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">{title}</h3>
+        <div className="space-y-1.5">
+          {items.map((item) => (
+            <div key={item.label} className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">{item.label}</span>
+              {item.ok !== undefined ? (
+                <span className={cn(
+                  "rounded px-1.5 py-0.5 font-mono text-[10px] font-medium",
+                  item.ok ? "bg-emerald-500/15 text-emerald-400" : "bg-zinc-500/20 text-zinc-400",
+                )}>
+                  {item.value}
+                </span>
+              ) : (
+                <span className="font-mono text-[11px] text-foreground truncate max-w-[200px]">{item.value || "—"}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      {extra}
+    </div>
+  );
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <StatusCard
+        title="Chapa Payments"
+        items={[
+          { label: "Configured", value: statuses.chapa.configured ? "configured" : "not configured", ok: statuses.chapa.configured },
+          { label: "Mode", value: statuses.chapa.mode ?? "—" },
+          { label: "Webhook URL", value: statuses.chapa.webhookUrl ?? "—" },
+        ]}
+      />
+      <StatusCard
+        title="Resend Email"
+        items={[
+          { label: "Configured", value: statuses.resend.configured ? "configured" : "not configured", ok: statuses.resend.configured },
+          { label: "From address", value: statuses.resend.from ?? "—" },
+        ]}
+        extra={
+          <div className="mt-3 pt-3 border-t border-border">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs w-full"
+              onClick={handleTestEmail}
+              disabled={sendTestMutation.isPending}
+            >
+              {sendTestMutation.isPending ? (
+                <RefreshCw className="size-3 animate-spin mr-1.5" />
+              ) : null}
+              Send test email
+            </Button>
+          </div>
+        }
+      />
+      <StatusCard
+        title="GitHub"
+        items={[
+          { label: "OAuth app", value: statuses.github.oauthConfigured ? "configured" : "not configured", ok: statuses.github.oauthConfigured },
+          { label: "GitHub App", value: statuses.github.appConfigured ? "configured" : "not configured", ok: statuses.github.appConfigured },
+          { label: "Callback URL", value: statuses.github.callbackUrl ?? "—" },
+        ]}
+      />
+      <StatusCard
+        title="Voxide"
+        items={[
+          { label: "Public key", value: statuses.voxide.configured ? "present" : "missing", ok: statuses.voxide.configured },
+        ]}
+      />
+      <StatusCard
+        title="Cloudinary"
+        items={[
+          { label: "Configured", value: statuses.cloudinary.configured ? "configured" : "not configured", ok: statuses.cloudinary.configured },
+        ]}
+      />
+      <StatusCard
+        title="AI Providers"
+        items={[
+          { label: "Groq API key", value: statuses.ai.groq.configured ? "configured" : "not configured", ok: statuses.ai.groq.configured },
+          { label: "OpenAI API key", value: statuses.ai.openai.configured ? "configured" : "not configured", ok: statuses.ai.openai.configured },
+        ]}
+      />
+    </div>
+  );
+}
+
+// ── Admin Management Tab ──────────────────────────────────────────────────────
+function AdminManagementTab() {
+  const { data: admins, isLoading } = useAdminListQuery();
+  const promoteMutation = usePromoteAdminMutation();
+  const demoteMutation = useDemoteAdminMutation();
+
+  const [promoteEmail, setPromoteEmail] = useState("");
+  const [promoteReason, setPromoteReason] = useState("");
+  const [confirmDemote, setConfirmDemote] = useState<{ id: string; name: string } | null>(null);
+  const [demoteReason, setDemoteReason] = useState("");
+  const { data: allUsers } = useAdminUsersQuery({ search: promoteEmail, limit: 5 });
+
+  const handlePromote = (userId: string) => {
+    if (!promoteReason.trim() || promoteReason.trim().length < 5) {
+      toast.error("A reason of at least 5 characters is required");
+      return;
+    }
+    promoteMutation.mutate(
+      { userId, reason: promoteReason },
+      {
+        onSuccess: () => {
+          toast.success("User promoted to platform_admin");
+          setPromoteEmail("");
+          setPromoteReason("");
+        },
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : "Promotion failed"),
+      },
+    );
+  };
+
+  const handleDemote = () => {
+    if (!confirmDemote) return;
+    if (!demoteReason.trim() || demoteReason.trim().length < 5) {
+      toast.error("A reason of at least 5 characters is required");
+      return;
+    }
+    demoteMutation.mutate(
+      { userId: confirmDemote.id, reason: demoteReason },
+      {
+        onSuccess: () => {
+          toast.success(`${confirmDemote.name} demoted to member`);
+          setConfirmDemote(null);
+          setDemoteReason("");
+        },
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : "Demotion failed"),
+      },
+    );
+  };
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-3">
+      {/* Demote confirmation modal */}
+      {confirmDemote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="panel w-full max-w-sm p-5 shadow-2xl border border-destructive/30 space-y-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="size-5 text-destructive shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-semibold">Demote {confirmDemote.name}?</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  This user will lose platform_admin access immediately.
+                </p>
+              </div>
+            </div>
+            <label className="block text-xs text-muted-foreground">
+              Reason (required)
+              <Input
+                className="mt-1"
+                value={demoteReason}
+                onChange={(e) => setDemoteReason(e.target.value)}
+                placeholder="Reason for demotion…"
+                autoFocus
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setConfirmDemote(null); setDemoteReason(""); }}>Cancel</Button>
+              <Button variant="destructive" size="sm" onClick={handleDemote} disabled={demoteMutation.isPending || demoteReason.trim().length < 5}>
+                {demoteMutation.isPending ? <RefreshCw className="size-3 animate-spin mr-1" /> : null}
+                Demote
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Admin List Column (2 Cols) */}
+      <div className="space-y-6 lg:col-span-2">
+        <div className="panel overflow-hidden">
+          <div className="border-b border-border p-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Platform Administrators</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">All users granted platform_admin authority. Every action is audit-logged.</p>
+            </div>
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-mono font-medium text-primary">
+              {admins?.length ?? 0} {admins?.length === 1 ? "admin" : "admins"}
+            </span>
+          </div>
+          <table className="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr className="border-b border-border bg-muted/30 text-muted-foreground">
+                <th className="p-3 font-medium">Name</th>
+                <th className="p-3 font-medium">Email</th>
+                <th className="p-3 font-medium">Last login</th>
+                <th className="p-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {isLoading ? (
+                <tr><td colSpan={4} className="p-8 text-center"><RefreshCw className="size-4 animate-spin mx-auto text-muted-foreground" /></td></tr>
+              ) : admins?.length === 0 ? (
+                <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No platform admins found.</td></tr>
+              ) : (
+                admins?.map((admin) => (
+                  <tr key={admin.id} className="hover:bg-accent/40">
+                    <td className="p-3 font-medium text-foreground">{admin.name}</td>
+                    <td className="p-3 text-muted-foreground">{admin.email}</td>
+                    <td className="p-3 text-muted-foreground font-mono text-[11px]">
+                      {admin.lastLoginAt ? new Date(admin.lastLoginAt).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="p-3 text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-[11px] text-destructive hover:bg-destructive/10 border-destructive/30"
+                        onClick={() => setConfirmDemote({ id: admin.id, name: admin.name })}
+                        disabled={demoteMutation.isPending}
+                      >
+                        Demote
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Right Column (1 Col): Promote User + Governance Notice */}
+      <div className="space-y-6 lg:col-span-1">
+        <div className="panel p-5 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Promote User to Admin</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Search an existing member and grant administrative role.</p>
+          </div>
+          <label className="block text-xs font-medium text-foreground">
+            Search by email
+            <div className="relative mt-1.5">
+              <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                placeholder="user@example.com"
+                value={promoteEmail}
+                onChange={(e) => setPromoteEmail(e.target.value)}
+              />
+            </div>
+          </label>
+          {promoteEmail.length >= 3 && allUsers?.users && allUsers.users.length > 0 && (
+            <div className="rounded border border-border overflow-hidden">
+              {allUsers.users
+                .filter((u) => u.role !== "platform_admin")
+                .slice(0, 5)
+                .map((u) => (
+                  <div key={u.id} className="flex items-center justify-between px-3 py-2 hover:bg-accent/40 border-b border-border last:border-0">
+                    <div>
+                      <div className="text-xs font-medium">{u.name}</div>
+                      <div className="text-[11px] text-muted-foreground">{u.email}</div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-[11px]"
+                      onClick={() => handlePromote(u.id)}
+                      disabled={promoteMutation.isPending || promoteReason.trim().length < 5}
+                    >
+                      Promote
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          )}
+          <label className="block text-xs font-medium text-foreground">
+            Reason (required, min 5 chars)
+            <Input
+              className="mt-1.5"
+              value={promoteReason}
+              onChange={(e) => setPromoteReason(e.target.value)}
+              placeholder="e.g. Lead DevOps engineer on call…"
+            />
+          </label>
+        </div>
+
+        <div className="panel p-4 bg-muted/20 border-dashed space-y-2.5">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <ShieldCheck className="size-4 text-primary" />
+            Platform Admin Privileges
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Platform administrators have unrestricted access to billing reconciliations, AI provider keys, system kill switches, and user management.
+          </p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Every promotion and demotion action is logged with actor identification and mandatory justification.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

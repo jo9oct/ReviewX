@@ -20,6 +20,7 @@ import {
 import {
   getSubscription,
   upgradeSubscription,
+  upgradeWorkspaceSubscription,
 } from './subscription.service.js';
 
 import { ApiError } from '../utils/ApiError.js';
@@ -28,6 +29,7 @@ import environment from '../config/environment.js';
 
 const PLANS = Object.freeze({
   PRO: 'pro',
+  TEAM: 'team',
   ENTERPRISE: 'enterprise',
 });
 
@@ -35,6 +37,9 @@ const getPlanPrice = (plan) => {
   switch (plan) {
     case PLANS.PRO:
       return environment.payment.proPlanPrice;
+
+    case PLANS.TEAM:
+      return environment.payment.teamPlanPrice ?? 2000;
 
     case PLANS.ENTERPRISE:
       return environment.payment.enterprisePlanPrice;
@@ -128,8 +133,7 @@ const splitUserName = (name) => {
 };
 
 /**
- * Initiate a payment for a controlled
- * subscription plan.
+ * Initiate a payment for a controlled subscription plan.
  *
  * The frontend does NOT provide:
  * - userId
@@ -138,10 +142,13 @@ const splitUserName = (name) => {
  * - price
  *
  * The backend controls all of them.
+ *
+ * @param {{ userId: string, plan: string, workspace: object }} params
  */
 export async function initiatePayment({
   userId,
   plan,
+  workspace,
 }) {
   if (!userId) {
     throw ApiError.unauthorized(
@@ -171,8 +178,9 @@ export async function initiatePayment({
     );
   }
 
-  const subscription =
-    await getSubscription(userId);
+  // Use workspace-aware subscription lookup
+  const resolvedWorkspace = workspace ?? { type: 'personal', userId, companyId: null };
+  const subscription = await getSubscription(resolvedWorkspace);
 
   if (
     subscription.plan === plan &&
@@ -183,19 +191,16 @@ export async function initiatePayment({
     );
   }
 
-  const amount =
-    getPlanPrice(plan);
+  const amount = getPlanPrice(plan);
+  const currency = environment.payment.currency;
+  const txRef = createTxRef(plan);
 
-  const currency =
-    environment.payment.currency;
+  // Store the workspace's companyId on the payment so verifyAndCompletePayment
+  // can activate the correct subscription without needing the JWT context.
+  const companyId = resolvedWorkspace.type === 'company'
+    ? resolvedWorkspace.companyId
+    : null;
 
-  const txRef =
-    createTxRef(plan);
-
-  /*
-   * Create our internal payment record
-   * before contacting Chapa.
-   */
   await createPayment({
     userId,
     plan,
@@ -203,6 +208,7 @@ export async function initiatePayment({
     currency,
     txRef,
     status: 'pending',
+    companyId,
   });
 
   try {
@@ -338,20 +344,23 @@ export async function verifyAndCompletePayment({
    * failed, retrying the callback can still
    * complete the subscription.
    */
+  // Reconstruct the workspace from the stored payment record so the correct
+  // subscription (company or personal) is activated regardless of who calls
+  // this endpoint or what their active workspace is.
+  const workspace = {
+    type:      payment.companyId ? 'company' : 'personal',
+    companyId: payment.companyId ? payment.companyId.toString() : null,
+    userId:    payment.userId.toString(),
+  };
+
   if (payment.status === 'paid') {
-    const subscription =
-      await getSubscription(
-        payment.userId,
-      );
+    const subscription = await getSubscription(workspace);
 
     if (
       subscription.plan !== payment.plan ||
       subscription.status !== 'active'
     ) {
-      await upgradeSubscription(
-        payment.userId,
-        payment.plan,
-      );
+      await upgradeWorkspaceSubscription(workspace, payment.plan);
     }
 
     return {
@@ -496,23 +505,16 @@ export async function verifyAndCompletePayment({
    * Upgrade the subscription only after
    * successful payment verification.
    *
-   * payment.plan is trusted because it
-   * originated from our own payment record,
-   * not from the frontend.
+   * workspace is derived from the stored payment record — not from the
+   * current request context — so the right subscription is always targeted.
    */
-  const subscription =
-    await getSubscription(
-      payment.userId,
-    );
+  const subscription = await getSubscription(workspace);
 
   if (
     subscription.plan !== payment.plan ||
     subscription.status !== 'active'
   ) {
-    await upgradeSubscription(
-      payment.userId,
-      payment.plan,
-    );
+    await upgradeWorkspaceSubscription(workspace, payment.plan);
   }
 
   return {

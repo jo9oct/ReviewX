@@ -2,10 +2,12 @@
 
 import { Router } from 'express';
 
-import { authenticate } from '../middleware/authenticate.js';
+import { authenticate }          from '../middleware/authenticate.js';
+import { requireCompanyOwner }   from '../middleware/requireCompanyOwner.js';
 
 import {
   initiateProPayment,
+  initiateTeamPayment,
   initiateEnterprisePayment,
   verifyPayment,
   handleChapaCallback,
@@ -13,43 +15,46 @@ import {
 
 const router = Router();
 
-/*
- * Pro subscription.
- *
- * Frontend sends only:
- * Authorization: Bearer <JWT>
- */
+// ── Plan upgrade initiation ───────────────────────────────────────────────────
+//
+// requireCompanyOwner is workspace-aware:
+//   • personal workspace  → passes through (user pays for their own plan)
+//   • company workspace   → only company.owner may proceed (403 otherwise)
+//
+// NOTE: apply requireCompanyOwner to these future routes too when added:
+//   POST /cancel
+//   POST /trial/start
+//   POST /company/transfer-ownership
+//   DELETE /company
+
 router.post(
   '/pro/initiate',
   authenticate,
+  requireCompanyOwner,
   initiateProPayment,
 );
 
-/*
- * Enterprise subscription.
- *
- * Frontend sends only:
- * Authorization: Bearer <JWT>
- */
+router.post(
+  '/team/initiate',
+  authenticate,
+  requireCompanyOwner,
+  initiateTeamPayment,
+);
+
 router.post(
   '/enterprise/initiate',
   authenticate,
+  requireCompanyOwner,
   initiateEnterprisePayment,
 );
 
-/*
- * Public verification endpoint used when the
- * customer returns from Chapa checkout.
- */
+// ── Public endpoints (no owner gate — Chapa calls these server-to-server) ────
+
 router.get(
   '/verify/:txRef',
   verifyPayment,
 );
 
-/*
- * Public server-to-server callback. The payment
- * is trusted only after server-side verification.
- */
 router.post(
   '/callback',
   handleChapaCallback,

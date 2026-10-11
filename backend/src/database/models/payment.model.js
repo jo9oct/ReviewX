@@ -15,7 +15,7 @@ const paymentSchema = new Schema(
 
     plan: {
       type: String,
-      enum: ['pro', 'enterprise'],
+      enum: ['pro', 'team', 'enterprise'],
       required: true,
       lowercase: true,
       trim: true,
@@ -53,12 +53,46 @@ const paymentSchema = new Schema(
 
     status: {
       type: String,
-      enum: ['pending', 'paid', 'failed'],
+      enum: ['pending', 'paid', 'failed', 'cancelled', 'refunded'],
       required: true,
       default: 'pending',
       lowercase: true,
       trim: true,
       index: true,
+    },
+
+    companyId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Company',
+      default: null,
+      index: true,
+    },
+
+    billingCycle: {
+      type: String,
+      enum: ['monthly', 'annual'],
+      default: 'monthly',
+      lowercase: true,
+      trim: true,
+    },
+
+    receiptNumber: {
+      type: String,
+      default: null,
+      index: true,
+      trim: true,
+    },
+
+    chapaVerifyResponse: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+
+    refundDetails: {
+      refundedAt: { type: Date, default: null },
+      refundedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+      reason: { type: String, default: '' },
+      revokedSubscription: { type: Boolean, default: false },
     },
 
     checkoutUrl: {
@@ -90,6 +124,12 @@ paymentSchema.index({
 paymentSchema.index({
   plan: 1,
   status: 1,
+});
+
+paymentSchema.index({
+  status: 1,
+  plan: 1,
+  createdAt: -1,
 });
 
 export const Payment = mongoose.model(

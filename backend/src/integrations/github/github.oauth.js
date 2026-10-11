@@ -1,10 +1,11 @@
 // STATUS: UPDATED
 
 import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
 
+import { config } from '../../config/env.js';
 import {
   createGithubAuthorizationUrl,
-  createOAuthState,
   exchangeGithubCode,
   isGithubConfigured,
 } from './github.auth.js';
@@ -14,7 +15,7 @@ import {
 } from './github.client.js';
 
 const OAUTH_STATE_MAX_AGE_MS =
-  10 * 60 * 1000;
+  15 * 60 * 1000;
 
 const CONNECTION_MAX_AGE_MS =
   60 * 60 * 1000;
@@ -70,6 +71,19 @@ const cleanupExpiredConnections =
     }
   };
 
+const createSignedOAuthState = (userId) => {
+  const nonce = crypto.randomBytes(16).toString('hex');
+  return jwt.sign(
+    {
+      userId: userId.trim(),
+      nonce,
+      purpose: 'github_oauth',
+    },
+    config.jwtSecret,
+    { expiresIn: '30m' },
+  );
+};
+
 const createGithubOAuthSession = ({
   userId,
 } = {}) => {
@@ -107,7 +121,7 @@ const createGithubOAuthSession = ({
   }
 
   const state =
-    createOAuthState();
+    createSignedOAuthState(userId);
 
   const authorizationUrl =
     createGithubAuthorizationUrl(
@@ -135,12 +149,10 @@ const consumeGithubOAuthState =
   (state) => {
     cleanupExpiredStates();
 
-    const record =
-      oauthStates.get(
-        state,
-      );
-
-    if (!record) {
+    if (
+      typeof state !== 'string' ||
+      !state.trim()
+    ) {
       const error = new Error(
         'The GitHub OAuth state is invalid or expired.',
       );
@@ -153,13 +165,51 @@ const consumeGithubOAuthState =
       throw error;
     }
 
-    oauthStates.delete(
-      state,
+    const trimmedState = state.trim();
+
+    // 1. Check in-memory map first
+    const record =
+      oauthStates.get(
+        trimmedState,
+      );
+
+    if (record) {
+      oauthStates.delete(
+        trimmedState,
+      );
+
+      return Object.freeze({
+        ...record,
+      });
+    }
+
+    // 2. Fall back to JWT verification (survives nodemon/server restarts)
+    try {
+      const decoded = jwt.verify(trimmedState, config.jwtSecret);
+      if (
+        decoded &&
+        decoded.purpose === 'github_oauth' &&
+        typeof decoded.userId === 'string'
+      ) {
+        return Object.freeze({
+          userId: decoded.userId,
+          createdAt: decoded.iat ? decoded.iat * 1000 : Date.now(),
+        });
+      }
+    } catch (_jwtError) {
+      // Verification failed
+    }
+
+    const error = new Error(
+      'The GitHub OAuth state is invalid or expired.',
     );
 
-    return Object.freeze({
-      ...record,
-    });
+    error.code =
+      'INVALID_GITHUB_OAUTH_STATE';
+
+    error.statusCode = 400;
+
+    throw error;
   };
 
 const completeGithubOAuth =
@@ -252,6 +302,23 @@ const completeGithubOAuth =
       connection,
     );
 
+    // Persist to MongoDB so connections survive process reloads
+    try {
+      const { GithubConnection } = await import(
+        '../../database/models/githubConnection.model.js'
+      );
+      await GithubConnection.create({
+        connectionId,
+        userId: connection.userId,
+        accessToken: connection.accessToken,
+        tokenType: connection.tokenType,
+        scope: connection.scope,
+        githubUser: connection.githubUser,
+      });
+    } catch (_dbError) {
+      // In-memory cache is still populated
+    }
+
     return Object.freeze({
       connectionId,
 
@@ -267,15 +334,38 @@ const completeGithubOAuth =
   };
 
 const consumeGithubConnection =
-  (
+  async (
     connectionId,
   ) => {
     cleanupExpiredConnections();
 
-    const connection =
+    let connection =
       githubConnections.get(
         connectionId,
       );
+
+    if (!connection) {
+      // Look up from database persistence
+      try {
+        const { GithubConnection } = await import(
+          '../../database/models/githubConnection.model.js'
+        );
+        const doc = await GithubConnection.findOne({ connectionId }).lean();
+        if (doc) {
+          connection = {
+            createdAt: new Date(doc.createdAt).getTime(),
+            userId: doc.userId,
+            accessToken: doc.accessToken,
+            tokenType: doc.tokenType,
+            scope: doc.scope,
+            githubUser: doc.githubUser,
+          };
+          githubConnections.set(connectionId, connection);
+        }
+      } catch (_dbError) {
+        // DB lookup failed or not connected
+      }
+    }
 
     if (!connection) {
       const error = new Error(

@@ -18,7 +18,16 @@ export type View =
   | "companies"
   | "payments"
   | "integrations"
-  | "schedules";
+  | "schedules"
+  | "findings"
+  | "reports"
+  | "settings"
+  | "admin-reviews"
+  | "activity"
+  | "queues"
+  | "webhooks"
+  | "platform-settings"
+  | "notifications";
 
 export type Role = "member" | "company" | "platform";
 

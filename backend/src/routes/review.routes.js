@@ -8,6 +8,7 @@ import {
   createReview,
   getReview,
   getAllReviews,
+  getReviewMetrics,
 } from '../controllers/review.controller.js';
 
 import {
@@ -56,6 +57,13 @@ router.get(
   authenticate,
   accessMiddleware(),
   getAllReviews,
+);
+
+router.get(
+  '/metrics',
+  authenticate,
+  accessMiddleware(),
+  getReviewMetrics,
 );
 
 router.get(

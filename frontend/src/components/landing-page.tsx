@@ -176,46 +176,68 @@ const SUPPORTED_LANGUAGES = [
 
 const PLANS: Plan[] = [
   {
-    name: "Starter",
+    name: "Free",
     price: "0",
     period: "ETB / month",
-    description: "For developers exploring automated code review.",
+    description: "For individual developers exploring automated code review.",
     features: [
-      "10 reviews / month",
-      "Built-in security rules",
-      "PDF & JSON export reports",
-      "Shareable finding links",
+      "50 monthly reviews",
+      "5 AI-assisted reviews",
+      "1,000 lines / 50 files per review",
+      "30-day history retention",
+      "Deterministic security & quality rules",
+      "Standard JSON reports",
     ],
     cta: "Start for free",
   },
   {
     name: "Pro",
-    price: "3,120",
+    price: "500",
     period: "ETB / month",
-    description: "For product teams shipping multiple changes per week.",
+    description: "For active developers shipping multiple changes each week.",
     features: [
-      "Unlimited reviews",
-      "Custom rules engine",
-      "AI-explained findings",
-      "Voice questions via Voxide",
-      "Priority support",
+      "500 monthly reviews",
+      "20 AI-assisted reviews",
+      "5,000 lines / 100 files per review",
+      "90-day history retention",
+      "Up to 10 seats",
+      "ZIP Archive uploads",
+      "Interactive HTML & JSON reports",
     ],
     featured: true,
-    cta: "Start free trial",
+    cta: "Upgrade to Pro",
   },
   {
-    name: "Company",
-    price: "10,270",
+    name: "Team",
+    price: "2,000",
     period: "ETB / month",
-    description: "For multi-team engineering organisations.",
+    description: "For collaborative engineering squads and companies.",
     features: [
-      "Everything in Pro",
-      "Shared dashboards",
-      "Team-wide rule controls",
-      "Advanced audit policies",
-      "Admin access controls",
+      "5,000 monthly reviews",
+      "100 AI-assisted reviews",
+      "10,000 lines / 200 files per review",
+      "180-day history retention",
+      "GitHub repository integration",
+      "Custom company rules & enforcement",
+      "Scheduled automated scans",
     ],
-    cta: "Talk to us",
+    cta: "Upgrade to Team",
+  },
+  {
+    name: "Enterprise",
+    price: "5,000",
+    period: "ETB / month",
+    description: "For high-scale engineering organisations requiring peak limits.",
+    features: [
+      "100,000 monthly reviews",
+      "500 AI-assisted reviews",
+      "50,000 lines / 500 files per review",
+      "365-day history retention",
+      "Up to 100 seats",
+      "Cross-team review analytics",
+      "Dedicated audit log policies",
+    ],
+    cta: "Upgrade to Enterprise",
   },
 ];
 
@@ -230,7 +252,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Can I use my own company's coding rules?",
-    a: "Yes. The Pro and Company plans include a custom rules engine where you can encode your team's standards and enforce them on every review.",
+    a: "Yes. The Team and Enterprise plans include a custom rules engine where you can encode your team's standards and enforce them on every review.",
   },
   {
     q: "What happens to my code after a review?",
@@ -1292,7 +1314,7 @@ export function LandingPage() {
                 </p>
               </div>
 
-              <div className="mt-12 grid gap-4 lg:grid-cols-3">
+              <div className="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {PLANS.map((plan, i) => (
                   <PlanCard key={plan.name} plan={plan} index={i} />
                 ))}

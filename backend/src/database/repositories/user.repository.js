@@ -118,3 +118,31 @@ export async function touchLoginAt(id) {
     lastLoginAt: new Date(),
   });
 }
+
+/**
+ * Attach a user to a company (used when accepting an invitation).
+ *
+ * @param {string} id       User id
+ * @param {string} companyId
+ * @returns {Promise<object|null>}  Updated user (lean), or null if not found.
+ */
+export async function setCompany(id, companyId) {
+  return User.findByIdAndUpdate(
+    id,
+    { $set: { company: companyId } },
+    { new: true },
+  ).lean().exec();
+}
+
+/**
+ * Update arbitrary fields on a user by id.
+ *
+ * Used by the platform-admin seed script. Never touches passwordHash.
+ *
+ * @param {string} id
+ * @param {object} fields
+ * @returns {Promise<object|null>}  Updated user (lean)
+ */
+export async function updateById(id, fields) {
+  return User.findByIdAndUpdate(id, fields, { new: true }).lean().exec();
+}

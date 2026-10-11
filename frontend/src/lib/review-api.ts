@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getApiBaseUrl,
   getAuthToken,
@@ -41,7 +41,7 @@ export type CreateReviewPayload = {
   options?: ReviewOptions;
 };
 
-export type SubscriptionTier = "free" | "pro" | "enterprise";
+export type SubscriptionTier = "free" | "pro" | "team" | "enterprise";
 
 export const TIER_POLICIES: Record<
   SubscriptionTier,
@@ -91,6 +91,21 @@ export const TIER_POLICIES: Record<
     jsonReport: true,
     maxConcurrentReviews: 3,
   },
+  team: {
+    maxLinesPerReview: 10000,
+    maxFilesPerReview: 200,
+    archiveUpload: true,
+    aiAnalysis: true,
+    aiRemediation: true,
+    advancedAnalysis: true,
+    githubIntegration: true,
+    companyRules: true,
+    scheduledReviews: true,
+    htmlReport: true,
+    pdfReport: true,
+    jsonReport: true,
+    maxConcurrentReviews: 5,
+  },
   enterprise: {
     maxLinesPerReview: Number.POSITIVE_INFINITY,
     maxFilesPerReview: Number.POSITIVE_INFINITY,
@@ -105,6 +120,71 @@ export const TIER_POLICIES: Record<
     pdfReport: true,
     jsonReport: true,
     maxConcurrentReviews: 10,
+  },
+};
+
+export const PLAN_LIMITS: Record<
+  SubscriptionTier,
+  {
+    name: string;
+    price: number;
+    currency: string;
+    monthlyReviews: number;
+    aiAssistedReviews: number;
+    linesPerReview: number;
+    filesPerReview: number;
+    historyRetentionDays: number;
+    seats: number;
+    description: string;
+  }
+> = {
+  free: {
+    name: "Free",
+    price: 0,
+    currency: "ETB",
+    monthlyReviews: 50,
+    aiAssistedReviews: 5,
+    linesPerReview: 1000,
+    filesPerReview: 50,
+    historyRetentionDays: 30,
+    seats: 0,
+    description: "For individual developers exploring automated code review.",
+  },
+  pro: {
+    name: "Pro",
+    price: 500,
+    currency: "ETB",
+    monthlyReviews: 500,
+    aiAssistedReviews: 20,
+    linesPerReview: 5000,
+    filesPerReview: 100,
+    historyRetentionDays: 90,
+    seats: 10,
+    description: "For active developers shipping code multiple times per week.",
+  },
+  team: {
+    name: "Team",
+    price: 2000,
+    currency: "ETB",
+    monthlyReviews: 5000,
+    aiAssistedReviews: 100,
+    linesPerReview: 10000,
+    filesPerReview: 200,
+    historyRetentionDays: 180,
+    seats: 10,
+    description: "For growing teams collaborating with GitHub integration and company rules.",
+  },
+  enterprise: {
+    name: "Enterprise",
+    price: 5000,
+    currency: "ETB",
+    monthlyReviews: 100000,
+    aiAssistedReviews: 500,
+    linesPerReview: 50000,
+    filesPerReview: 500,
+    historyRetentionDays: 365,
+    seats: 100,
+    description: "For high-scale engineering organisations demanding maximum throughput.",
   },
 };
 
@@ -265,15 +345,35 @@ export type ReviewIndexRecord = {
   updatedAt?: string | null;
 };
 
+export type WorkspaceUsage = {
+  reviews:   { used: number; limit: number | null };
+  aiReviews: { used: number; limit: number | null };
+  seats:     { used: number; limit: number | null };
+  periodStart: string;
+  periodEnd:   string;
+};
+
 export type SubscriptionRecord = {
   _id?: string;
   userId: string;
   plan: SubscriptionTier;
-  status: "active" | "expired" | "cancelled";
+  status: "trialing" | "active" | "past_due" | "expired" | "cancelled";
   startedAt: string;
   expiresAt?: string | null;
+  monthlyReviews?: number;
+  aiAssistedReviews?: number;
+  linesPerReview?: number;
+  filesPerReview?: number;
+  historyRetentionDays?: number;
+  seats?: number;
   createdAt?: string;
   updatedAt?: string;
+  /** Attached by GET /subscriptions from getWorkspaceUsage() */
+  usage?: WorkspaceUsage;
+  /** Feature flags from the effective tier policy */
+  features?: Record<string, boolean>;
+  /** Server-side pending upgrade request status (replaces localStorage lock) */
+  pendingRequest?: { exists: boolean; createdAt?: string };
 };
 
 export type PaymentInitiation = {
@@ -332,6 +432,28 @@ export class ApiRequestError extends Error {
   }
 }
 
+function extractErrorMessage(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === "object") {
+    const raw = payload as Record<string, unknown>;
+    const err = raw["error"];
+    const msg = raw["message"];
+    if (typeof err === "string" && err.trim().length > 0) {
+      return err;
+    }
+    if (err && typeof err === "object") {
+      const nestedErr = err as Record<string, unknown>;
+      const nestedMsg = nestedErr["message"];
+      if (typeof nestedMsg === "string" && nestedMsg.trim().length > 0) {
+        return nestedMsg;
+      }
+    }
+    if (typeof msg === "string" && msg.trim().length > 0) {
+      return msg;
+    }
+  }
+  return fallback;
+}
+
 const API_BASE = getApiBaseUrl();
 const API_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
 
@@ -341,12 +463,16 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (!isMultipart && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  headers.set("Accept", "application/json");
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json, */*");
+  }
   const token = getAuthToken();
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  const response = await fetch(`${API_BASE}${path}`, {
+  const normalizedPath = path.replace(/^\/api\/v1(?=\/)/, "").replace(/^\/api(?=\/)/, "");
+  const targetUrl = `${API_BASE}${normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`}`;
+  const response = await fetch(targetUrl, {
     ...init,
     credentials: "include",
     headers,
@@ -355,13 +481,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
 
   if (!response.ok) {
-    if (response.status === 401) {
-      handleUnauthorized();
-    }
-    const message =
-      payload && typeof payload === "object" && "error" in payload && payload.error
-        ? String((payload as { error?: { message?: string } }).error?.message ?? "Request failed")
-        : "Request failed";
+    const message = extractErrorMessage(payload, `Request failed with status ${response.status}`);
     throw new ApiRequestError(message, response.status, payload);
   }
 
@@ -379,7 +499,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function getApiHealth(): Promise<{ status: string; service: string; version: string }> {
-  const headers = new Headers({ Accept: "application/json" });
+  const headers = new Headers({ Accept: "application/json, */*" });
   const token = getAuthToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(`${API_ORIGIN}/health`, {
@@ -387,9 +507,8 @@ export async function getApiHealth(): Promise<{ status: string; service: string;
     headers,
   });
   const payload = (await response.json().catch(() => null)) as ApiEnvelope<{ status: string; service: string; version: string }> | null;
-  if (response.status === 401) handleUnauthorized();
   if (!response.ok || !payload?.success || !payload.data) {
-    const message = payload?.error?.message ?? `Health check failed (${response.status})`;
+    const message = extractErrorMessage(payload, `Health check failed (${response.status})`);
     throw new ApiRequestError(message, response.status, payload);
   }
   if (typeof payload.data === "object") {
@@ -411,39 +530,58 @@ export function getApiErrorResponse(error: unknown): unknown {
     : undefined;
 }
 
-export async function startGithubConnect(): Promise<void> {
-  const headers = new Headers({ Accept: "application/json" });
-  const token = getAuthToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${API_BASE}/github/connect`, {
-    method: "GET",
-    credentials: "include",
-    headers,
-    redirect: "manual",
-  });
+export async function getGithubStatus(): Promise<{
+  connected: boolean;
+  connectionId?: string;
+  githubUser?: GithubUser;
+}> {
+  return apiFetch<{
+    connected: boolean;
+    connectionId?: string;
+    githubUser?: GithubUser;
+  }>("/github/status");
+}
 
-  if (response.type === "opaqueredirect") {
-    throw new ApiRequestError(
-      "The GitHub connect endpoint redirects to GitHub, but this cross-origin API response hides its redirect location. Configure a same-origin API proxy or update the backend to return an authorization URL.",
-      0,
-      null,
-    );
-  }
-  if (response.status >= 300 && response.status < 400) {
-    const location = response.headers.get("Location");
-    if (!location) {
-      throw new ApiRequestError("The GitHub connect response did not include a redirect location.", response.status, null);
+export async function disconnectGithubApi(): Promise<{ disconnected: boolean }> {
+  return apiFetch<{ disconnected: boolean }>("/github/disconnect", {
+    method: "POST",
+  });
+}
+
+export async function startGithubConnect(): Promise<string> {
+  const result = await apiFetch<{ authorizationUrl: string }>("/github/connect");
+  return result.authorizationUrl;
+}
+
+export async function openGithubConnectPopup(): Promise<Window | null> {
+  if (typeof window === "undefined") return null;
+  const width = 600;
+  const height = 750;
+  const left = window.screenX + (window.outerWidth - width) / 2;
+  const top = window.screenY + (window.outerHeight - height) / 2;
+
+  // Open blank popup synchronously on user gesture to avoid popup blocker suppression
+  const popup = window.open(
+    "about:blank",
+    "reviewx_github_oauth",
+    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,status=1`
+  );
+
+  try {
+    const url = await startGithubConnect();
+    if (popup && !popup.closed) {
+      popup.location.href = url;
+      return popup;
+    } else {
+      window.location.assign(url);
+      return null;
     }
-    window.location.assign(new URL(location, response.url).toString());
-    return;
+  } catch (err) {
+    if (popup && !popup.closed) {
+      popup.close();
+    }
+    throw err;
   }
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as ApiEnvelope<unknown> | null;
-    const message = payload?.error?.message ?? `GitHub authorization request failed (${response.status})`;
-    if (response.status === 401) handleUnauthorized();
-    throw new ApiRequestError(message, response.status, payload);
-  }
-  throw new ApiRequestError("The GitHub connect endpoint returned an unexpected response.", response.status, null);
 }
 
 export async function completeGithubOAuth(params: {
@@ -478,13 +616,24 @@ export async function createReview(payload: CreateReviewPayload): Promise<{ revi
   });
 }
 
+export type SubscriptionResponse = {
+  subscription: SubscriptionRecord;
+  usage: WorkspaceUsage;
+  pendingRequest: { exists: boolean; createdAt?: string };
+};
+
 export async function getSubscription(): Promise<SubscriptionRecord> {
-  const result = await apiFetch<{ subscription: SubscriptionRecord }>("/subscriptions");
-  return result.subscription;
+  const result = await apiFetch<{ subscription: SubscriptionRecord; usage: WorkspaceUsage; pendingRequest: { exists: boolean; createdAt?: string } }>("/subscriptions");
+  // Merge usage and pendingRequest into the subscription object for convenience
+  return {
+    ...result.subscription,
+    usage:          result.usage,
+    pendingRequest: result.pendingRequest,
+  };
 }
 
-export async function initiateSubscriptionPayment(plan: "pro" | "enterprise"): Promise<PaymentInitiation> {
-  const endpoint = plan === "pro" ? "/payment/pro/initiate" : "/payment/enterprise/initiate";
+export async function initiateSubscriptionPayment(plan: "pro" | "team" | "enterprise"): Promise<PaymentInitiation> {
+  const endpoint = `/payment/${plan}/initiate`;
   const payment = await apiFetch<PaymentInitiation>(endpoint, {
     method: "POST",
   });
@@ -497,7 +646,7 @@ export async function initiateSubscriptionPayment(plan: "pro" | "enterprise"): P
 export type PaymentVerification = {
   payment: {
     txRef: string;
-    plan: "pro" | "enterprise";
+    plan: "pro" | "team" | "enterprise";
     status: "pending" | "paid" | "failed";
   };
   alreadyProcessed: boolean;
@@ -524,12 +673,69 @@ export function useSubscriptionQuery(
     refetchOnMount: "always",
     refetchInterval: untilPlan
       ? (query) => {
-          const planOrder: Record<SubscriptionTier, number> = { free: 0, pro: 1, enterprise: 2 };
+          const planOrder: Record<SubscriptionTier, number> = { free: 0, pro: 1, team: 2, enterprise: 3 };
           return query.state.data && planOrder[query.state.data.plan] >= planOrder[untilPlan]
             ? false
             : options?.pollIntervalMs ?? 3000;
         }
       : false,
+  });
+}
+
+// ── Upgrade Requests ─────────────────────────────────────────────────────────
+
+export type UpgradeRequestRecord = {
+  _id: string;
+  requesterId: { _id: string; name: string; email: string } | string;
+  companyId: string;
+  message: string;
+  status: "pending" | "acknowledged";
+  createdAt: string;
+};
+
+export async function postUpgradeRequest(message = ""): Promise<UpgradeRequestRecord> {
+  return apiFetch<UpgradeRequestRecord>("/subscriptions/upgrade-request", {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+}
+
+export async function getUpgradeRequests(): Promise<UpgradeRequestRecord[]> {
+  return apiFetch<UpgradeRequestRecord[]>("/subscriptions/upgrade-requests");
+}
+
+export async function acknowledgeUpgradeRequest(id: string): Promise<UpgradeRequestRecord> {
+  return apiFetch<UpgradeRequestRecord>(`/subscriptions/upgrade-requests/${encodeURIComponent(id)}/acknowledge`, {
+    method: "POST",
+  });
+}
+
+export function useUpgradeRequestMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ message }: { message?: string }) => postUpgradeRequest(message ?? ""),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
+    },
+  });
+}
+
+export function useUpgradeRequestsQuery() {
+  return useQuery({
+    queryKey: ["upgrade-requests"],
+    queryFn:  getUpgradeRequests,
+    staleTime: 30_000,
+  });
+}
+
+export function useAcknowledgeUpgradeRequestMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => acknowledgeUpgradeRequest(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["upgrade-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
+    },
   });
 }
 

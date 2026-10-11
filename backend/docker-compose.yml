@@ -84,6 +84,10 @@ services:
       FRONTEND_URL: ${FRONTEND_URL}
       PAYMENT_CURRENCY: ${PAYMENT_CURRENCY}
 
+      # Invitation email delivery (Resend HTTP API)
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+
     ports:
       - "5000:5000"
 

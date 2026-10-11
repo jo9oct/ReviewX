@@ -8,7 +8,9 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "worker": "node worker.js",
-    "start": "node --watch src/server.js"
+    "start": "node --watch src/server.js",
+    "seed:admin": "node scripts/seed-platform-admin.js",
+    "test": "node --test --test-concurrency=1 --test-timeout=120000 \"src/tests/integration/*.test.js\""
   },
   "engines": {
     "node": ">=20.0.0"
@@ -27,6 +29,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.0.0",
     "multer": "^2.4.0",
+    "node-cron": "^4.6.0",
     "nodemon": "^3.1.14",
     "tree-sitter": "0.21.1",
     "tree-sitter-c": "0.21.4",

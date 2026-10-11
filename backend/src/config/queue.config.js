@@ -35,6 +35,10 @@ const queueConfig = {
     cleanup:
       process.env.CLEANUP_QUEUE_NAME ||
       'cleanup',
+
+    notification:
+      process.env.NOTIFICATION_QUEUE_NAME ||
+      'notification',
   },
 };
 

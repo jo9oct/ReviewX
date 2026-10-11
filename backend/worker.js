@@ -28,14 +28,25 @@ import {
 } from './src/jobs/cleanup.job.js';
 
 import {
+  createNotificationProcessor,
+} from './src/jobs/notification.job.js';
+
+import {
   createScheduler,
 } from './src/scheduler/scheduler.js';
+
+import {
+  startScheduler as startNotificationScheduler,
+  stopScheduler as stopNotificationScheduler,
+} from './src/scheduler/notification.scheduler.js';
 
 import * as reviewService from './src/services/review.service.js';
 
 import * as reportService from './src/services/report.service.js';
 
 import cleanupService from './src/services/cleanup.service.js';
+
+import notificationDeliveryService from './src/services/notificationDelivery.service.js';
 
 const workers = [];
 
@@ -105,6 +116,8 @@ const createWorkerServices =
       reportService,
 
       cleanupService,
+
+      notificationDeliveryService,
     };
   };
 
@@ -200,12 +213,25 @@ const bootstrap =
         }),
     });
 
+    createWorker({
+      queueName:
+        QUEUE_NAMES.NOTIFICATION,
+
+      processor:
+        createNotificationProcessor({
+          notificationDeliveryService:
+            services.notificationDeliveryService,
+        }),
+    });
+
     scheduler =
       createScheduler({
         logger: console,
       });
 
     await scheduler.start();
+
+    startNotificationScheduler();
 
     console.info(
       '[worker] review worker started',
@@ -217,6 +243,14 @@ const bootstrap =
 
     console.info(
       '[worker] cleanup worker started',
+    );
+
+    console.info(
+      '[worker] notification worker started',
+    );
+
+    console.info(
+      '[worker] notification scheduler started',
     );
 
     console.info(
@@ -248,6 +282,8 @@ const shutdown =
       if (scheduler) {
         scheduler.shutdown();
       }
+
+      stopNotificationScheduler();
 
       await Promise.all(
         workers.map(

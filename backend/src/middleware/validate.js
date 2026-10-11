@@ -36,7 +36,14 @@ export function validate(schema, source = 'body') {
       });
     }
 
-    req[source] = value;
+    // Express 5 exposes req.query as a getter-only property, so validated
+    // values can only be written back for writable sources (body/params).
+    // For query, stash the validated value on req.validatedQuery instead.
+    if (source === 'query') {
+      req.validatedQuery = value;
+    } else {
+      req[source] = value;
+    }
     next();
   };
 }

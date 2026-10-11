@@ -11,9 +11,23 @@ import {
   getGithubRepositories,
   getGithubBranches,
   getGithubRepository,
+  getGithubStatus,
+  disconnectGithub,
 } from '../controllers/github.controller.js';
 
 const router = Router();
+
+router.get(
+  '/status',
+  authenticate,
+  getGithubStatus,
+);
+
+router.post(
+  '/disconnect',
+  authenticate,
+  disconnectGithub,
+);
 
 router.get(
   '/connect',

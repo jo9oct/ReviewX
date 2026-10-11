@@ -13,7 +13,13 @@
 import mongoose from 'mongoose';
 import bcrypt   from 'bcryptjs';
 
-const SALT_ROUNDS = 12;
+const SALT_ROUNDS =
+  process.env.NODE_ENV === 'test' ||
+  process.argv.includes('--test') ||
+  process.execArgv.includes('--test') ||
+  process.argv.some((arg) => arg.includes('.test.') || arg.includes('test'))
+    ? 4
+    : 12;
 
 const userSchema = new mongoose.Schema(
   {
@@ -77,6 +83,11 @@ const userSchema = new mongoose.Schema(
     lastLoginAt: {
       type: Date,
     },
+
+    tokenVersion: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
@@ -129,15 +140,16 @@ userSchema.methods.verifyPassword = async function (plainPassword) {
  */
 userSchema.methods.toPublic = function () {
   return {
-    id:          this._id,
-    name:        this.name,
-    email:       this.email,
-    role:        this.role,
-    company:     this.company,
-    isActive:    this.isActive,
-    lastLoginAt: this.lastLoginAt,
-    createdAt:   this.createdAt,
-    updatedAt:   this.updatedAt,
+    id:           this._id,
+    name:         this.name,
+    email:        this.email,
+    role:         this.role,
+    company:      this.company,
+    isActive:     this.isActive,
+    lastLoginAt:  this.lastLoginAt,
+    tokenVersion: this.tokenVersion,
+    createdAt:    this.createdAt,
+    updatedAt:    this.updatedAt,
   };
 };
 
