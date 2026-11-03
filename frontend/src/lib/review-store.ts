@@ -37,7 +37,16 @@ interface ReviewState {
   activeReview: ReviewResult | null;
   activeReviewStatus: string | null;
   scheduledReviews: ScheduledReview[];
-  apiResponses: Record<string, { request?: unknown; response?: unknown; error?: string; errorResponse?: unknown; receivedAt: string }>;
+  apiResponses: Record<
+    string,
+    {
+      request?: unknown;
+      response?: unknown;
+      error?: string;
+      errorResponse?: unknown;
+      receivedAt: string;
+    }
+  >;
   userName: string;
   userEmail: string;
   setView: (view: View) => void;
@@ -53,7 +62,9 @@ interface ReviewState {
   setActiveReviewId: (reviewId: string | null) => void;
   setActiveReview: (review: ReviewResult | null) => void;
   setActiveReviewStatus: (status: string | null) => void;
-  setScheduledReviews: (updater: ScheduledReview[] | ((prev: ScheduledReview[]) => ScheduledReview[])) => void;
+  setScheduledReviews: (
+    updater: ScheduledReview[] | ((prev: ScheduledReview[]) => ScheduledReview[]),
+  ) => void;
   setApiResponse: (
     key: string,
     value: { request?: unknown; response?: unknown; error?: string; errorResponse?: unknown },

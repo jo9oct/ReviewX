@@ -1,12 +1,36 @@
 const SOURCE_FILE_EXTENSIONS = new Set([
-  ".c", ".cc", ".cpp", ".cs", ".css", ".go", ".h", ".hpp", ".html", ".java",
-  ".js", ".jsx", ".json", ".kt", ".php", ".py", ".rb", ".rs", ".sql", ".swift",
-  ".ts", ".tsx", ".vue", ".xml", ".yaml", ".yml",
+  ".c",
+  ".cc",
+  ".cpp",
+  ".cs",
+  ".css",
+  ".go",
+  ".h",
+  ".hpp",
+  ".html",
+  ".java",
+  ".js",
+  ".jsx",
+  ".json",
+  ".kt",
+  ".php",
+  ".py",
+  ".rb",
+  ".rs",
+  ".sql",
+  ".swift",
+  ".ts",
+  ".tsx",
+  ".vue",
+  ".xml",
+  ".yaml",
+  ".yml",
 ]);
 
 function sourceFileName(path: string): boolean {
   const normalized = path.replace(/\\/g, "/");
-  if (normalized.startsWith("/") || normalized.split("/").some((part) => part === "..")) return false;
+  if (normalized.startsWith("/") || normalized.split("/").some((part) => part === ".."))
+    return false;
   const name = normalized.split("/").pop()?.toLowerCase() ?? "";
   const dot = name.lastIndexOf(".");
   return dot >= 0 && SOURCE_FILE_EXTENSIONS.has(name.slice(dot));
@@ -14,15 +38,21 @@ function sourceFileName(path: string): boolean {
 
 async function inflateRaw(compressed: Uint8Array): Promise<Uint8Array> {
   if (typeof DecompressionStream === "undefined") {
-    throw new Error("This browser cannot extract compressed ZIP files. Use a current browser or upload source files.");
+    throw new Error(
+      "This browser cannot extract compressed ZIP files. Use a current browser or upload source files.",
+    );
   }
   const compressedBuffer = new ArrayBuffer(compressed.byteLength);
   new Uint8Array(compressedBuffer).set(compressed);
-  const stream = new Blob([compressedBuffer]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  const stream = new Blob([compressedBuffer])
+    .stream()
+    .pipeThrough(new DecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-export async function readSourceFilesFromZip(file: File): Promise<Array<{ filename: string; content: string }>> {
+export async function readSourceFilesFromZip(
+  file: File,
+): Promise<Array<{ filename: string; content: string }>> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const minEndOffset = Math.max(0, bytes.length - 65_557);
@@ -47,7 +77,8 @@ export async function readSourceFilesFromZip(file: File): Promise<Array<{ filena
   let offset = centralDirectoryOffset;
 
   for (let index = 0; index < entryCount; index += 1) {
-    if (view.getUint32(offset, true) !== 0x02014b50) throw new Error("The ZIP archive contains an invalid directory entry.");
+    if (view.getUint32(offset, true) !== 0x02014b50)
+      throw new Error("The ZIP archive contains an invalid directory entry.");
     const flags = view.getUint16(offset + 8, true);
     const method = view.getUint16(offset + 10, true);
     const compressedSize = view.getUint32(offset + 20, true);
@@ -60,7 +91,8 @@ export async function readSourceFilesFromZip(file: File): Promise<Array<{ filena
     offset += 46 + fileNameLength + extraLength + commentLength;
 
     if (!sourceFileName(path)) continue;
-    if ((flags & 1) !== 0) throw new Error(`The ZIP archive contains an encrypted source file: ${path}`);
+    if ((flags & 1) !== 0)
+      throw new Error(`The ZIP archive contains an encrypted source file: ${path}`);
     if (compressedSize === 0xffffffff || localHeaderOffset === 0xffffffff) {
       throw new Error("ZIP64 archives are not supported by this browser uploader.");
     }
@@ -83,6 +115,7 @@ export async function readSourceFilesFromZip(file: File): Promise<Array<{ filena
     files.push({ filename: path, content: decoder.decode(content) });
   }
 
-  if (files.length === 0) throw new Error("The ZIP archive contains no supported source-code files.");
+  if (files.length === 0)
+    throw new Error("The ZIP archive contains no supported source-code files.");
   return files;
 }

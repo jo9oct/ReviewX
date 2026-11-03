@@ -148,6 +148,18 @@ type Finding = {
   description: string;
 };
 
+function errorMessage(error: unknown, fallback: string): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message || fallback;
+  }
+  return fallback;
+}
+
 function mapBackendFindingToUi(bf: ReviewFinding, index: number): Finding {
   const sevMap: Record<string, Severity> = {
     critical: "CRITICAL",
@@ -194,7 +206,10 @@ function toUiReviewResult(details: ReviewDetails): ReviewResult {
       ...(finding._id ? { _id: finding._id } : {}),
       ...(finding.id ? { id: finding.id } : {}),
       category:
-        category === "security" || category === "bug" || category === "quality" || category === "performance"
+        category === "security" ||
+        category === "bug" ||
+        category === "quality" ||
+        category === "performance"
           ? category
           : "quality",
       type: finding.ruleId ?? category,
@@ -214,7 +229,9 @@ function toUiReviewResult(details: ReviewDetails): ReviewResult {
       code: null,
       recommendation: finding.remediation ?? null,
       analyzer: "backend",
-      fingerprint: String(finding._id ?? finding.id ?? `${reviewId}-${finding.ruleId ?? "finding"}`),
+      fingerprint: String(
+        finding._id ?? finding.id ?? `${reviewId}-${finding.ruleId ?? "finding"}`,
+      ),
     };
   });
   const countSeverity = (severity: string) =>
@@ -249,7 +266,8 @@ function toUiReviewResult(details: ReviewDetails): ReviewResult {
           model: aiAnalysis.model ?? null,
           summary: aiAnalysis.result?.summary?.summary ?? null,
           recommendations:
-            aiAnalysis.result?.improvements?.map((item) => item.suggestion ?? "").filter(Boolean) ?? [],
+            aiAnalysis.result?.improvements?.map((item) => item.suggestion ?? "").filter(Boolean) ??
+            [],
         }
       : null,
     errorMessage: details.review.errorCode ?? null,
@@ -427,7 +445,8 @@ export function ReviewPlatform() {
         timer = window.setTimeout(() => void refreshReview(), 1500);
       } catch (reviewError) {
         if (cancelled) return;
-        const message = reviewError instanceof Error ? reviewError.message : "Unable to load review status";
+        const message =
+          reviewError instanceof Error ? reviewError.message : "Unable to load review status";
         setApiResponse("GET /reviews/:reviewId", {
           request: { reviewId: activeReviewId },
           ...apiFailure(reviewError, message),
@@ -450,16 +469,14 @@ export function ReviewPlatform() {
 
   // Derive context label and org name from role — no static personas map needed
   const roleBadge =
-    role === "platform" ? "Platform admin"
-    : role === "company" ? "Company admin"
-    : "Member";
+    role === "platform" ? "Platform admin" : role === "company" ? "Company admin" : "Member";
 
   const orgName =
     role === "platform"
       ? "ReviewX Platform"
       : user?.company && typeof user.company === "string" && !user.company.match(/^[a-f\d]{24}$/i)
-      ? user.company
-      : `${userName ? `${userName}'s Workspace` : "Personal Workspace"}`;
+        ? user.company
+        : `${userName ? `${userName}'s Workspace` : "Personal Workspace"}`;
 
   const orgInitials =
     role === "platform"
@@ -475,8 +492,8 @@ export function ReviewPlatform() {
     role === "platform"
       ? "ReviewX / platform"
       : role === "company"
-      ? `${orgName} / admin`
-      : `${orgName} / personal`;
+        ? `${orgName} / admin`
+        : `${orgName} / personal`;
 
   const nav = roleNav[role];
   const titles: Record<View, string> = {
@@ -613,7 +630,7 @@ export function ReviewPlatform() {
               title={
                 subscriptionQuery.isError
                   ? "Unable to retrieve your subscription from the backend"
-                  : subscriptionQuery.data?.status ?? "Loading subscription"
+                  : (subscriptionQuery.data?.status ?? "Loading subscription")
               }
             >
               {subscriptionQuery.isLoading
@@ -697,16 +714,28 @@ function GitHubIntegrationWorkspace() {
     })),
   );
   const [connectionId, setConnectionId] = useState(() =>
-    typeof window === "undefined" ? "" : window.sessionStorage.getItem(STORAGE_KEYS.GITHUB_CONNECTION_ID) ?? "",
+    typeof window === "undefined"
+      ? ""
+      : (window.sessionStorage.getItem(STORAGE_KEYS.GITHUB_CONNECTION_ID) ?? ""),
   );
   const [callbackJson, setCallbackJson] = useState("");
-  const [githubUser, setGithubUser] = useState<{ login: string; name?: string | null } | null>(null);
-  const [repositories, setRepositories] = useState<Awaited<ReturnType<typeof listGithubRepositories>>["repositories"]>([]);
+  const [githubUser, setGithubUser] = useState<{ login: string; name?: string | null } | null>(
+    null,
+  );
+  const [repositories, setRepositories] = useState<
+    Awaited<ReturnType<typeof listGithubRepositories>>["repositories"]
+  >([]);
   const [selectedRepository, setSelectedRepository] = useState("");
-  const [branches, setBranches] = useState<Awaited<ReturnType<typeof listGithubBranches>>["branches"]>([]);
+  const [branches, setBranches] = useState<
+    Awaited<ReturnType<typeof listGithubBranches>>["branches"]
+  >([]);
   const [selectedBranch, setSelectedBranch] = useState("");
-  const [repositoryInfo, setRepositoryInfo] = useState<Awaited<ReturnType<typeof getGithubRepository>>["repository"] | null>(null);
-  const [health, setHealth] = useState<{ status: string; service: string; version: string } | null>(null);
+  const [repositoryInfo, setRepositoryInfo] = useState<
+    Awaited<ReturnType<typeof getGithubRepository>>["repository"] | null
+  >(null);
+  const [health, setHealth] = useState<{ status: string; service: string; version: string } | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -722,7 +751,8 @@ function GitHubIntegrationWorkspace() {
       })
       .catch((healthError) => {
         if (active) {
-          const message = healthError instanceof Error ? healthError.message : "Unable to reach the backend";
+          const message =
+            healthError instanceof Error ? healthError.message : "Unable to reach the backend";
           setError(message);
           setApiResponse("GET /health", { request: {}, ...apiFailure(healthError, message) });
         }
@@ -752,11 +782,15 @@ function GitHubIntegrationWorkspace() {
       })
       .catch((loadError) => {
         if (active) {
-          const message = loadError instanceof Error ? loadError.message : "Unable to load GitHub user";
+          const message =
+            loadError instanceof Error ? loadError.message : "Unable to load GitHub user";
           setError(message);
-          setApiResponse("GET /github/connections/:connectionId/user", { request: { connectionId }, ...apiFailure(loadError, message) });
+          setApiResponse("GET /github/connections/:connectionId/user", {
+            request: { connectionId },
+            ...apiFailure(loadError, message),
+          });
         }
-      })
+      });
     void listGithubRepositories(connectionId)
       .then((repositoryResponse) => {
         if (!active) return;
@@ -768,7 +802,8 @@ function GitHubIntegrationWorkspace() {
       })
       .catch((loadError) => {
         if (active) {
-          const message = loadError instanceof Error ? loadError.message : "Unable to load GitHub repositories";
+          const message =
+            loadError instanceof Error ? loadError.message : "Unable to load GitHub repositories";
           setError(message);
           setApiResponse("GET /github/connections/:connectionId/repositories", {
             request: { connectionId },
@@ -784,7 +819,9 @@ function GitHubIntegrationWorkspace() {
     };
   }, [connectionId, refreshKey, setApiResponse]);
 
-  const repository = repositories.find((item) => `${item.owner ?? ""}/${item.name}` === selectedRepository);
+  const repository = repositories.find(
+    (item) => `${item.owner ?? ""}/${item.name}` === selectedRepository,
+  );
 
   useEffect(() => {
     if (!connectionId || !repository?.owner || !repository.name) {
@@ -799,20 +836,29 @@ function GitHubIntegrationWorkspace() {
       .then((response) => {
         if (active) {
           setBranches(response.branches);
-          setApiResponse("GET /github/connections/:connectionId/repositories/:owner/:name/branches", {
-            request: { connectionId, owner: repository.owner, name: repository.name },
-            response,
-          });
+          setApiResponse(
+            "GET /github/connections/:connectionId/repositories/:owner/:name/branches",
+            {
+              request: { connectionId, owner: repository.owner, name: repository.name },
+              response,
+            },
+          );
         }
       })
       .catch((branchError) => {
         if (active) {
-          const message = branchError instanceof Error ? branchError.message : "Unable to load repository branches";
+          const message =
+            branchError instanceof Error
+              ? branchError.message
+              : "Unable to load repository branches";
           setError(message);
-          setApiResponse("GET /github/connections/:connectionId/repositories/:owner/:name/branches", {
-            request: { connectionId, owner: repository.owner, name: repository.name },
-            ...apiFailure(branchError, message),
-          });
+          setApiResponse(
+            "GET /github/connections/:connectionId/repositories/:owner/:name/branches",
+            {
+              request: { connectionId, owner: repository.owner, name: repository.name },
+              ...apiFailure(branchError, message),
+            },
+          );
         }
       });
     return () => {
@@ -828,16 +874,24 @@ function GitHubIntegrationWorkspace() {
         connectionId?: string;
       };
       const id = parsed.data?.connectionId ?? parsed.connectionId;
-      if (!parsed.success || !id) throw new Error("Callback JSON must contain success:true and data.connectionId.");
+      if (!parsed.success || !id)
+        throw new Error("Callback JSON must contain success:true and data.connectionId.");
       window.sessionStorage.setItem(STORAGE_KEYS.GITHUB_CONNECTION_ID, id);
       setConnectionId(id);
       setSelectedRepository("");
       setError(null);
-      setApiResponse("GET /github/callback", { request: { callbackResponse: parsed }, response: parsed });
+      setApiResponse("GET /github/callback", {
+        request: { callbackResponse: parsed },
+        response: parsed,
+      });
     } catch (callbackError) {
-      const message = callbackError instanceof Error ? callbackError.message : "Invalid GitHub callback response";
+      const message =
+        callbackError instanceof Error ? callbackError.message : "Invalid GitHub callback response";
       setError(message);
-      setApiResponse("GET /github/callback", { request: { callbackResponse: callbackJson }, ...apiFailure(callbackError, message) });
+      setApiResponse("GET /github/callback", {
+        request: { callbackResponse: callbackJson },
+        ...apiFailure(callbackError, message),
+      });
     }
   };
 
@@ -853,10 +907,16 @@ function GitHubIntegrationWorkspace() {
       setError(null);
       const request = { connectionId, owner, name, ...(ref ? { ref } : {}) };
       const response = await getGithubRepository(connectionId, owner, name, ref || undefined);
-      setApiResponse("GET /github/connections/:connectionId/repositories/:owner/:name", { request, response });
+      setApiResponse("GET /github/connections/:connectionId/repositories/:owner/:name", {
+        request,
+        response,
+      });
       setRepositoryInfo(response.repository);
     } catch (repositoryError) {
-      const message = repositoryError instanceof Error ? repositoryError.message : "Unable to load repository details";
+      const message =
+        repositoryError instanceof Error
+          ? repositoryError.message
+          : "Unable to load repository details";
       setError(message);
       setApiResponse("GET /github/connections/:connectionId/repositories/:owner/:name", {
         request: { connectionId, owner, name, ...(ref ? { ref } : {}) },
@@ -900,7 +960,8 @@ function GitHubIntegrationWorkspace() {
       setActiveReviewId(result.review.id);
       setView("result");
     } catch (reviewError) {
-      const message = reviewError instanceof Error ? reviewError.message : "Unable to start a GitHub review";
+      const message =
+        reviewError instanceof Error ? reviewError.message : "Unable to start a GitHub review";
       setError(message);
       setApiResponse("POST /reviews (GitHub source)", { ...apiFailure(reviewError, message) });
     } finally {
@@ -910,8 +971,18 @@ function GitHubIntegrationWorkspace() {
 
   return (
     <div className="space-y-6">
-      <PageHeading title="Integrations" subtitle="Connect GitHub and inspect repositories using the backend integration APIs." />
-      {error && <div role="alert" className="rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</div>}
+      <PageHeading
+        title="Integrations"
+        subtitle="Connect GitHub and inspect repositories using the backend integration APIs."
+      />
+      {error && (
+        <div
+          role="alert"
+          className="rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+        >
+          {error}
+        </div>
+      )}
       <section className="panel space-y-4 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -919,33 +990,51 @@ function GitHubIntegrationWorkspace() {
             <div>
               <h2 className="text-sm font-semibold">GitHub</h2>
               <p className="text-xs text-muted-foreground">
-                {githubUser ? `Connected as ${githubUser.login}` : "Authorize a short-lived backend connection to browse repositories."}
+                {githubUser
+                  ? `Connected as ${githubUser.login}`
+                  : "Authorize a short-lived backend connection to browse repositories."}
               </p>
             </div>
           </div>
-          <Button onClick={() => void startGithubConnect().catch((connectError) => {
-            const message = connectError instanceof Error ? connectError.message : "Unable to start GitHub authorization";
-            setError(message);
-          })}>
+          <Button
+            onClick={() =>
+              void startGithubConnect().catch((connectError) => {
+                const message =
+                  connectError instanceof Error
+                    ? connectError.message
+                    : "Unable to start GitHub authorization";
+                setError(message);
+              })
+            }
+          >
             <Github className="size-4" /> Connect GitHub
           </Button>
         </div>
         <p className="text-xs leading-5 text-muted-foreground">
-          The backend callback returns connection JSON in the authorization tab. Paste that response here to load its repositories.
+          The backend callback returns connection JSON in the authorization tab. Paste that response
+          here to load its repositories.
         </p>
         <label className="block space-y-1 text-xs">
           <span className="text-muted-foreground">GitHub connection response</span>
           <textarea
             value={callbackJson}
             onChange={(event) => setCallbackJson(event.target.value)}
-            placeholder={'Paste the callback response, e.g. {"success":true,"data":{"connectionId":"..."}}'}
+            placeholder={
+              'Paste the callback response, e.g. {"success":true,"data":{"connectionId":"..."}}'
+            }
             className="min-h-24 w-full rounded-md border border-input bg-background p-3 font-mono text-[10px]"
           />
         </label>
-        <Button variant="outline" onClick={importCallbackResponse}>Use callback response</Button>
+        <Button variant="outline" onClick={importCallbackResponse}>
+          Use callback response
+        </Button>
         <div className="flex flex-wrap gap-2">
           {connectionId && (
-            <Button variant="outline" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading}>
+            <Button
+              variant="outline"
+              onClick={() => setRefreshKey((value) => value + 1)}
+              disabled={loading}
+            >
               <RefreshCw /> Refresh
             </Button>
           )}
@@ -955,15 +1044,27 @@ function GitHubIntegrationWorkspace() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold">Repositories</h2>
-            <p className="text-xs text-muted-foreground">List repositories, branches, and repository source details from GitHub.</p>
+            <p className="text-xs text-muted-foreground">
+              List repositories, branches, and repository source details from GitHub.
+            </p>
           </div>
-          <Button variant="outline" onClick={() => setRefreshKey((value) => value + 1)} disabled={!connectionId || loading}>Refresh repositories</Button>
-          <span className="text-xs text-muted-foreground">{loading ? "Loading…" : `${repositories.length} loaded`}</span>
+          <Button
+            variant="outline"
+            onClick={() => setRefreshKey((value) => value + 1)}
+            disabled={!connectionId || loading}
+          >
+            Refresh repositories
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {loading ? "Loading…" : `${repositories.length} loaded`}
+          </span>
         </div>
         {!connectionId ? (
           <p className="text-xs text-muted-foreground">Connect GitHub to load repositories.</p>
         ) : repositories.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No repositories are available for this connection.</p>
+          <p className="text-xs text-muted-foreground">
+            No repositories are available for this connection.
+          </p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-1 text-xs">
@@ -976,7 +1077,10 @@ function GitHubIntegrationWorkspace() {
               >
                 <option value="">Choose a repository</option>
                 {repositories.map((item) => (
-                  <option key={item.id ?? `${item.owner}/${item.name}`} value={`${item.owner ?? ""}/${item.name}`}>
+                  <option
+                    key={item.id ?? `${item.owner}/${item.name}`}
+                    value={`${item.owner ?? ""}/${item.name}`}
+                  >
                     {item.fullName ?? `${item.owner}/${item.name}`}
                   </option>
                 ))}
@@ -992,23 +1096,40 @@ function GitHubIntegrationWorkspace() {
                 className="h-9 w-full rounded-md border border-input bg-background px-3"
               >
                 <option value="">Default branch</option>
-                {branches.map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}
+                {branches.map((branch) => (
+                  <option key={branch.name} value={branch.name}>
+                    {branch.name}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => void loadRepositoryDetails()} disabled={!connectionId || !repository || loading}>Load repository details</Button>
-          <Button onClick={() => void reviewRepository()} disabled={!connectionId || !repository || loading}>
-          Start GitHub review
+          <Button
+            variant="outline"
+            onClick={() => void loadRepositoryDetails()}
+            disabled={!connectionId || !repository || loading}
+          >
+            Load repository details
+          </Button>
+          <Button
+            onClick={() => void reviewRepository()}
+            disabled={!connectionId || !repository || loading}
+          >
+            Start GitHub review
           </Button>
         </div>
         {repositoryInfo && (
           <div className="rounded border border-border p-3 text-xs">
             <div className="font-medium">{repositoryInfo.fullName ?? repositoryInfo.name}</div>
-            {repositoryInfo.description && <p className="mt-1 text-muted-foreground">{repositoryInfo.description}</p>}
+            {repositoryInfo.description && (
+              <p className="mt-1 text-muted-foreground">{repositoryInfo.description}</p>
+            )}
             <div className="mt-2 font-mono text-[10px] text-muted-foreground">
-              {repositoryInfo.defaultBranch ? `Default branch: ${repositoryInfo.defaultBranch}` : "Repository details loaded"}
+              {repositoryInfo.defaultBranch
+                ? `Default branch: ${repositoryInfo.defaultBranch}`
+                : "Repository details loaded"}
             </div>
           </div>
         )}
@@ -1017,22 +1138,31 @@ function GitHubIntegrationWorkspace() {
         <div>
           <h2 className="text-xs font-semibold">Backend health</h2>
           <p className="text-xs text-muted-foreground">
-            {health ? `${health.service} ${health.version} · ${health.status}` : "Health status unavailable"}
+            {health
+              ? `${health.service} ${health.version} · ${health.status}`
+              : "Health status unavailable"}
           </p>
         </div>
-        <Button variant="outline" onClick={() => void getApiHealth().then((result) => {
-          setHealth(result);
-          setApiResponse("GET /health", { request: {}, response: result });
-        }).catch((healthError) => {
-          const message = healthError instanceof Error ? healthError.message : "Health check failed";
-          setError(message);
-          setApiResponse("GET /health", { request: {}, ...apiFailure(healthError, message) });
-        })}>
+        <Button
+          variant="outline"
+          onClick={() =>
+            void getApiHealth()
+              .then((result) => {
+                setHealth(result);
+                setApiResponse("GET /health", { request: {}, response: result });
+              })
+              .catch((healthError) => {
+                const message =
+                  healthError instanceof Error ? healthError.message : "Health check failed";
+                setError(message);
+                setApiResponse("GET /health", { request: {}, ...apiFailure(healthError, message) });
+              })
+          }
+        >
           Check health
         </Button>
       </section>
-      <section className="space-y-2">
-      </section>
+      <section className="space-y-2"></section>
     </div>
   );
 }
@@ -1046,17 +1176,28 @@ function Integrations() {
         <Github className="size-5 shrink-0" />
         <div>
           <h2 className="text-sm font-semibold">GitHub</h2>
-          <p className="text-xs text-muted-foreground">Authorize a short-lived backend connection to browse repositories.</p>
+          <p className="text-xs text-muted-foreground">
+            Authorize a short-lived backend connection to browse repositories.
+          </p>
         </div>
       </div>
       {githubAllowed ? (
-        <Button onClick={() => void startGithubConnect().catch((error) => {
-          toast.error(error instanceof Error ? error.message : "Unable to start GitHub authorization");
-        })}>
+        <Button
+          onClick={() =>
+            void startGithubConnect().catch((error) => {
+              toast.error(
+                error instanceof Error ? error.message : "Unable to start GitHub authorization",
+              );
+            })
+          }
+        >
           <Github className="size-4" /> Connect GitHub
         </Button>
       ) : (
-        <span className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border px-3 text-xs text-muted-foreground" aria-label="Enterprise plan required for GitHub">
+        <span
+          className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border px-3 text-xs text-muted-foreground"
+          aria-label="Enterprise plan required for GitHub"
+        >
           <Github className="size-4" /> Enterprise plan required
         </span>
       )}
@@ -1106,7 +1247,8 @@ function Schedules() {
       })
       .catch((loadError) => {
         if (active) {
-          const message = loadError instanceof Error ? loadError.message : "Unable to load scheduled reviews";
+          const message =
+            loadError instanceof Error ? loadError.message : "Unable to load scheduled reviews";
           setError(message);
           setApiResponse("GET /scheduled-reviews", apiFailure(loadError, message));
         }
@@ -1118,14 +1260,17 @@ function Schedules() {
 
   useEffect(() => {
     let active = true;
-    void Promise.allSettled([listAllReviews(), listProjects()])
-      .then(([reviewsResult, projectsResult]) => {
+    void Promise.allSettled([listAllReviews(), listProjects()]).then(
+      ([reviewsResult, projectsResult]) => {
         if (!active) return;
         if (reviewsResult.status === "fulfilled") {
           setReviewIndex(reviewsResult.value.reviews);
           setApiResponse("GET /reviews/all", { response: reviewsResult.value });
         } else {
-          const message = reviewsResult.reason instanceof Error ? reviewsResult.reason.message : "Unable to load reviews";
+          const message =
+            reviewsResult.reason instanceof Error
+              ? reviewsResult.reason.message
+              : "Unable to load reviews";
           setError(message);
           setApiResponse("GET /reviews/all", { ...apiFailure(reviewsResult.reason, message) });
         }
@@ -1133,11 +1278,15 @@ function Schedules() {
           setProjects(projectsResult.value);
           setApiResponse("GET /projects", { response: projectsResult.value });
         } else {
-          const message = projectsResult.reason instanceof Error ? projectsResult.reason.message : "Unable to load projects";
+          const message =
+            projectsResult.reason instanceof Error
+              ? projectsResult.reason.message
+              : "Unable to load projects";
           setError(message);
           setApiResponse("GET /projects", { ...apiFailure(projectsResult.reason, message) });
         }
-      });
+      },
+    );
     return () => {
       active = false;
     };
@@ -1162,9 +1311,13 @@ function Schedules() {
       setScheduledReviews((current) => [created, ...current]);
       setSelectedSchedule(created);
     } catch (createError) {
-      const message = createError instanceof Error ? createError.message : "Unable to create scheduled review";
+      const message =
+        createError instanceof Error ? createError.message : "Unable to create scheduled review";
       setError(message);
-      setApiResponse("POST /scheduled-reviews", { request: { reviewId, intervalSeconds: interval }, ...apiFailure(createError, message) });
+      setApiResponse("POST /scheduled-reviews", {
+        request: { reviewId, intervalSeconds: interval },
+        ...apiFailure(createError, message),
+      });
     } finally {
       setLoading(false);
     }
@@ -1174,29 +1327,47 @@ function Schedules() {
     try {
       setError(null);
       const schedule = await getScheduledReview(scheduleId);
-      setApiResponse("GET /scheduled-reviews/:scheduleId", { request: { scheduleId }, response: schedule });
+      setApiResponse("GET /scheduled-reviews/:scheduleId", {
+        request: { scheduleId },
+        response: schedule,
+      });
       setSelectedSchedule(schedule);
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : "Unable to load schedule details";
+      const message =
+        loadError instanceof Error ? loadError.message : "Unable to load schedule details";
       setError(message);
-      setApiResponse("GET /scheduled-reviews/:scheduleId", { request: { scheduleId }, ...apiFailure(loadError, message) });
+      setApiResponse("GET /scheduled-reviews/:scheduleId", {
+        request: { scheduleId },
+        ...apiFailure(loadError, message),
+      });
     }
   };
 
   const cancelSchedule = async (scheduleId: string) => {
-    const confirmed = window.confirm("Disable this schedule? It will remain in your schedule list as inactive.");
+    const confirmed = window.confirm(
+      "Disable this schedule? It will remain in your schedule list as inactive.",
+    );
     if (!confirmed) return;
     try {
       setError(null);
       setLoading(true);
       const cancelled = await cancelScheduledReview(scheduleId);
-      setApiResponse("DELETE /scheduled-reviews/:scheduleId", { request: { scheduleId }, response: cancelled });
-      setScheduledReviews((current) => current.map((item) => item.scheduleId === scheduleId ? cancelled : item));
+      setApiResponse("DELETE /scheduled-reviews/:scheduleId", {
+        request: { scheduleId },
+        response: cancelled,
+      });
+      setScheduledReviews((current) =>
+        current.map((item) => (item.scheduleId === scheduleId ? cancelled : item)),
+      );
       setSelectedSchedule(cancelled);
     } catch (cancelError) {
-      const message = cancelError instanceof Error ? cancelError.message : "Unable to cancel scheduled review";
+      const message =
+        cancelError instanceof Error ? cancelError.message : "Unable to cancel scheduled review";
       setError(message);
-      setApiResponse("DELETE /scheduled-reviews/:scheduleId", { request: { scheduleId }, ...apiFailure(cancelError, message) });
+      setApiResponse("DELETE /scheduled-reviews/:scheduleId", {
+        request: { scheduleId },
+        ...apiFailure(cancelError, message),
+      });
     } finally {
       setLoading(false);
     }
@@ -1204,72 +1375,180 @@ function Schedules() {
 
   return (
     <div className="space-y-6">
-      <PageHeading title="Scheduled reviews" subtitle="Create, inspect, list, and disable recurring reviews from your backend data." />
-      {error && <div role="alert" className="rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</div>}
+      <PageHeading
+        title="Scheduled reviews"
+        subtitle="Create, inspect, list, and disable recurring reviews from your backend data."
+      />
+      {error && (
+        <div
+          role="alert"
+          className="rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+        >
+          {error}
+        </div>
+      )}
       {!schedulesAllowed ? (
         <section className="panel p-5">
           <h2 className="text-sm font-semibold">Enterprise feature</h2>
           <p className="mt-2 text-xs text-muted-foreground">
-            Scheduled reviews are not enabled for the {subscriptionTier} subscription assigned to this account. The backend remains authoritative for feature access.
+            Scheduled reviews are not enabled for the {subscriptionTier} subscription assigned to
+            this account. The backend remains authoritative for feature access.
           </p>
         </section>
       ) : (
-      <>
-      <section className="panel space-y-4 p-5">
-        <h2 className="text-sm font-semibold">Create a schedule</h2>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">Review</span>
-            <select value={reviewId} onChange={(event) => setReviewId(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3" aria-label="Review to schedule">
-              <option value="">Choose a review</option>
-              {reviewIndex.map((item) => {
-                const id = String(item.reviewId ?? item.id ?? item._id ?? "");
-                const project = projects.find((record) => record.id === item.projectId);
-                return id ? <option key={id} value={id}>{project?.name ?? "Project"} · {item.status ?? "unknown"}</option> : null;
-              })}
-            </select>
-          </label>
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">Interval (seconds)</span>
-            <Input type="number" min={1} step={1} value={intervalSeconds} onChange={(event) => setIntervalSeconds(event.target.value)} />
-          </label>
-          <Button onClick={() => void createSchedule()} disabled={loading || !reviewId} className="self-end">Create schedule</Button>
-        </div>
-      </section>
-      <section className="panel overflow-hidden">
-        <div className="border-b border-border px-4 py-3 text-sm font-semibold">Schedules ({scheduledReviews.length})</div>
-        {scheduledReviews.length === 0 ? (
-          <p className="p-5 text-xs text-muted-foreground">No scheduled reviews were returned.</p>
-        ) : scheduledReviews.map((schedule) => (
-          <div key={schedule.scheduleId} className={cn("flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-0", !schedule.enabled && "bg-destructive/5")}>
-            <div>
-              <div className={cn("text-xs font-medium", !schedule.enabled && "text-destructive")}>{!schedule.enabled && "INACTIVE"}</div>
-              <div className="mt-1 text-[10px] text-muted-foreground">
-                {projects.find((project) => project.id === reviewIndex.find((review) => (review.reviewId ?? review.id ?? review._id) === schedule.reviewId)?.projectId)?.name ?? "Project"} · every {schedule.intervalSeconds ?? "—"} seconds · {schedule.enabled ? "enabled" : "disabled"}
-              </div>
+        <>
+          <section className="panel space-y-4 p-5">
+            <h2 className="text-sm font-semibold">Create a schedule</h2>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-xs">
+                <span className="text-muted-foreground">Review</span>
+                <select
+                  value={reviewId}
+                  onChange={(event) => setReviewId(event.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3"
+                  aria-label="Review to schedule"
+                >
+                  <option value="">Choose a review</option>
+                  {reviewIndex.map((item) => {
+                    const id = String(item.reviewId ?? item.id ?? item._id ?? "");
+                    const project = projects.find((record) => record.id === item.projectId);
+                    return id ? (
+                      <option key={id} value={id}>
+                        {project?.name ?? "Project"} · {item.status ?? "unknown"}
+                      </option>
+                    ) : null;
+                  })}
+                </select>
+              </label>
+              <label className="space-y-1 text-xs">
+                <span className="text-muted-foreground">Interval (seconds)</span>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={intervalSeconds}
+                  onChange={(event) => setIntervalSeconds(event.target.value)}
+                />
+              </label>
+              <Button
+                onClick={() => void createSchedule()}
+                disabled={loading || !reviewId}
+                className="self-end"
+              >
+                Create schedule
+              </Button>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => void loadSchedule(schedule.scheduleId ?? "")} disabled={!schedule.scheduleId}>Details</Button>
-              {schedule.enabled && <Button variant="outline" size="sm" onClick={() => void cancelSchedule(schedule.scheduleId ?? "")} disabled={loading || !schedule.scheduleId}>Disable</Button>}
+          </section>
+          <section className="panel overflow-hidden">
+            <div className="border-b border-border px-4 py-3 text-sm font-semibold">
+              Schedules ({scheduledReviews.length})
             </div>
-          </div>
-        ))}
-      </section>
-      {selectedSchedule && (
-        <section className="panel p-4">
-          <h2 className="text-xs font-semibold">Schedule details</h2>
-          <dl className="mt-2 grid gap-2 text-[10px] sm:grid-cols-2">
-            <dt>Project</dt><dd>{projects.find((project) => project.id === reviewIndex.find((review) => (review.reviewId ?? review.id ?? review._id) === selectedSchedule.reviewId)?.projectId)?.name ?? "Project"}</dd>
-            <dt>Interval</dt><dd>{selectedSchedule.intervalSeconds ?? "—"} seconds</dd>
-            <dt>Next run</dt><dd>{selectedSchedule.nextRunAt ? new Date(selectedSchedule.nextRunAt).toLocaleString() : "—"}</dd>
-            <dt>Last run</dt><dd>{selectedSchedule.lastRunAt ? new Date(selectedSchedule.lastRunAt).toLocaleString() : "—"}</dd>
-            <dt>Status</dt><dd className={!selectedSchedule.enabled ? "text-destructive" : ""}>{selectedSchedule.enabled ? "Enabled" : "Inactive"}</dd>
-            <dt>Created</dt><dd>{selectedSchedule.createdAt ? new Date(selectedSchedule.createdAt).toLocaleString() : "—"}</dd>
-            <dt>Updated</dt><dd>{selectedSchedule.updatedAt ? new Date(selectedSchedule.updatedAt).toLocaleString() : "—"}</dd>
-          </dl>
-        </section>
-      )}
-      </>
+            {scheduledReviews.length === 0 ? (
+              <p className="p-5 text-xs text-muted-foreground">
+                No scheduled reviews were returned.
+              </p>
+            ) : (
+              scheduledReviews.map((schedule) => (
+                <div
+                  key={schedule.scheduleId}
+                  className={cn(
+                    "flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-0",
+                    !schedule.enabled && "bg-destructive/5",
+                  )}
+                >
+                  <div>
+                    <div
+                      className={cn("text-xs font-medium", !schedule.enabled && "text-destructive")}
+                    >
+                      {!schedule.enabled && "INACTIVE"}
+                    </div>
+                    <div className="mt-1 text-[10px] text-muted-foreground">
+                      {projects.find(
+                        (project) =>
+                          project.id ===
+                          reviewIndex.find(
+                            (review) =>
+                              (review.reviewId ?? review.id ?? review._id) === schedule.reviewId,
+                          )?.projectId,
+                      )?.name ?? "Project"}{" "}
+                      · every {schedule.intervalSeconds ?? "—"} seconds ·{" "}
+                      {schedule.enabled ? "enabled" : "disabled"}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void loadSchedule(schedule.scheduleId ?? "")}
+                      disabled={!schedule.scheduleId}
+                    >
+                      Details
+                    </Button>
+                    {schedule.enabled && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void cancelSchedule(schedule.scheduleId ?? "")}
+                        disabled={loading || !schedule.scheduleId}
+                      >
+                        Disable
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </section>
+          {selectedSchedule && (
+            <section className="panel p-4">
+              <h2 className="text-xs font-semibold">Schedule details</h2>
+              <dl className="mt-2 grid gap-2 text-[10px] sm:grid-cols-2">
+                <dt>Project</dt>
+                <dd>
+                  {projects.find(
+                    (project) =>
+                      project.id ===
+                      reviewIndex.find(
+                        (review) =>
+                          (review.reviewId ?? review.id ?? review._id) ===
+                          selectedSchedule.reviewId,
+                      )?.projectId,
+                  )?.name ?? "Project"}
+                </dd>
+                <dt>Interval</dt>
+                <dd>{selectedSchedule.intervalSeconds ?? "—"} seconds</dd>
+                <dt>Next run</dt>
+                <dd>
+                  {selectedSchedule.nextRunAt
+                    ? new Date(selectedSchedule.nextRunAt).toLocaleString()
+                    : "—"}
+                </dd>
+                <dt>Last run</dt>
+                <dd>
+                  {selectedSchedule.lastRunAt
+                    ? new Date(selectedSchedule.lastRunAt).toLocaleString()
+                    : "—"}
+                </dd>
+                <dt>Status</dt>
+                <dd className={!selectedSchedule.enabled ? "text-destructive" : ""}>
+                  {selectedSchedule.enabled ? "Enabled" : "Inactive"}
+                </dd>
+                <dt>Created</dt>
+                <dd>
+                  {selectedSchedule.createdAt
+                    ? new Date(selectedSchedule.createdAt).toLocaleString()
+                    : "—"}
+                </dd>
+                <dt>Updated</dt>
+                <dd>
+                  {selectedSchedule.updatedAt
+                    ? new Date(selectedSchedule.updatedAt).toLocaleString()
+                    : "—"}
+                </dd>
+              </dl>
+            </section>
+          )}
+        </>
       )}
     </div>
   );
@@ -1305,15 +1584,23 @@ function NewReview() {
   const [filename, setFilename] = useState("api/users.ts");
   const [sourceMode, setSourceMode] = useState<"paste" | "upload" | "archive" | "github">("paste");
   const [githubConnectionId, setGithubConnectionId] = useState(() =>
-    typeof window === "undefined" ? "" : window.sessionStorage.getItem(STORAGE_KEYS.GITHUB_CONNECTION_ID) ?? "",
+    typeof window === "undefined"
+      ? ""
+      : (window.sessionStorage.getItem(STORAGE_KEYS.GITHUB_CONNECTION_ID) ?? ""),
   );
-  const [githubRepositories, setGithubRepositories] = useState<Awaited<ReturnType<typeof listGithubRepositories>>["repositories"]>([]);
-  const [githubBranches, setGithubBranches] = useState<Awaited<ReturnType<typeof listGithubBranches>>["branches"]>([]);
+  const [githubRepositories, setGithubRepositories] = useState<
+    Awaited<ReturnType<typeof listGithubRepositories>>["repositories"]
+  >([]);
+  const [githubBranches, setGithubBranches] = useState<
+    Awaited<ReturnType<typeof listGithubBranches>>["branches"]
+  >([]);
   const [selectedGithubRepository, setSelectedGithubRepository] = useState("");
   const [selectedGithubBranch, setSelectedGithubBranch] = useState("");
   const [githubCallbackResponse, setGithubCallbackResponse] = useState("");
   const [archiveFilename, setArchiveFilename] = useState("");
-  const [selectedFiles, setSelectedFiles] = useState<Array<{ filename: string; content: string }>>([]);
+  const [selectedFiles, setSelectedFiles] = useState<Array<{ filename: string; content: string }>>(
+    [],
+  );
   const selectedFileSummaries = useMemo(
     () =>
       selectedFiles.map(({ filename, content }) => ({
@@ -1331,19 +1618,30 @@ function NewReview() {
   });
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const githubRepository = githubRepositories.find((item) => `${item.owner ?? ""}/${item.name}` === selectedGithubRepository);
+  const githubRepository = githubRepositories.find(
+    (item) => `${item.owner ?? ""}/${item.name}` === selectedGithubRepository,
+  );
 
   const importGithubConnection = () => {
     try {
-      const parsed = JSON.parse(githubCallbackResponse) as { success?: boolean; data?: { connectionId?: string }; connectionId?: string };
+      const parsed = JSON.parse(githubCallbackResponse) as {
+        success?: boolean;
+        data?: { connectionId?: string };
+        connectionId?: string;
+      };
       const connectionId = parsed.data?.connectionId ?? parsed.connectionId;
-      if (!parsed.success || !connectionId) throw new Error("Paste the successful GitHub callback response.");
+      if (!parsed.success || !connectionId)
+        throw new Error("Paste the successful GitHub callback response.");
       window.sessionStorage.setItem(STORAGE_KEYS.GITHUB_CONNECTION_ID, connectionId);
       setGithubConnectionId(connectionId);
       setSelectedGithubRepository("");
       setError(null);
     } catch (connectionError) {
-      setError(connectionError instanceof Error ? connectionError.message : "Unable to use GitHub connection");
+      setError(
+        connectionError instanceof Error
+          ? connectionError.message
+          : "Unable to use GitHub connection",
+      );
     }
   };
 
@@ -1362,7 +1660,8 @@ function NewReview() {
       })
       .catch((loadError) => {
         if (active) {
-          const message = loadError instanceof Error ? loadError.message : "Unable to load GitHub repositories";
+          const message =
+            loadError instanceof Error ? loadError.message : "Unable to load GitHub repositories";
           setError(message);
           setApiResponse("GET /github/connections/:connectionId/repositories", {
             request: { connectionId: githubConnectionId },
@@ -1387,20 +1686,35 @@ function NewReview() {
       .then((response) => {
         if (active) {
           setGithubBranches(response.branches);
-          setApiResponse("GET /github/connections/:connectionId/repositories/:owner/:name/branches", {
-            request: { connectionId: githubConnectionId, owner: githubRepository.owner, name: githubRepository.name },
-            response,
-          });
+          setApiResponse(
+            "GET /github/connections/:connectionId/repositories/:owner/:name/branches",
+            {
+              request: {
+                connectionId: githubConnectionId,
+                owner: githubRepository.owner,
+                name: githubRepository.name,
+              },
+              response,
+            },
+          );
         }
       })
       .catch((loadError) => {
         if (active) {
-          const message = loadError instanceof Error ? loadError.message : "Unable to load GitHub branches";
+          const message =
+            loadError instanceof Error ? loadError.message : "Unable to load GitHub branches";
           setError(message);
-          setApiResponse("GET /github/connections/:connectionId/repositories/:owner/:name/branches", {
-            request: { connectionId: githubConnectionId, owner: githubRepository.owner, name: githubRepository.name },
-            ...apiFailure(loadError, message),
-          });
+          setApiResponse(
+            "GET /github/connections/:connectionId/repositories/:owner/:name/branches",
+            {
+              request: {
+                connectionId: githubConnectionId,
+                owner: githubRepository.owner,
+                name: githubRepository.name,
+              },
+              ...apiFailure(loadError, message),
+            },
+          );
         }
       });
     return () => {
@@ -1434,7 +1748,9 @@ function NewReview() {
         : selectedFileSummaries.reduce((total, file) => total + file.lineCount, 0);
     const fileCount = sourceMode === "github" ? 0 : sourceFiles.length;
     if (fileCount > fileLimit || requestedLines > lineLimit) {
-      setError(`The selected ${tier} plan allows ${Number.isFinite(fileLimit) ? fileLimit : "unlimited"} files and ${Number.isFinite(lineLimit) ? lineLimit : "unlimited"} lines.`);
+      setError(
+        `The selected ${tier} plan allows ${Number.isFinite(fileLimit) ? fileLimit : "unlimited"} files and ${Number.isFinite(lineLimit) ? lineLimit : "unlimited"} lines.`,
+      );
       return;
     }
     if (sourceMode === "archive" && !policy.archiveUpload) {
@@ -1451,14 +1767,20 @@ function NewReview() {
         : sourceMode === "github"
           ? []
           : sourceMode === "archive"
-            ? selectedFiles.map((file) => ({ filename: file.filename, path: file.filename, content: file.content }))
+            ? selectedFiles.map((file) => ({
+                filename: file.filename,
+                path: file.filename,
+                content: file.content,
+              }))
             : selectedFiles.map((file, index) => ({
                 filename: file.filename,
                 path: file.filename,
                 content: index === 0 ? code : file.content,
               }));
     if (!projectName.trim() || projectName.trim().length > 200 || filename.length > 512) {
-      setError("Project name is required and must be 200 characters or fewer; source paths must be 512 characters or fewer.");
+      setError(
+        "Project name is required and must be 200 characters or fewer; source paths must be 512 characters or fewer.",
+      );
       return;
     }
     setError(null);
@@ -1477,15 +1799,23 @@ function NewReview() {
                   repository: {
                     owner: githubRepository.owner ?? "",
                     name: githubRepository.name,
-                    ...((selectedGithubBranch || githubRepository.defaultBranch) ? { ref: selectedGithubBranch || githubRepository.defaultBranch! } : {}),
+                    ...(selectedGithubBranch || githubRepository.defaultBranch
+                      ? { ref: selectedGithubBranch || githubRepository.defaultBranch! }
+                      : {}),
                   },
                 }
-            : { type: sourceMode, filename: sourceMode === "archive" ? archiveFilename : filename, files: requestFiles },
+              : {
+                  type: sourceMode,
+                  filename: sourceMode === "archive" ? archiveFilename : filename,
+                  files: requestFiles,
+                },
         options,
       };
       const requestSize = new TextEncoder().encode(JSON.stringify(payload)).byteLength;
       if (requestSize > 9 * 1024 * 1024) {
-        throw new Error("The review request is too large for the backend's default 10 MB HTTP body limit. Reduce the source size.");
+        throw new Error(
+          "The review request is too large for the backend's default 10 MB HTTP body limit. Reduce the source size.",
+        );
       }
 
       const result = await createReview(payload);
@@ -1497,7 +1827,10 @@ function NewReview() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to start review";
       setError(message);
-      setApiResponse("POST /reviews", { request: { projectName, sourceMode }, ...apiFailure(err, message) });
+      setApiResponse("POST /reviews", {
+        request: { projectName, sourceMode },
+        ...apiFailure(err, message),
+      });
       setAnalyzing(false);
     }
   };
@@ -1516,10 +1849,12 @@ function NewReview() {
         setError(null);
         return;
       }
-      const contents = await Promise.all(Array.from(files).map(async (file) => ({
-        filename: file.webkitRelativePath || file.name,
-        content: await file.text(),
-      })));
+      const contents = await Promise.all(
+        Array.from(files).map(async (file) => ({
+          filename: file.webkitRelativePath || file.name,
+          content: await file.text(),
+        })),
+      );
       setSelectedFiles(contents);
       if (sourceMode === "upload") {
         setCode(contents[0]?.content ?? "");
@@ -1527,7 +1862,9 @@ function NewReview() {
       }
       setError(null);
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Unable to read the selected file");
+      setError(
+        uploadError instanceof Error ? uploadError.message : "Unable to read the selected file",
+      );
     }
   };
 
@@ -1538,7 +1875,10 @@ function NewReview() {
           <LoaderCircle className="size-7 animate-spin text-primary" />
           <div>
             <h1 className="text-lg font-semibold">Submitting review</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Waiting for the backend to accept the review request. Analysis progress will follow the review status returned by the backend.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Waiting for the backend to accept the review request. Analysis progress will follow
+              the review status returned by the backend.
+            </p>
           </div>
         </section>
       </div>
@@ -1559,8 +1899,15 @@ function NewReview() {
         <section className="panel overflow-hidden">
           <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-2">
             <label className="space-y-1 text-xs">
-              <span className="text-muted-foreground">Project name (required, up to 200 characters)</span>
-              <Input required maxLength={200} value={projectName} onChange={(event) => setProjectName(event.target.value)} />
+              <span className="text-muted-foreground">
+                Project name (required, up to 200 characters)
+              </span>
+              <Input
+                required
+                maxLength={200}
+                value={projectName}
+                onChange={(event) => setProjectName(event.target.value)}
+              />
             </label>
             <label className="space-y-1 text-xs">
               <span className="text-muted-foreground">Source type</span>
@@ -1575,8 +1922,12 @@ function NewReview() {
               >
                 <option value="paste">Paste a single file</option>
                 <option value="upload">Upload source files</option>
-                <option value="archive" disabled={!policy.archiveUpload}>ZIP archive {!policy.archiveUpload ? "(Pro/Enterprise)" : ""}</option>
-                <option value="github" disabled={!policy.githubIntegration}>GitHub repository {!policy.githubIntegration ? "(Enterprise)" : ""}</option>
+                <option value="archive" disabled={!policy.archiveUpload}>
+                  ZIP archive {!policy.archiveUpload ? "(Pro/Enterprise)" : ""}
+                </option>
+                <option value="github" disabled={!policy.githubIntegration}>
+                  GitHub repository {!policy.githubIntegration ? "(Enterprise)" : ""}
+                </option>
               </select>
             </label>
           </div>
@@ -1585,7 +1936,11 @@ function NewReview() {
             type="file"
             className="hidden"
             multiple={sourceMode === "upload"}
-            accept={sourceMode === "archive" ? ".zip,application/zip" : ".js,.jsx,.ts,.tsx,.py,.java,.php,.go,.rs,.cs,.cpp,.c,.h,.rb,.swift,.kt,.sql,.json,.html,.css"}
+            accept={
+              sourceMode === "archive"
+                ? ".zip,application/zip"
+                : ".js,.jsx,.ts,.tsx,.py,.java,.php,.go,.rs,.cs,.cpp,.c,.h,.rb,.swift,.kt,.sql,.json,.html,.css"
+            }
             onChange={(event) => {
               void upload(event.currentTarget.files);
               event.currentTarget.value = "";
@@ -1595,17 +1950,36 @@ function NewReview() {
             <div className="space-y-4 p-4">
               {!githubConnectionId ? (
                 <div className="space-y-3 rounded border border-border p-4">
-                  <p className="text-xs text-muted-foreground">Authorize GitHub, then paste the callback response to load your repositories.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Authorize GitHub, then paste the callback response to load your repositories.
+                  </p>
                   <Button
-                    onClick={() => void startGithubConnect().catch((connectError) => {
-                      const message = connectError instanceof Error ? connectError.message : "Unable to start GitHub authorization";
-                      setError(message);
-                    })}
+                    onClick={() =>
+                      void startGithubConnect().catch((connectError) => {
+                        const message =
+                          connectError instanceof Error
+                            ? connectError.message
+                            : "Unable to start GitHub authorization";
+                        setError(message);
+                      })
+                    }
                   >
                     <Github className="size-4" /> Connect GitHub
                   </Button>
-                  <textarea value={githubCallbackResponse} onChange={(event) => setGithubCallbackResponse(event.target.value)} placeholder="Paste GitHub callback response" aria-label="GitHub callback response" className="min-h-20 w-full rounded-md border border-input bg-background p-3 font-mono text-xs" />
-                  <Button variant="outline" onClick={importGithubConnection} disabled={!githubCallbackResponse.trim()}>Use connection</Button>
+                  <textarea
+                    value={githubCallbackResponse}
+                    onChange={(event) => setGithubCallbackResponse(event.target.value)}
+                    placeholder="Paste GitHub callback response"
+                    aria-label="GitHub callback response"
+                    className="min-h-20 w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={importGithubConnection}
+                    disabled={!githubCallbackResponse.trim()}
+                  >
+                    Use connection
+                  </Button>
                 </div>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -1619,7 +1993,10 @@ function NewReview() {
                     >
                       <option value="">Choose a repository</option>
                       {githubRepositories.map((item) => (
-                        <option key={item.id ?? `${item.owner}/${item.name}`} value={`${item.owner ?? ""}/${item.name}`}>
+                        <option
+                          key={item.id ?? `${item.owner}/${item.name}`}
+                          value={`${item.owner ?? ""}/${item.name}`}
+                        >
                           {item.fullName ?? `${item.owner}/${item.name}`}
                         </option>
                       ))}
@@ -1635,7 +2012,11 @@ function NewReview() {
                       className="h-9 w-full rounded-md border border-input bg-background px-3"
                     >
                       <option value="">Use default branch</option>
-                      {githubBranches.map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}
+                      {githubBranches.map((branch) => (
+                        <option key={branch.name} value={branch.name}>
+                          {branch.name}
+                        </option>
+                      ))}
                     </select>
                   </label>
                 </div>
@@ -1651,93 +2032,127 @@ function NewReview() {
             <div className="space-y-4 p-5">
               <div className="rounded border border-dashed border-border p-6 text-center">
                 <p className="text-sm font-medium">Select a ZIP archive</p>
-                <p className="mt-1 text-xs text-muted-foreground">Source files are extracted and sent to the backend; the archive is not shown in the code editor.</p>
-                <Button variant="outline" className="mt-3" onClick={() => input.current?.click()}>Choose .zip file</Button>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Source files are extracted and sent to the backend; the archive is not shown in
+                  the code editor.
+                </p>
+                <Button variant="outline" className="mt-3" onClick={() => input.current?.click()}>
+                  Choose .zip file
+                </Button>
               </div>
-              {archiveFilename && <p className="text-xs text-muted-foreground">{archiveFilename} · {selectedFiles.length} source files extracted</p>}
+              {archiveFilename && (
+                <p className="text-xs text-muted-foreground">
+                  {archiveFilename} · {selectedFiles.length} source files extracted
+                </p>
+              )}
               {selectedFiles.length > 0 && (
                 <ul className="max-h-48 space-y-1 overflow-auto rounded border border-border p-3 text-xs text-muted-foreground">
-                  {selectedFileSummaries.map((file) => <li key={file.filename} className="flex justify-between gap-3"><span className="truncate">{file.filename}</span><span>{file.lineCount} lines</span></li>)}
+                  {selectedFileSummaries.map((file) => (
+                    <li key={file.filename} className="flex justify-between gap-3">
+                      <span className="truncate">{file.filename}</span>
+                      <span>{file.lineCount} lines</span>
+                    </li>
+                  ))}
                 </ul>
               )}
               <div className="flex justify-end">
-                <Button onClick={begin} disabled={!selectedFiles.length}><WandSparkles />Start review</Button>
+                <Button onClick={begin} disabled={!selectedFiles.length}>
+                  <WandSparkles />
+                  Start review
+                </Button>
               </div>
             </div>
           ) : (
             <>
-          <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-            <div className="flex items-center gap-2 font-mono text-xs">
-              <FileCode2 className="size-3.5 text-muted-foreground" />
-              <input
-                value={filename}
-                onChange={(e) => setFilename(e.target.value)}
-                className="bg-transparent text-foreground border-none outline-none font-mono text-xs w-48 hover:underline focus:underline"
-                placeholder="file.ext"
-              />
-              {code.trim().length > 0 && <span className="size-1.5 rounded-full bg-warning" />}
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Select value={language} onValueChange={(val) => {
-                setLanguage(val);
-                const ext = val === "python" ? "py" : val === "javascript" ? "js" : val === "java" ? "java" : val === "php" ? "php" : "ts";
-                if (filename.startsWith("src/code.")) {
-                  setFilename(`src/code.${ext}`);
-                }
-              }}>
-                <SelectTrigger className="h-7 w-32 font-mono text-[11px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="typescript">TypeScript</SelectItem>
-                  <SelectItem value="javascript">JavaScript</SelectItem>
-                  <SelectItem value="python">Python</SelectItem>
-                  <SelectItem value="java">Java</SelectItem>
-                  <SelectItem value="php">c++</SelectItem>
-                </SelectContent>
-              </Select>
-              {sourceMode === "upload" && <Button variant="outline" size="sm" onClick={() => input.current?.click()}>
-                <Upload />
-                Select source files
-              </Button>}
-            </div>
-          </div>
-          <div className="h-140 bg-editor">
-            <Suspense
-              fallback={
-                <div className="grid h-full place-items-center text-xs text-muted-foreground">
-                  Loading editor…
+              <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+                <div className="flex items-center gap-2 font-mono text-xs">
+                  <FileCode2 className="size-3.5 text-muted-foreground" />
+                  <input
+                    value={filename}
+                    onChange={(e) => setFilename(e.target.value)}
+                    className="bg-transparent text-foreground border-none outline-none font-mono text-xs w-48 hover:underline focus:underline"
+                    placeholder="file.ext"
+                  />
+                  {code.trim().length > 0 && <span className="size-1.5 rounded-full bg-warning" />}
                 </div>
-              }
-            >
-              <Editor
-                height="100%"
-                language={language}
-                value={code}
-                onChange={(v) => setCode(v ?? "")}
-                theme="vs-dark"
-                options={{
-                  minimap: { enabled: false },
-                  fontFamily: "JetBrains Mono",
-                  fontSize: 13,
-                  lineHeight: 22,
-                  padding: { top: 16 },
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  wordWrap: "on",
-                }}
-              />
-            </Suspense>
-          </div>
-          <div className="flex items-center justify-between border-t border-border px-4 py-3">
-            <span className="font-mono text-[10px] text-muted-foreground">
-              UTF-8 · LF · {codeLineCount} lines
-            </span>
-            <Button onClick={begin} disabled={sourceMode === "paste" ? !code.trim() : !selectedFiles.length}>
-              <WandSparkles />
-              Start review
-            </Button>
-          </div>
+                <div className="ml-auto flex items-center gap-2">
+                  <Select
+                    value={language}
+                    onValueChange={(val) => {
+                      setLanguage(val);
+                      const ext =
+                        val === "python"
+                          ? "py"
+                          : val === "javascript"
+                            ? "js"
+                            : val === "java"
+                              ? "java"
+                              : val === "php"
+                                ? "php"
+                                : "ts";
+                      if (filename.startsWith("src/code.")) {
+                        setFilename(`src/code.${ext}`);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-7 w-32 font-mono text-[11px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="typescript">TypeScript</SelectItem>
+                      <SelectItem value="javascript">JavaScript</SelectItem>
+                      <SelectItem value="python">Python</SelectItem>
+                      <SelectItem value="java">Java</SelectItem>
+                      <SelectItem value="php">c++</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {sourceMode === "upload" && (
+                    <Button variant="outline" size="sm" onClick={() => input.current?.click()}>
+                      <Upload />
+                      Select source files
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="h-140 bg-editor">
+                <Suspense
+                  fallback={
+                    <div className="grid h-full place-items-center text-xs text-muted-foreground">
+                      Loading editor…
+                    </div>
+                  }
+                >
+                  <Editor
+                    height="100%"
+                    language={language}
+                    value={code}
+                    onChange={(v) => setCode(v ?? "")}
+                    theme="vs-dark"
+                    options={{
+                      minimap: { enabled: false },
+                      fontFamily: "JetBrains Mono",
+                      fontSize: 13,
+                      lineHeight: 22,
+                      padding: { top: 16 },
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      wordWrap: "on",
+                    }}
+                  />
+                </Suspense>
+              </div>
+              <div className="flex items-center justify-between border-t border-border px-4 py-3">
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  UTF-8 · LF · {codeLineCount} lines
+                </span>
+                <Button
+                  onClick={begin}
+                  disabled={sourceMode === "paste" ? !code.trim() : !selectedFiles.length}
+                >
+                  <WandSparkles />
+                  Start review
+                </Button>
+              </div>
             </>
           )}
         </section>
@@ -1760,10 +2175,34 @@ function NewReview() {
                   </SelectContent>
                 </Select>
               </div>
-              <CheckRow label="Security analysis" checked={options.securityAnalysis} onCheckedChange={(checked) => setOptions((current) => ({ ...current, securityAnalysis: checked }))} />
-              <CheckRow label="Bug detection" checked={options.bugDetection} onCheckedChange={(checked) => setOptions((current) => ({ ...current, bugDetection: checked }))} />
-              <CheckRow label="Code quality" checked={options.codeQuality} onCheckedChange={(checked) => setOptions((current) => ({ ...current, codeQuality: checked }))} />
-              <CheckRow label="Performance" checked={options.performance} onCheckedChange={(checked) => setOptions((current) => ({ ...current, performance: checked }))} />
+              <CheckRow
+                label="Security analysis"
+                checked={options.securityAnalysis}
+                onCheckedChange={(checked) =>
+                  setOptions((current) => ({ ...current, securityAnalysis: checked }))
+                }
+              />
+              <CheckRow
+                label="Bug detection"
+                checked={options.bugDetection}
+                onCheckedChange={(checked) =>
+                  setOptions((current) => ({ ...current, bugDetection: checked }))
+                }
+              />
+              <CheckRow
+                label="Code quality"
+                checked={options.codeQuality}
+                onCheckedChange={(checked) =>
+                  setOptions((current) => ({ ...current, codeQuality: checked }))
+                }
+              />
+              <CheckRow
+                label="Performance"
+                checked={options.performance}
+                onCheckedChange={(checked) =>
+                  setOptions((current) => ({ ...current, performance: checked }))
+                }
+              />
             </div>
           </div>
           <div className="panel p-4">
@@ -1781,7 +2220,12 @@ function NewReview() {
         <section className="panel mt-4 p-4">
           <h2 className="text-xs font-semibold">Selected source files ({selectedFiles.length})</h2>
           <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-            {selectedFileSummaries.map((file) => <li key={file.filename} className="flex justify-between gap-3"><span className="truncate">{file.filename}</span><span>{file.lineCount} lines</span></li>)}
+            {selectedFileSummaries.map((file) => (
+              <li key={file.filename} className="flex justify-between gap-3">
+                <span className="truncate">{file.filename}</span>
+                <span>{file.lineCount} lines</span>
+              </li>
+            ))}
           </ul>
         </section>
       )}
@@ -1873,7 +2317,9 @@ function ReviewResult() {
     })),
   );
   const [generatingReport, setGeneratingReport] = useState<"json" | "html" | "pdf" | null>(null);
-  const [reportLinks, setReportLinks] = useState<Partial<Record<"json" | "html" | "pdf", string>>>({});
+  const [reportLinks, setReportLinks] = useState<Partial<Record<"json" | "html" | "pdf", string>>>(
+    {},
+  );
 
   const allFindings = useMemo(() => {
     if (activeReview?.findings && activeReview.findings.length > 0) {
@@ -1882,7 +2328,8 @@ function ReviewResult() {
     return [];
   }, [activeReview]);
 
-  const visible = severity === "All" ? allFindings : allFindings.filter((f) => f.severity === severity);
+  const visible =
+    severity === "All" ? allFindings : allFindings.filter((f) => f.severity === severity);
 
   const handleGenerateReport = async (type: "json" | "html" | "pdf") => {
     if (!activeReview?.reviewId) {
@@ -1896,13 +2343,23 @@ function ReviewResult() {
       toast.info(`Generating ${type.toUpperCase()} report...`);
       const request = { reviewId: activeReview.reviewId, format: type };
       let report = await createReport(activeReview.reviewId, type);
-      setApiResponse(`POST /reviews/${activeReview.reviewId}/reports`, { request, response: report });
+      setApiResponse(`POST /reviews/${activeReview.reviewId}/reports`, {
+        request,
+        response: report,
+      });
 
       if (!report.reportId && report.status !== "completed") {
         throw new Error("The backend did not return an ID for the generated report.");
       }
 
-      for (let attempt = 0; report.status !== "completed" && report.status !== "failed" && report.reportId && attempt < 30; attempt += 1) {
+      for (
+        let attempt = 0;
+        report.status !== "completed" &&
+        report.status !== "failed" &&
+        report.reportId &&
+        attempt < 30;
+        attempt += 1
+      ) {
         await new Promise((resolve) => window.setTimeout(resolve, 1000));
         report = await getReport(report.reportId);
       }
@@ -1938,9 +2395,13 @@ function ReviewResult() {
         <LoaderCircle className="mx-auto size-6 animate-spin text-primary" />
         <h1 className="mt-4 text-lg font-semibold">Loading backend review result</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {activeReviewStatus ? `Current status: ${activeReviewStatus}` : "Waiting for the review status response."}
+          {activeReviewStatus
+            ? `Current status: ${activeReviewStatus}`
+            : "Waiting for the review status response."}
         </p>
-        {activeReviewId && <p className="mt-2 font-mono text-xs text-muted-foreground">{activeReviewId}</p>}
+        {activeReviewId && (
+          <p className="mt-2 font-mono text-xs text-muted-foreground">{activeReviewId}</p>
+        )}
       </section>
     );
   }
@@ -1948,8 +2409,12 @@ function ReviewResult() {
   return (
     <>
       {activeReview.status === "failed" && (
-        <div role="alert" className="mb-4 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          Review failed: {activeReview.errorMessage ?? "The backend could not complete this review."}
+        <div
+          role="alert"
+          className="mb-4 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+        >
+          Review failed:{" "}
+          {activeReview.errorMessage ?? "The backend could not complete this review."}
         </div>
       )}
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
@@ -1963,7 +2428,8 @@ function ReviewResult() {
           </button>
           <h1 className="text-xl font-semibold">{fileName}</h1>
           <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-            {reviewId} · {language} · {activeReview.status} · {allFindings.length} {allFindings.length === 1 ? "finding" : "findings"}
+            {reviewId} · {language} · {activeReview.status} · {allFindings.length}{" "}
+            {allFindings.length === 1 ? "finding" : "findings"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1976,7 +2442,9 @@ function ReviewResult() {
               <div key={format} className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  disabled={!allowed || generatingReport !== null || activeReview.status !== "completed"}
+                  disabled={
+                    !allowed || generatingReport !== null || activeReview.status !== "completed"
+                  }
                   title={
                     !allowed
                       ? `${format.toUpperCase()} reports are not included in your ${subscriptionTier} plan.`
@@ -2016,23 +2484,51 @@ function ReviewResult() {
           <ScoreRing score={reviewScore} />
         </div>
         <div className="grid grid-cols-2 gap-x-8 gap-y-5 self-center">
-          <Metric label="Security" value={scoreBreakdown?.security ?? (activeReview ? "--" : 0)} barValue={scoreBreakdown?.security ?? 0} icon={ShieldAlert} />
-          <Metric label="Bugs" value={scoreBreakdown?.bugs ?? (activeReview ? "--" : 0)} barValue={scoreBreakdown?.bugs ?? 0} icon={Bug} />
-          <Metric label="Quality" value={scoreBreakdown?.quality ?? (activeReview ? "--" : 0)} barValue={scoreBreakdown?.quality ?? 0} icon={Code2} />
-          <Metric label="Performance" value={scoreBreakdown?.performance ?? (activeReview ? "--" : 0)} barValue={scoreBreakdown?.performance ?? 0} icon={Zap} />
+          <Metric
+            label="Security"
+            value={scoreBreakdown?.security ?? (activeReview ? "--" : 0)}
+            barValue={scoreBreakdown?.security ?? 0}
+            icon={ShieldAlert}
+          />
+          <Metric
+            label="Bugs"
+            value={scoreBreakdown?.bugs ?? (activeReview ? "--" : 0)}
+            barValue={scoreBreakdown?.bugs ?? 0}
+            icon={Bug}
+          />
+          <Metric
+            label="Quality"
+            value={scoreBreakdown?.quality ?? (activeReview ? "--" : 0)}
+            barValue={scoreBreakdown?.quality ?? 0}
+            icon={Code2}
+          />
+          <Metric
+            label="Performance"
+            value={scoreBreakdown?.performance ?? (activeReview ? "--" : 0)}
+            barValue={scoreBreakdown?.performance ?? 0}
+            icon={Zap}
+          />
         </div>
         <div className="border-t border-border pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
           <p className="text-[10px] font-semibold uppercase text-muted-foreground">
             Review summary
           </p>
           <div className="mt-4 grid grid-cols-3 gap-2">
-            <SummaryCount n={String(activeReview?.summary?.critical ?? 0)} label="Critical" s="CRITICAL" />
+            <SummaryCount
+              n={String(activeReview?.summary?.critical ?? 0)}
+              label="Critical"
+              s="CRITICAL"
+            />
             <SummaryCount n={String(activeReview?.summary?.high ?? 0)} label="High" s="HIGH" />
-            <SummaryCount n={String((activeReview?.summary?.medium ?? 0) + (activeReview?.summary?.low ?? 0))} label="Other" s="LOW" />
+            <SummaryCount
+              n={String((activeReview?.summary?.medium ?? 0) + (activeReview?.summary?.low ?? 0))}
+              label="Other"
+              s="LOW"
+            />
           </div>
           <p className="mt-4 text-[11px] leading-5 text-muted-foreground">
             {activeReview.status === "failed"
-              ? activeReview.errorMessage ?? "The backend could not complete this review."
+              ? (activeReview.errorMessage ?? "The backend could not complete this review.")
               : activeReview.aiAnalysis?.summary ||
                 (allFindings.length > 0
                   ? `${allFindings.length} findings detected across ${new Set(allFindings.map((f) => f.category)).size} categories.`
@@ -2148,7 +2644,13 @@ function SummaryCount({ n, label, s }: { n: string; label: string; s: Severity }
   );
 }
 
-function CodeEvidence({ rawFinding, finding }: { rawFinding?: any; finding: Finding }) {
+function CodeEvidence({
+  rawFinding,
+  finding,
+}: {
+  rawFinding: ReviewFinding | undefined;
+  finding: Finding;
+}) {
   const snippet = rawFinding?.evidence?.snippet || rawFinding?.snippet;
   const startLine = Number(rawFinding?.location?.startLine || finding.line || 1);
 
@@ -2173,22 +2675,25 @@ function CodeEvidence({ rawFinding, finding }: { rawFinding?: any; finding: Find
     <section className="panel overflow-hidden">
       <div className="border-b border-border px-4 py-3 text-xs font-semibold">Code location</div>
       <div className="bg-editor px-4 py-3 font-mono text-xs text-muted-foreground">
-        <span>{finding.file} : line {finding.line}</span>
+        <span>
+          {finding.file} : line {finding.line}
+        </span>
       </div>
     </section>
   );
 }
 
 function FindingDetail() {
-  const { selectedFinding, setView, findingStatuses, setFindingStatus, activeReview } = useReviewStore(
-    useShallow((state) => ({
-      selectedFinding: state.selectedFinding,
-      setView: state.setView,
-      findingStatuses: state.findingStatuses,
-      setFindingStatus: state.setFindingStatus,
-      activeReview: state.activeReview,
-    })),
-  );
+  const { selectedFinding, setView, findingStatuses, setFindingStatus, activeReview } =
+    useReviewStore(
+      useShallow((state) => ({
+        selectedFinding: state.selectedFinding,
+        setView: state.setView,
+        findingStatuses: state.findingStatuses,
+        setFindingStatus: state.setFindingStatus,
+        activeReview: state.activeReview,
+      })),
+    );
   const allFindings = useMemo(() => {
     if (activeReview?.findings && activeReview.findings.length > 0) {
       return activeReview.findings.map(mapBackendFindingToUi);
@@ -2209,12 +2714,19 @@ function FindingDetail() {
     );
   }
 
-  const rawFinding: any = activeReview?.findings?.find((rf: any) => (rf._id || rf.id) === f.id);
+  const rawFinding = activeReview?.findings?.find(
+    (finding) => (finding._id || finding.id) === f.id,
+  );
   const status = findingStatuses[f.id] ?? f.status;
   const setStatus = (s: string) => setFindingStatus(f.id, s);
 
-  const aiExplanation = rawFinding?.aiAnalysis?.explanation || rawFinding?.explanation || f.description;
-  const fixDiff = rawFinding?.aiAnalysis?.fix || rawFinding?.aiAnalysis?.improvedCode || rawFinding?.fix || rawFinding?.suggestedFix;
+  const aiExplanation =
+    rawFinding?.aiAnalysis?.explanation || rawFinding?.explanation || f.description;
+  const fixDiff =
+    rawFinding?.aiAnalysis?.fix ||
+    rawFinding?.aiAnalysis?.improvedCode ||
+    rawFinding?.fix ||
+    rawFinding?.suggestedFix;
   const rule = rawFinding?.ruleId || f.id;
   const cwe = rawFinding?.cwe || rawFinding?.cweId || null;
   const owasp = rawFinding?.owasp || null;
@@ -2368,7 +2880,6 @@ function FindingDetail() {
   );
 }
 
-
 /* ─────────────────────── member dashboard data ─────────────────────── */
 
 /** score → colour token */
@@ -2414,8 +2925,7 @@ function SeveritySummary({
         {counts?.low} Low
       </span>,
     );
-  if (parts.length === 0)
-    return <span className="text-success">No findings</span>;
+  if (parts.length === 0) return <span className="text-success">No findings</span>;
 
   return (
     <span className="flex items-center gap-1.5 font-mono text-[10px]">
@@ -2551,16 +3061,16 @@ function Dashboard() {
 
   const totalFindings = metricsData?.totalFindings ?? 0;
   const criticalCount = metricsData?.criticalCount ?? 0;
-  const highCount     = metricsData?.highCount ?? 0;
-  const mediumCount   = metricsData?.mediumCount ?? 0;
-  const lowCount      = metricsData?.lowCount ?? 0;
-  const resolvedPct   = metricsData?.resolvedPercentage ?? null;
-  const avgScore      = metricsData?.averageScore ?? 0;
-  const totalReviews  = metricsData?.totalReviews ?? 0;
+  const highCount = metricsData?.highCount ?? 0;
+  const mediumCount = metricsData?.mediumCount ?? 0;
+  const lowCount = metricsData?.lowCount ?? 0;
+  const resolvedPct = metricsData?.resolvedPercentage ?? null;
+  const avgScore = metricsData?.averageScore ?? 0;
+  const totalReviews = metricsData?.totalReviews ?? 0;
   const scoreTrendData = metricsData?.scoreTrend ?? [];
-  const catHealth     = metricsData?.categoryHealth;
+  const catHealth = metricsData?.categoryHealth;
   const recentReviews = metricsData?.recentReviews ?? [];
-  const openFindings  = metricsData?.openFindings ?? [];
+  const openFindings = metricsData?.openFindings ?? [];
 
   return (
     <>
@@ -2575,9 +3085,18 @@ function Dashboard() {
         }
       />
       {metricsQuery.isError && (
-        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          <span>{metricsQuery.error instanceof Error ? metricsQuery.error.message : "Unable to load dashboard data."}</span>
-          <Button variant="outline" size="sm" onClick={() => void metricsQuery.refetch()}>Retry</Button>
+        <div
+          role="alert"
+          className="mb-4 flex items-center justify-between gap-3 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+        >
+          <span>
+            {metricsQuery.error instanceof Error
+              ? metricsQuery.error.message
+              : "Unable to load dashboard data."}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => void metricsQuery.refetch()}>
+            Retry
+          </Button>
         </div>
       )}
 
@@ -2585,7 +3104,10 @@ function Dashboard() {
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><Gauge className="size-3.5" />Avg score</span>
+            <span className="flex items-center gap-1.5">
+              <Gauge className="size-3.5" />
+              Avg score
+            </span>
             <span className="font-mono text-[10px] text-success">
               {avgScore > 0 ? "Overall health" : "No reviews yet"}
             </span>
@@ -2603,7 +3125,10 @@ function Dashboard() {
 
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><FileText className="size-3.5" />My reviews</span>
+            <span className="flex items-center gap-1.5">
+              <FileText className="size-3.5" />
+              My reviews
+            </span>
             <span className="font-mono text-[10px] text-muted-foreground">Total</span>
           </div>
           <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
@@ -2644,15 +3169,11 @@ function Dashboard() {
 
             {/* Concise severity text — top 2 urgent only */}
             <div className="mt-1 flex items-center gap-2 text-[10px]">
-              {criticalCount > 0 && (
-                <span className="text-critical">{criticalCount} critical</span>
-              )}
+              {criticalCount > 0 && <span className="text-critical">{criticalCount} critical</span>}
               {criticalCount > 0 && highCount > 0 && (
                 <span className="text-muted-foreground">·</span>
               )}
-              {highCount > 0 && (
-                <span className="text-high">{highCount} high</span>
-              )}
+              {highCount > 0 && <span className="text-high">{highCount} high</span>}
               {criticalCount === 0 && highCount === 0 && mediumCount > 0 && (
                 <span className="text-medium">{mediumCount} medium</span>
               )}
@@ -2690,9 +3211,16 @@ function Dashboard() {
 
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="size-3.5" />Resolved</span>
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="size-3.5" />
+              Resolved
+            </span>
             <span className="font-mono text-[10px] text-success">
-              {resolvedPct !== null ? "Resolution rate" : totalFindings === 0 ? "No findings yet" : "Rate unavailable"}
+              {resolvedPct !== null
+                ? "Resolution rate"
+                : totalFindings === 0
+                  ? "No findings yet"
+                  : "Rate unavailable"}
             </span>
           </div>
           <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
@@ -2715,7 +3243,9 @@ function Dashboard() {
             <div>
               <h2 className="text-sm font-semibold">Score trend</h2>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {scoreTrendData.length > 0 ? `Last ${scoreTrendData.length} analyzed reviews` : "Recent reviews"}
+                {scoreTrendData.length > 0
+                  ? `Last ${scoreTrendData.length} analyzed reviews`
+                  : "Recent reviews"}
               </p>
             </div>
             <div className="text-right">
@@ -2738,11 +3268,18 @@ function Dashboard() {
               {scoreTrendData.map((d, i) => {
                 const isLast = i === scoreTrendData.length - 1;
                 return (
-                  <div key={`${d.label}-${i}`} className="group flex flex-1 flex-col items-center gap-2">
-                    <span className={cn(
-                      "font-mono text-[9px] transition-colors",
-                      isLast ? "text-primary" : "text-transparent group-hover:text-muted-foreground",
-                    )}>
+                  <div
+                    key={`${d.label}-${i}`}
+                    className="group flex flex-1 flex-col items-center gap-2"
+                  >
+                    <span
+                      className={cn(
+                        "font-mono text-[9px] transition-colors",
+                        isLast
+                          ? "text-primary"
+                          : "text-transparent group-hover:text-muted-foreground",
+                      )}
+                    >
                       {d.score}
                     </span>
                     <div className="flex h-32 w-full items-end">
@@ -2768,10 +3305,30 @@ function Dashboard() {
             {catHealth ? "Across all your analyzed reviews" : "No review data yet"}
           </p>
           <div className="mt-5 space-y-4">
-            <Metric label="Security"    value={catHealth ? catHealth.security : "--"} barValue={catHealth ? catHealth.security : 0} icon={ShieldAlert} />
-            <Metric label="Bugs"        value={catHealth ? catHealth.bugs : "--"} barValue={catHealth ? catHealth.bugs : 0} icon={Bug} />
-            <Metric label="Quality"     value={catHealth ? catHealth.quality : "--"} barValue={catHealth ? catHealth.quality : 0} icon={Code2} />
-            <Metric label="Performance" value={catHealth ? catHealth.performance : "--"} barValue={catHealth ? catHealth.performance : 0} icon={Zap} />
+            <Metric
+              label="Security"
+              value={catHealth ? catHealth.security : "--"}
+              barValue={catHealth ? catHealth.security : 0}
+              icon={ShieldAlert}
+            />
+            <Metric
+              label="Bugs"
+              value={catHealth ? catHealth.bugs : "--"}
+              barValue={catHealth ? catHealth.bugs : 0}
+              icon={Bug}
+            />
+            <Metric
+              label="Quality"
+              value={catHealth ? catHealth.quality : "--"}
+              barValue={catHealth ? catHealth.quality : 0}
+              icon={Code2}
+            />
+            <Metric
+              label="Performance"
+              value={catHealth ? catHealth.performance : "--"}
+              barValue={catHealth ? catHealth.performance : 0}
+              icon={Zap}
+            />
           </div>
         </section>
       </div>
@@ -2791,10 +3348,12 @@ function Dashboard() {
                 {openFindings.length}
               </span>
             </h2>
-            <span className={cn(
-              "inline-flex h-5 items-center rounded-sm border px-1.5 font-mono text-[9px] font-semibold",
-              "severity-critical",
-            )}>
+            <span
+              className={cn(
+                "inline-flex h-5 items-center rounded-sm border px-1.5 font-mono text-[9px] font-semibold",
+                "severity-critical",
+              )}
+            >
               {criticalCount} CRITICAL
             </span>
           </div>
@@ -2852,7 +3411,9 @@ function Dashboard() {
                 >
                   <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-mono text-xs font-medium text-foreground">{r.name}</p>
+                    <p className="truncate font-mono text-xs font-medium text-foreground">
+                      {r.name}
+                    </p>
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
                       {r.lang} · {r.date} · {r.findings} findings
                     </p>
@@ -2863,10 +3424,12 @@ function Dashboard() {
                         Attention
                       </span>
                     )}
-                    <span className={cn(
-                      "inline-flex h-6 min-w-[2.2rem] items-center justify-center rounded border font-mono text-xs font-semibold",
-                      scoreBg(r.score),
-                    )}>
+                    <span
+                      className={cn(
+                        "inline-flex h-6 min-w-[2.2rem] items-center justify-center rounded border font-mono text-xs font-semibold",
+                        scoreBg(r.score),
+                      )}
+                    >
                       {r.score}
                     </span>
                   </div>
@@ -2976,11 +3539,17 @@ function ReviewTable() {
                 </td>
                 <td>{r.lang}</td>
                 <td>
-                  <span className={cn("font-mono font-semibold", scoreColor(r.score))}>{r.score}</span>
+                  <span className={cn("font-mono font-semibold", scoreColor(r.score))}>
+                    {r.score}
+                  </span>
                 </td>
-                <td><span className="status-dot">{r.status}</span></td>
+                <td>
+                  <span className="status-dot">{r.status}</span>
+                </td>
                 <td>{r.date}</td>
-                <td><ChevronDown className="size-3.5 -rotate-90 text-muted-foreground" /></td>
+                <td>
+                  <ChevronDown className="size-3.5 -rotate-90 text-muted-foreground" />
+                </td>
               </tr>
             ))
           )}
@@ -3044,9 +3613,18 @@ function CompanyDashboard() {
         }
       />
       {metricsQuery.isError && (
-        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          <span>{metricsQuery.error instanceof Error ? metricsQuery.error.message : "Unable to load team review data."}</span>
-          <Button variant="outline" size="sm" onClick={() => void metricsQuery.refetch()}>Retry</Button>
+        <div
+          role="alert"
+          className="mb-4 flex items-center justify-between gap-3 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+        >
+          <span>
+            {metricsQuery.error instanceof Error
+              ? metricsQuery.error.message
+              : "Unable to load team review data."}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => void metricsQuery.refetch()}>
+            Retry
+          </Button>
         </div>
       )}
 
@@ -3054,7 +3632,10 @@ function CompanyDashboard() {
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><Gauge className="size-3.5" />Team avg score</span>
+            <span className="flex items-center gap-1.5">
+              <Gauge className="size-3.5" />
+              Team avg score
+            </span>
             <span className="font-mono text-[10px] text-success">
               {teamAvg > 0 ? "Overall health" : "No team reviews yet"}
             </span>
@@ -3071,7 +3652,10 @@ function CompanyDashboard() {
         </div>
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><FileText className="size-3.5" />Team reviews</span>
+            <span className="flex items-center gap-1.5">
+              <FileText className="size-3.5" />
+              Team reviews
+            </span>
             <span className="font-mono text-[10px] text-muted-foreground">Total</span>
           </div>
           <div className="mt-3 font-mono text-3xl font-semibold text-foreground">{teamReviews}</div>
@@ -3081,18 +3665,30 @@ function CompanyDashboard() {
         </div>
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><AlertTriangle className="size-3.5" />Findings</span>
+            <span className="flex items-center gap-1.5">
+              <AlertTriangle className="size-3.5" />
+              Findings
+            </span>
             <span className="font-mono text-[10px] text-critical">{critCount} critical</span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">{totalFindings}</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
+            {totalFindings}
+          </div>
           <div className="mt-1 text-[10px] text-muted-foreground">across all members</div>
         </div>
         <div className="panel p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><ShieldCheck className="size-3.5" />Active rules</span>
-            <span className="font-mono text-[10px] text-muted-foreground">{rules.length} custom</span>
+            <span className="flex items-center gap-1.5">
+              <ShieldCheck className="size-3.5" />
+              Active rules
+            </span>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {rules.length} custom
+            </span>
           </div>
-          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">{activeRulesCount}</div>
+          <div className="mt-3 font-mono text-3xl font-semibold text-foreground">
+            {activeRulesCount}
+          </div>
           <div className="mt-1 text-[10px] text-muted-foreground">enforced on every review</div>
         </div>
       </div>
@@ -3121,7 +3717,9 @@ function CompanyDashboard() {
                 {members.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                      {membersLoading ? "Loading members..." : "No members found in this workspace."}
+                      {membersLoading
+                        ? "Loading members..."
+                        : "No members found in this workspace."}
                     </td>
                   </tr>
                 ) : (
@@ -3130,26 +3728,42 @@ function CompanyDashboard() {
                       <td>
                         <div className="flex items-center gap-2">
                           <div className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-[9px] font-semibold text-primary-foreground">
-                            {m.name.split(" ").map((n) => n[0]).join("")}
+                            {m.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")}
                           </div>
                           <div>
                             <div className="text-xs font-medium text-foreground">{m.name}</div>
-                            <div className="font-mono text-[10px] text-muted-foreground">{m.email}</div>
+                            <div className="font-mono text-[10px] text-muted-foreground">
+                              {m.email}
+                            </div>
                           </div>
                         </div>
                       </td>
                       <td>{m.role}</td>
                       <td className="font-mono">{m.reviews}</td>
                       <td>
-                        <span className={cn("font-mono font-semibold", m.avg > 0 ? scoreColor(m.avg) : "text-muted-foreground")}>
+                        <span
+                          className={cn(
+                            "font-mono font-semibold",
+                            m.avg > 0 ? scoreColor(m.avg) : "text-muted-foreground",
+                          )}
+                        >
                           {m.avg > 0 ? m.avg : "--"}
                         </span>
                       </td>
                       <td>
-                        <span className={cn(
-                          "font-mono text-xs font-semibold",
-                          m.open >= 10 ? "text-critical" : m.open >= 5 ? "text-warning" : "text-success",
-                        )}>
+                        <span
+                          className={cn(
+                            "font-mono text-xs font-semibold",
+                            m.open >= 10
+                              ? "text-critical"
+                              : m.open >= 5
+                                ? "text-warning"
+                                : "text-success",
+                          )}
+                        >
                           {m.open}
                         </span>
                       </td>
@@ -3165,12 +3779,17 @@ function CompanyDashboard() {
           <h2 className="text-sm font-semibold">Rule compliance</h2>
           <p className="mt-0.5 text-[11px] text-muted-foreground">Pass rate across team reviews</p>
           <div className="mt-5 space-y-4">
-            <Metric label="Security"    value={catHealth?.security ?? "--"} icon={ShieldAlert} />
-            <Metric label="Bugs"        value={catHealth?.bugs ?? "--"} icon={Bug} />
-            <Metric label="Quality"     value={catHealth?.quality ?? "--"} icon={Code2} />
+            <Metric label="Security" value={catHealth?.security ?? "--"} icon={ShieldAlert} />
+            <Metric label="Bugs" value={catHealth?.bugs ?? "--"} icon={Bug} />
+            <Metric label="Quality" value={catHealth?.quality ?? "--"} icon={Code2} />
             <Metric label="Performance" value={catHealth?.performance ?? "--"} icon={Zap} />
           </div>
-          <Button variant="outline" size="sm" className="mt-5 w-full" onClick={() => setView("rules")}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-5 w-full"
+            onClick={() => setView("rules")}
+          >
             <ShieldCheck />
             Manage rules
           </Button>
@@ -3188,10 +3807,12 @@ function CompanyDashboard() {
               </span>
             </h2>
             {critCount > 0 && (
-              <span className={cn(
-                "inline-flex h-5 items-center rounded-sm border px-1.5 font-mono text-[9px] font-semibold",
-                "severity-critical",
-              )}>
+              <span
+                className={cn(
+                  "inline-flex h-5 items-center rounded-sm border px-1.5 font-mono text-[9px] font-semibold",
+                  "severity-critical",
+                )}
+              >
                 {critCount} CRITICAL
               </span>
             )}
@@ -3222,7 +3843,9 @@ function CompanyDashboard() {
         <section className="panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Recent team reviews</h2>
-            <Button variant="ghost" size="sm" onClick={() => setView("history")}>View all</Button>
+            <Button variant="ghost" size="sm" onClick={() => setView("history")}>
+              View all
+            </Button>
           </div>
           <div className="divide-y divide-border">
             {recentReviews.length === 0 ? (
@@ -3240,15 +3863,19 @@ function CompanyDashboard() {
                 >
                   <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-mono text-xs font-medium text-foreground">{r.name}</p>
+                    <p className="truncate font-mono text-xs font-medium text-foreground">
+                      {r.name}
+                    </p>
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
                       {r.lang} · {r.date || r.relativeDate}
                     </p>
                   </div>
-                  <span className={cn(
-                    "inline-flex h-6 min-w-[2.2rem] items-center justify-center rounded border font-mono text-xs font-semibold",
-                    scoreBg(r.score),
-                  )}>
+                  <span
+                    className={cn(
+                      "inline-flex h-6 min-w-[2.2rem] items-center justify-center rounded border font-mono text-xs font-semibold",
+                      scoreBg(r.score),
+                    )}
+                  >
                     {r.score}
                   </span>
                 </button>
@@ -3274,12 +3901,15 @@ function UsersView() {
   const updateRoleMutation = useUpdateAdminUserRoleMutation();
   const toggleStatusMutation = useToggleAdminUserStatusMutation();
 
-  const handleRoleChange = async (userId: string, newRole: "member" | "company_admin" | "platform_admin") => {
+  const handleRoleChange = async (
+    userId: string,
+    newRole: "member" | "company_admin" | "platform_admin",
+  ) => {
     try {
       await updateRoleMutation.mutateAsync({ userId, role: newRole });
       toast.success("User role updated successfully");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update user role");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to update user role"));
     }
   };
 
@@ -3287,8 +3917,8 @@ function UsersView() {
     try {
       await toggleStatusMutation.mutateAsync(userId);
       toast.success(`User ${userName} is now ${currentStatus ? "deactivated" : "active"}`);
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to toggle user status");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to toggle user status"));
     }
   };
 
@@ -3311,7 +3941,7 @@ function UsersView() {
           `"${(u.company || "").replace(/"/g, '""')}"`,
           u.isActive ? "Active" : "Inactive",
           u.createdAt,
-        ].join(",")
+        ].join(","),
       ),
     ];
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -3412,15 +4042,27 @@ function UsersView() {
                           {u.name ? u.name.slice(0, 2).toUpperCase() : "U"}
                         </div>
                         <div>
-                          <div className="text-xs font-medium text-foreground">{u.name || "Unnamed"}</div>
-                          <div className="font-mono text-[10px] text-muted-foreground">{u.email}</div>
+                          <div className="text-xs font-medium text-foreground">
+                            {u.name || "Unnamed"}
+                          </div>
+                          <div className="font-mono text-[10px] text-muted-foreground">
+                            {u.email}
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td>
                       <Select
                         value={u.role}
-                        onValueChange={(val) => handleRoleChange(u.id, val as any)}
+                        onValueChange={(val) => {
+                          if (
+                            val === "member" ||
+                            val === "company_admin" ||
+                            val === "platform_admin"
+                          ) {
+                            handleRoleChange(u.id, val);
+                          }
+                        }}
                       >
                         <SelectTrigger className="h-7 w-32 text-xs">
                           <SelectValue />
@@ -3433,7 +4075,9 @@ function UsersView() {
                       </Select>
                     </td>
                     <td>
-                      <span className="text-xs text-muted-foreground">{u.company || "— Independent"}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {u.company || "— Independent"}
+                      </span>
                     </td>
                     <td>
                       <span
@@ -3441,13 +4085,13 @@ function UsersView() {
                           "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
                           u.isActive
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : "bg-destructive/10 text-destructive"
+                            : "bg-destructive/10 text-destructive",
                         )}
                       >
                         <span
                           className={cn(
                             "size-1.5 rounded-full",
-                            u.isActive ? "bg-emerald-500" : "bg-destructive"
+                            u.isActive ? "bg-emerald-500" : "bg-destructive",
                           )}
                         />
                         {u.isActive ? "Active" : "Suspended"}
@@ -3506,9 +4150,13 @@ function CompaniesView() {
         ) : companies.length === 0 ? (
           <div className="p-12 text-center">
             <Building2 className="mx-auto size-10 text-muted-foreground/40 mb-3" />
-            <h3 className="text-sm font-semibold text-foreground">No enterprise company workspaces yet</h3>
+            <h3 className="text-sm font-semibold text-foreground">
+              No enterprise company workspaces yet
+            </h3>
             <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
-              All registered accounts currently operate as independent developers. When a company account is provisioned, their shared rules, team members, and review metrics will appear here.
+              All registered accounts currently operate as independent developers. When a company
+              account is provisioned, their shared rules, team members, and review metrics will
+              appear here.
             </p>
           </div>
         ) : (
@@ -3560,16 +4208,25 @@ function PaymentsView() {
         subtitle="Gateway status, subscription tiers, and developer licensing."
       />
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Active accounts" value={totalUsers.toString()} delta="all tenants" icon={Users} />
+        <Stat
+          label="Active accounts"
+          value={totalUsers.toString()}
+          delta="all tenants"
+          icon={Users}
+        />
         <Stat label="Payment gateway" value="Chapa" delta="Test mode" icon={CreditCard} />
         <Stat label="Billing frequency" value="Monthly" delta="ETB / USD" icon={CircleDollarSign} />
         <Stat label="Gateway status" value="Active" delta="Webhooks enabled" icon={CheckCircle2} />
       </div>
       <div className="panel p-12 text-center">
         <CreditCard className="mx-auto size-10 text-muted-foreground/40 mb-3" />
-        <h3 className="text-sm font-semibold text-foreground">No billing transactions recorded yet</h3>
+        <h3 className="text-sm font-semibold text-foreground">
+          No billing transactions recorded yet
+        </h3>
         <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
-          The Chapa payment gateway integration is configured in development mode. As users upgrade from the Free tier to Pro or Enterprise plans, verified checkout sessions and invoices will be listed here.
+          The Chapa payment gateway integration is configured in development mode. As users upgrade
+          from the Free tier to Pro or Enterprise plans, verified checkout sessions and invoices
+          will be listed here.
         </p>
       </div>
     </>
@@ -3618,9 +4275,7 @@ function HistoryView() {
 }
 function Rules() {
   const user = useAuthStore((state) => state.user);
-  const canManageRules =
-    user?.role === "company_admin" ||
-    user?.role === "platform_admin";
+  const canManageRules = user?.role === "company_admin" || user?.role === "platform_admin";
 
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -3634,9 +4289,7 @@ function Rules() {
     isError,
     error,
     refetch,
-  } = useCompanyRulesQuery(
-    categoryFilter !== "all" ? { category: categoryFilter } : undefined
-  );
+  } = useCompanyRulesQuery(categoryFilter !== "all" ? { category: categoryFilter } : undefined);
 
   const toggleMutation = useToggleCompanyRuleMutation();
   const deleteMutation = useDeleteCompanyRuleMutation();
@@ -3648,7 +4301,7 @@ function Rules() {
       (r) =>
         r.name.toLowerCase().includes(q) ||
         r.description.toLowerCase().includes(q) ||
-        r.ruleText.toLowerCase().includes(q)
+        r.ruleText.toLowerCase().includes(q),
     );
   }, [rules, searchQuery]);
 
@@ -3747,7 +4400,7 @@ function Rules() {
                     "rounded px-2.5 py-1 text-xs font-medium transition-colors",
                     categoryFilter === c.id
                       ? "bg-primary text-primary-foreground"
-                      : "bg-surface text-muted-foreground hover:bg-accent hover:text-foreground"
+                      : "bg-surface text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
                   {c.label}
@@ -3777,9 +4430,7 @@ function Rules() {
               <FileCode2 className="size-6 text-primary" />
             </div>
             <h3 className="mt-4 text-sm font-semibold text-foreground">
-              {searchQuery || categoryFilter !== "all"
-                ? "No matching rules found"
-                : "No rules yet"}
+              {searchQuery || categoryFilter !== "all" ? "No matching rules found" : "No rules yet"}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
               {searchQuery || categoryFilter !== "all"
@@ -3800,7 +4451,7 @@ function Rules() {
                 key={r._id}
                 className={cn(
                   "flex flex-wrap items-center gap-3 p-4 transition-colors",
-                  !r.enabled && "opacity-60 bg-surface/30"
+                  !r.enabled && "opacity-60 bg-surface/30",
                 )}
               >
                 <Switch
@@ -3816,9 +4467,7 @@ function Rules() {
                       {r.category}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                    {r.description}
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{r.description}</p>
                   <p className="mt-1 font-mono text-[10px] text-primary/80 truncate max-w-lg">
                     Pattern: {r.ruleText}
                   </p>
@@ -3859,7 +4508,8 @@ function Rules() {
           <div className="panel max-w-sm w-full p-5 space-y-4 border border-border shadow-xl">
             <h3 className="text-sm font-semibold text-foreground">Delete company rule?</h3>
             <p className="text-xs text-muted-foreground">
-              Are you sure you want to delete this rule? It will no longer be applied during code reviews.
+              Are you sure you want to delete this rule? It will no longer be applied during code
+              reviews.
             </p>
             <div className="flex justify-end gap-2 pt-2">
               <Button
@@ -3879,7 +4529,11 @@ function Rules() {
                 }}
                 disabled={deleteMutation.isPending}
               >
-                {deleteMutation.isPending ? <LoaderCircle className="animate-spin size-3.5" /> : "Delete"}
+                {deleteMutation.isPending ? (
+                  <LoaderCircle className="animate-spin size-3.5" />
+                ) : (
+                  "Delete"
+                )}
               </Button>
             </div>
           </div>
@@ -3900,21 +4554,13 @@ function Rules() {
   );
 }
 
-function RuleModal({
-  rule,
-  onClose,
-}: {
-  rule: CompanyRuleItem | null;
-  onClose: () => void;
-}) {
+function RuleModal({ rule, onClose }: { rule: CompanyRuleItem | null; onClose: () => void }) {
   const isEdit = Boolean(rule);
   const [name, setName] = useState(rule?.name || "");
   const [category, setCategory] = useState<CompanyRuleItem["category"]>(
-    rule?.category || "security"
+    rule?.category || "security",
   );
-  const [severity, setSeverity] = useState<CompanyRuleItem["severity"]>(
-    rule?.severity || "medium"
-  );
+  const [severity, setSeverity] = useState<CompanyRuleItem["severity"]>(rule?.severity || "medium");
   const [ruleText, setRuleText] = useState(rule?.ruleText || "");
   const [description, setDescription] = useState(rule?.description || "");
   const [formError, setFormError] = useState<string | null>(null);
@@ -4005,9 +4651,7 @@ function RuleModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-foreground mb-1.5">
-              Rule name
-            </label>
+            <label className="block text-xs font-medium text-foreground mb-1.5">Rule name</label>
             <Input
               required
               value={name}
@@ -4021,35 +4665,70 @@ function RuleModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">
-                Category
-              </label>
+              <label className="block text-xs font-medium text-foreground mb-1.5">Category</label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as any)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (
+                    value === "security" ||
+                    value === "bug" ||
+                    value === "quality" ||
+                    value === "performance" ||
+                    value === "custom"
+                  ) {
+                    setCategory(value);
+                  }
+                }}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
-                <option value="security" className="bg-background">Security</option>
-                <option value="bug" className="bg-background">Bug</option>
-                <option value="quality" className="bg-background">Quality</option>
-                <option value="performance" className="bg-background">Performance</option>
-                <option value="custom" className="bg-background">Custom</option>
+                <option value="security" className="bg-background">
+                  Security
+                </option>
+                <option value="bug" className="bg-background">
+                  Bug
+                </option>
+                <option value="quality" className="bg-background">
+                  Quality
+                </option>
+                <option value="performance" className="bg-background">
+                  Performance
+                </option>
+                <option value="custom" className="bg-background">
+                  Custom
+                </option>
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">
-                Severity
-              </label>
+              <label className="block text-xs font-medium text-foreground mb-1.5">Severity</label>
               <select
                 value={severity}
-                onChange={(e) => setSeverity(e.target.value as any)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (
+                    value === "critical" ||
+                    value === "high" ||
+                    value === "medium" ||
+                    value === "low"
+                  ) {
+                    setSeverity(value);
+                  }
+                }}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
-                <option value="critical" className="bg-background">Critical</option>
-                <option value="high" className="bg-background">High</option>
-                <option value="medium" className="bg-background">Medium</option>
-                <option value="low" className="bg-background">Low</option>
+                <option value="critical" className="bg-background">
+                  Critical
+                </option>
+                <option value="high" className="bg-background">
+                  High
+                </option>
+                <option value="medium" className="bg-background">
+                  Medium
+                </option>
+                <option value="low" className="bg-background">
+                  Low
+                </option>
               </select>
             </div>
           </div>
@@ -4121,8 +4800,8 @@ function InviteMemberModal({ onClose }: { onClose: () => void }) {
       });
       toast.success(`Invited ${name.trim()} successfully!`);
       onClose();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to invite member");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to invite member"));
     }
   };
 
@@ -4201,19 +4880,39 @@ function Company() {
         }
       />
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Active members" value={String(members.length)} delta="Workspace seats" icon={Users} />
-        <Stat label="Reviews total" value={String(metricsData?.totalReviews ?? 0)} delta="Across all members" icon={Activity} />
-        <Stat label="Critical findings" value={String(metricsData?.criticalCount ?? 0)} delta="Across listed reviews" icon={ShieldAlert} />
+        <Stat
+          label="Active members"
+          value={String(members.length)}
+          delta="Workspace seats"
+          icon={Users}
+        />
+        <Stat
+          label="Reviews total"
+          value={String(metricsData?.totalReviews ?? 0)}
+          delta="Across all members"
+          icon={Activity}
+        />
+        <Stat
+          label="Critical findings"
+          value={String(metricsData?.criticalCount ?? 0)}
+          delta="Across listed reviews"
+          icon={ShieldAlert}
+        />
       </div>
       <section className="panel mt-4 overflow-hidden">
-        <div className="border-b border-border p-4 text-sm font-semibold">Members ({members.length})</div>
+        <div className="border-b border-border p-4 text-sm font-semibold">
+          Members ({members.length})
+        </div>
         {members.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
             {membersLoading ? "Loading members..." : "No members found in this workspace."}
           </div>
         ) : (
           members.map((m) => (
-            <div className="flex items-center gap-3 border-b border-border p-4 last:border-0" key={m.id || m.email}>
+            <div
+              className="flex items-center gap-3 border-b border-border p-4 last:border-0"
+              key={m.id || m.email}
+            >
               <div className="grid size-8 place-items-center rounded-full bg-accent text-xs font-semibold">
                 {m.name
                   .split(" ")
@@ -4224,18 +4923,14 @@ function Company() {
                 <p className="text-xs font-medium">{m.name}</p>
                 <p className="text-[10px] text-muted-foreground">{m.email}</p>
               </div>
-              <span className="rounded border border-border px-2 py-1 text-[10px]">
-                {m.role}
-              </span>
+              <span className="rounded border border-border px-2 py-1 text-[10px]">{m.role}</span>
               <span className="status-dot">Active</span>
             </div>
           ))
         )}
       </section>
 
-      {inviteModalOpen && (
-        <InviteMemberModal onClose={() => setInviteModalOpen(false)} />
-      )}
+      {inviteModalOpen && <InviteMemberModal onClose={() => setInviteModalOpen(false)} />}
     </>
   );
 }
@@ -4276,14 +4971,24 @@ function Billing() {
     <>
       <PageHeading
         title={role === "member" ? "Upgrade your plan" : "Plans & billing"}
-        subtitle={role === "member"
-          ? "Choose a subscription upgrade and complete payment securely with Chapa."
-          : "Subscription details retrieved from your ReviewX account."}
+        subtitle={
+          role === "member"
+            ? "Choose a subscription upgrade and complete payment securely with Chapa."
+            : "Subscription details retrieved from your ReviewX account."
+        }
       />
       {paymentError && (
-        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        <div
+          role="alert"
+          className="mb-4 flex items-center justify-between gap-3 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+        >
           <span>{paymentError}</span>
-          <button type="button" aria-label="Dismiss payment error" onClick={() => setPaymentError(null)} className="rounded p-1 hover:bg-destructive/10">
+          <button
+            type="button"
+            aria-label="Dismiss payment error"
+            onClick={() => setPaymentError(null)}
+            className="rounded p-1 hover:bg-destructive/10"
+          >
             <X className="size-4" />
           </button>
         </div>
@@ -4326,94 +5031,124 @@ function Billing() {
               </div>
             </dl>
             <p className="mt-4 text-xs text-muted-foreground">
-              Plan changes are managed by the subscription service. This workspace only displays the plan currently assigned to your account.
+              Plan changes are managed by the subscription service. This workspace only displays the
+              plan currently assigned to your account.
             </p>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">No subscription details were returned for this account.</p>
+          <p className="text-sm text-muted-foreground">
+            No subscription details were returned for this account.
+          </p>
         )}
         {subscription.isError && (
-          <Button variant="outline" size="sm" className="mt-3" onClick={() => void subscription.refetch()}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={() => void subscription.refetch()}
+          >
             Retry
           </Button>
         )}
       </section>
-      {role === "member" && !subscription.isLoading && !subscription.isError && subscription.data && (
-        <section className="mt-5 space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold">Available upgrades</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Plan pricing and currency are supplied by the backend at checkout. Your subscription changes only after Chapa confirms payment.
-            </p>
-          </div>
-          {planRank[currentPlan] === planRank.enterprise ? (
-            <div className="panel flex items-start gap-3 p-5">
-              <CheckCircle2 className="mt-0.5 size-5 text-success" />
-              <div>
-                <h3 className="text-sm font-semibold">You’re on the highest available plan</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Your Enterprise subscription is active. No further upgrade is available.</p>
+      {role === "member" &&
+        !subscription.isLoading &&
+        !subscription.isError &&
+        subscription.data && (
+          <section className="mt-5 space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold">Available upgrades</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Plan pricing and currency are supplied by the backend at checkout. Your subscription
+                changes only after Chapa confirms payment.
+              </p>
+            </div>
+            {planRank[currentPlan] === planRank.enterprise ? (
+              <div className="panel flex items-start gap-3 p-5">
+                <CheckCircle2 className="mt-0.5 size-5 text-success" />
+                <div>
+                  <h3 className="text-sm font-semibold">You’re on the highest available plan</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Your Enterprise subscription is active. No further upgrade is available.
+                  </p>
+                </div>
               </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {(
+                  [
+                    {
+                      plan: "pro",
+                      title: "Pro",
+                      description:
+                        "For individual developers who need expanded review capabilities.",
+                      features: ["Higher review limits", "AI-assisted analysis", "Archive uploads"],
+                    },
+                    {
+                      plan: "enterprise",
+                      title: "Enterprise",
+                      description:
+                        "For teams using GitHub integration and advanced workspace features.",
+                      features: [
+                        "Enterprise review capacity",
+                        "GitHub integration",
+                        "Scheduled reviews",
+                      ],
+                    },
+                  ] as const
+                )
+                  .filter(({ plan }) => planRank[plan] > planRank[currentPlan])
+                  .map(({ plan, title, description, features }) => (
+                    <article key={plan} className="panel flex flex-col p-5">
+                      <div className="flex items-center gap-2">
+                        <CircleDollarSign className="size-5 text-primary" />
+                        <h3 className="text-sm font-semibold">{title}</h3>
+                        {plan === "pro" && (
+                          <span className="ml-auto rounded border border-border px-2 py-0.5 text-[9px] uppercase text-muted-foreground">
+                            Popular
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-3 min-h-10 text-xs leading-5 text-muted-foreground">
+                        {description}
+                      </p>
+                      <ul className="my-4 flex-1 space-y-2">
+                        {features.map((feature) => (
+                          <li key={feature} className="flex items-center gap-2 text-xs">
+                            <Check className="size-3.5 text-success" />
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
+                      <Button
+                        className="w-full"
+                        disabled={pendingPlan !== null || currentPlan === plan}
+                        onClick={() => void startCheckout(plan)}
+                      >
+                        {pendingPlan === plan ? (
+                          <>
+                            <LoaderCircle className="animate-spin" /> Starting secure checkout…
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard /> Upgrade to {title}
+                          </>
+                        )}
+                      </Button>
+                    </article>
+                  ))}
+              </div>
+            )}
+            <div className="flex items-start gap-2 rounded border border-border bg-surface-raised p-3 text-[11px] leading-5 text-muted-foreground">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+              <p>
+                Checkout is handled by Chapa. The backend verifies the payment before changing your
+                subscription; closing or returning from checkout does not itself mark a payment
+                successful.
+              </p>
             </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {([
-                {
-                  plan: "pro",
-                  title: "Pro",
-                  description: "For individual developers who need expanded review capabilities.",
-                  features: ["Higher review limits", "AI-assisted analysis", "Archive uploads"],
-                },
-                {
-                  plan: "enterprise",
-                  title: "Enterprise",
-                  description: "For teams using GitHub integration and advanced workspace features.",
-                  features: ["Enterprise review capacity", "GitHub integration", "Scheduled reviews"],
-                },
-              ] as const)
-                .filter(({ plan }) => planRank[plan] > planRank[currentPlan])
-                .map(({ plan, title, description, features }) => (
-                  <article key={plan} className="panel flex flex-col p-5">
-                    <div className="flex items-center gap-2">
-                      <CircleDollarSign className="size-5 text-primary" />
-                      <h3 className="text-sm font-semibold">{title}</h3>
-                      {plan === "pro" && <span className="ml-auto rounded border border-border px-2 py-0.5 text-[9px] uppercase text-muted-foreground">Popular</span>}
-                    </div>
-                    <p className="mt-3 min-h-10 text-xs leading-5 text-muted-foreground">{description}</p>
-                    <ul className="my-4 flex-1 space-y-2">
-                      {features.map((feature) => (
-                        <li key={feature} className="flex items-center gap-2 text-xs">
-                          <Check className="size-3.5 text-success" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                    <Button
-                      className="w-full"
-                      disabled={pendingPlan !== null || currentPlan === plan}
-                      onClick={() => void startCheckout(plan)}
-                    >
-                      {pendingPlan === plan ? (
-                        <>
-                          <LoaderCircle className="animate-spin" /> Starting secure checkout…
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard /> Upgrade to {title}
-                        </>
-                      )}
-                    </Button>
-                  </article>
-                ))}
-            </div>
-          )}
-          <div className="flex items-start gap-2 rounded border border-border bg-surface-raised p-3 text-[11px] leading-5 text-muted-foreground">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-            <p>
-              Checkout is handled by Chapa. The backend verifies the payment before changing your subscription; closing or returning from checkout does not itself mark a payment successful.
-            </p>
-          </div>
-        </section>
-      )}
+          </section>
+        )}
     </>
   );
 }
@@ -4425,12 +5160,13 @@ function Profile() {
       role: state.role,
     })),
   );
-  const initials = userName
-    .split(" ")
-    .map((n) => n[0] ?? "")
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "?";
+  const initials =
+    userName
+      .split(" ")
+      .map((n) => n[0] ?? "")
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "?";
   const roleLabel =
     role === "platform" ? "Platform admin" : role === "company" ? "Company admin" : "Member";
   return (
@@ -4578,7 +5314,8 @@ function Admin() {
           </div>
           <div className="mt-3 font-mono text-3xl font-semibold text-foreground">100%</div>
           <div className="mt-1 text-[10px] text-muted-foreground">
-            {Math.floor((kpis?.uptimeSeconds ?? 0) / 3600)}h uptime · {kpis?.activeEnvironment || "production"}
+            {Math.floor((kpis?.uptimeSeconds ?? 0) / 3600)}h uptime ·{" "}
+            {kpis?.activeEnvironment || "production"}
           </div>
         </div>
       </div>
@@ -4589,7 +5326,9 @@ function Admin() {
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-sm font-semibold">Review activity trend</h2>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">Code reviews processed · last 6 months</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Code reviews processed · last 6 months
+              </p>
             </div>
             <div className="text-right">
               <div className="font-mono text-2xl font-semibold text-foreground">
@@ -4615,7 +5354,7 @@ function Admin() {
                       className={cn(
                         "w-full rounded-t-sm transition-colors",
                         isLast ? "bg-primary" : "bg-primary/25 group-hover:bg-primary/50",
-                        d.count === 0 && "bg-muted/40"
+                        d.count === 0 && "bg-muted/40",
                       )}
                       style={{ height: `${heightPercent}%` }}
                     />
@@ -4631,10 +5370,10 @@ function Admin() {
           <h2 className="text-sm font-semibold">Quick actions</h2>
           <div className="mt-4 space-y-2">
             {[
-              { label: "User accounts",     view: "users"     as const, icon: Users           },
-              { label: "Tenant workspaces", view: "companies" as const, icon: Building2        },
-              { label: "Company rules",     view: "rules"     as const, icon: ShieldAlert      },
-              { label: "All code reviews",  view: "history"   as const, icon: History          },
+              { label: "User accounts", view: "users" as const, icon: Users },
+              { label: "Tenant workspaces", view: "companies" as const, icon: Building2 },
+              { label: "Company rules", view: "rules" as const, icon: ShieldAlert },
+              { label: "All code reviews", view: "history" as const, icon: History },
             ].map(({ label, view, icon: Icon }) => (
               <button
                 key={view}
@@ -4655,12 +5394,16 @@ function Admin() {
         <section className="panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Enterprise workspaces</h2>
-            <Button variant="ghost" size="sm" onClick={() => setView("companies")}>View all</Button>
+            <Button variant="ghost" size="sm" onClick={() => setView("companies")}>
+              View all
+            </Button>
           </div>
           {topTenants.length === 0 ? (
             <div className="p-8 text-center">
               <Building2 className="mx-auto size-8 text-muted-foreground/30 mb-2" />
-              <p className="text-xs font-medium text-foreground">No enterprise workspaces registered yet</p>
+              <p className="text-xs font-medium text-foreground">
+                No enterprise workspaces registered yet
+              </p>
               <p className="mt-1 text-[11px] text-muted-foreground">
                 All registered accounts are currently operating as independent developers.
               </p>
@@ -4692,7 +5435,9 @@ function Admin() {
                       <td className="font-mono">{c.members}</td>
                       <td className="font-mono">{c.rules}</td>
                       <td>
-                        <span className={cn("font-mono font-semibold text-xs", scoreColor(c.health))}>
+                        <span
+                          className={cn("font-mono font-semibold text-xs", scoreColor(c.health))}
+                        >
                           {c.health}
                         </span>
                       </td>
@@ -4732,19 +5477,21 @@ function Admin() {
                   e.icon === "rev"
                     ? Code2
                     : e.icon === "usr"
-                    ? Users
-                    : e.icon === "co"
-                    ? Building2
-                    : e.icon === "pay"
-                    ? CircleDollarSign
-                    : Activity;
+                      ? Users
+                      : e.icon === "co"
+                        ? Building2
+                        : e.icon === "pay"
+                          ? CircleDollarSign
+                          : Activity;
                 return (
                   <div key={e.id || e.text} className="flex items-center gap-3 px-4 py-3">
                     <div className="grid size-7 shrink-0 place-items-center rounded bg-accent">
                       <IconComponent className="size-3.5 text-muted-foreground" />
                     </div>
                     <span className="flex-1 text-xs text-foreground">{e.text}</span>
-                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{e.time}</span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                      {e.time}
+                    </span>
                   </div>
                 );
               })

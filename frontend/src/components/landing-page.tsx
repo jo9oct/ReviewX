@@ -78,7 +78,7 @@ const NAV_LINKS = [
   { label: "Features", href: "#features" },
   { label: "Workflow", href: "#workflow" },
   { label: "Security", href: "#security" },
-  { label: "Pricing",  href: "#pricing"  },
+  { label: "Pricing", href: "#pricing" },
 ];
 
 /** Mini score ring used inside the "Health score" feature card. */
@@ -91,8 +91,12 @@ function MiniScoreRing() {
       <svg viewBox="0 0 64 64" className="size-full -rotate-90">
         <circle cx="32" cy="32" r={r} fill="none" stroke="var(--border)" strokeWidth="5" />
         <circle
-          cx="32" cy="32" r={r} fill="none"
-          stroke="var(--score)" strokeWidth="5"
+          cx="32"
+          cy="32"
+          r={r}
+          fill="none"
+          stroke="var(--score)"
+          strokeWidth="5"
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - score / 100)}
@@ -160,11 +164,11 @@ const STEPS = [
 ];
 
 const SUPPORTED_LANGUAGES = [
-  { label: "JavaScript", mono: "JS",  color: "text-[#f7df1e]" },
-  { label: "TypeScript", mono: "TS",  color: "text-[#3178c6]" },
-  { label: "Python",     mono: "PY",  color: "text-[#4b8bbe]" },
-  { label: "Java",       mono: "JV",  color: "text-[#ed8b00]" },
-  { label: "PHP",        mono: "PHP", color: "text-[#8892be]" },
+  { label: "JavaScript", mono: "JS", color: "text-[#f7df1e]" },
+  { label: "TypeScript", mono: "TS", color: "text-[#3178c6]" },
+  { label: "Python", mono: "PY", color: "text-[#4b8bbe]" },
+  { label: "Java", mono: "JV", color: "text-[#ed8b00]" },
+  { label: "PHP", mono: "PHP", color: "text-[#8892be]" },
 ];
 
 const PLANS: Plan[] = [
@@ -235,7 +239,7 @@ const FAQ: FaqItem[] = [
 ];
 
 const SOCIAL_LINKS = [
-  { label: "ReviewX on GitHub",     href: "https://github.com",  icon: Github  },
+  { label: "ReviewX on GitHub", href: "https://github.com", icon: Github },
   { label: "ReviewX on X / Twitter", href: "https://twitter.com", icon: Twitter },
 ];
 
@@ -243,25 +247,25 @@ const FOOTER_LINKS = [
   {
     heading: "Product",
     links: [
-      { label: "Features",   href: "#features" },
-      { label: "Pricing",    href: "#pricing"  },
-      { label: "Security",   href: "#security" },
-      { label: "Changelog",  href: "#"         },
+      { label: "Features", href: "#features" },
+      { label: "Pricing", href: "#pricing" },
+      { label: "Security", href: "#security" },
+      { label: "Changelog", href: "#" },
     ],
   },
   {
     heading: "Company",
     links: [
-      { label: "About",    href: "#" },
-      { label: "Blog",     href: "#" },
-      { label: "Contact",  href: "#" },
+      { label: "About", href: "#" },
+      { label: "Blog", href: "#" },
+      { label: "Contact", href: "#" },
     ],
   },
   {
     heading: "Legal",
     links: [
-      { label: "Privacy policy",   href: "/privacy" },
-      { label: "Terms of service", href: "/terms"   },
+      { label: "Privacy policy", href: "/privacy" },
+      { label: "Terms of service", href: "/terms" },
     ],
   },
 ];
@@ -304,16 +308,16 @@ SectionHeading.displayName = "SectionHeading";
 /** Mini code-editor mock shown in the hero. */
 function HeroCodePanel() {
   const lines = [
-    { text: "import express from 'express';",            hi: false },
-    { text: "import mysql  from 'mysql2';",              hi: false },
-    { text: "",                                           hi: false },
+    { text: "import express from 'express';", hi: false },
+    { text: "import mysql  from 'mysql2';", hi: false },
+    { text: "", hi: false },
     { text: "app.get('/api/users', async (req, res) => {", hi: false },
-    { text: "  const userId = req.query.id;",            hi: false },
-    { text: "  const query  = `SELECT * FROM users",     hi: true  },
-    { text: "    WHERE id = ${userId}`;",                hi: true  },
-    { text: "  const [rows] = await db.query(query);",   hi: true  },
-    { text: "  res.json(rows);",                         hi: false },
-    { text: "});",                                       hi: false },
+    { text: "  const userId = req.query.id;", hi: false },
+    { text: "  const query  = `SELECT * FROM users", hi: true },
+    { text: "    WHERE id = ${userId}`;", hi: true },
+    { text: "  const [rows] = await db.query(query);", hi: true },
+    { text: "  res.json(rows);", hi: false },
+    { text: "});", hi: false },
   ];
 
   return (
@@ -337,7 +341,10 @@ function HeroCodePanel() {
           {lines.map((line, i) => (
             <div
               key={i}
-              className={cn("flex gap-3 px-3", line.hi && "border-l-2 border-critical bg-critical/10")}
+              className={cn(
+                "flex gap-3 px-3",
+                line.hi && "border-l-2 border-critical bg-critical/10",
+              )}
             >
               {/* Line numbers — fixed muted violet-slate */}
               <span className="w-4 select-none text-right text-[#5d5670]">{i + 1}</span>
@@ -349,16 +356,20 @@ function HeroCodePanel() {
 
         {/* Score pane — uses theme tokens with dark purple styling */}
         <div className="bg-surface/80 p-4 dark:bg-[#120f1c]/80">
-          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Overall score</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+            Overall score
+          </p>
           <div className="mt-3 flex items-end gap-2">
-            <span className="font-mono text-4xl font-semibold leading-none text-foreground">78</span>
+            <span className="font-mono text-4xl font-semibold leading-none text-foreground">
+              78
+            </span>
             <span className="pb-0.5 font-mono text-[10px] text-muted-foreground">/100</span>
           </div>
           <div className="mt-5 space-y-3">
             {[
-              { label: "Security",    value: 70, color: "bg-critical" },
-              { label: "Bugs",        value: 80, color: "bg-high"     },
-              { label: "Quality",     value: 85, color: "bg-score"    },
+              { label: "Security", value: 70, color: "bg-critical" },
+              { label: "Bugs", value: 80, color: "bg-high" },
+              { label: "Quality", value: 85, color: "bg-score" },
               { label: "Performance", value: 75, color: "bg-purple-500" },
             ].map((m) => (
               <div key={m.label}>
@@ -367,21 +378,31 @@ function HeroCodePanel() {
                   <span className="font-semibold text-foreground">{m.value}</span>
                 </div>
                 <div className="h-1 overflow-hidden rounded-full bg-secondary">
-                  <div className={cn("h-full rounded-full", m.color)} style={{ width: `${m.value}%` }} />
+                  <div
+                    className={cn("h-full rounded-full", m.color)}
+                    style={{ width: `${m.value}%` }}
+                  />
                 </div>
               </div>
             ))}
           </div>
           <div className="mt-4 rounded-xl border border-border bg-background/70 p-3 dark:border-white/[0.08] dark:bg-[#0c0915]/60">
-            <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Findings</p>
+            <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+              Findings
+            </p>
             <div className="space-y-1.5">
               {[
                 { label: "Critical", count: 1, cls: "severity-critical" },
-                { label: "High",     count: 2, cls: "severity-high"     },
-                { label: "Medium",   count: 3, cls: "severity-medium"   },
+                { label: "High", count: 2, cls: "severity-high" },
+                { label: "Medium", count: 3, cls: "severity-medium" },
               ].map((f) => (
                 <div key={f.label} className="flex items-center justify-between text-[11px]">
-                  <span className={cn("inline-flex h-4 items-center rounded-sm border px-1.5 font-mono text-[9px] font-semibold", f.cls)}>
+                  <span
+                    className={cn(
+                      "inline-flex h-4 items-center rounded-sm border px-1.5 font-mono text-[9px] font-semibold",
+                      f.cls,
+                    )}
+                  >
                     {f.label}
                   </span>
                   <span className="font-mono font-semibold text-foreground">{f.count}</span>
@@ -486,9 +507,7 @@ function PlanCard({ plan, index = 0 }: { plan: Plan; index?: number }) {
 
       {/* Price — intentionally static, no count-up */}
       <div className="relative mt-5 flex items-baseline gap-1">
-        <span className="font-mono text-4xl font-semibold text-foreground">
-          {plan.price}
-        </span>
+        <span className="font-mono text-4xl font-semibold text-foreground">{plan.price}</span>
         <span className="text-xs text-muted-foreground">{plan.period}</span>
       </div>
 
@@ -565,7 +584,7 @@ function FaqRow({ item, delay = 0 }: { item: FaqItem; delay?: number }) {
         )}
       >
         <div className="min-h-0 overflow-hidden">
-            <p className="pb-5 text-sm leading-7 text-muted-foreground">{item.a}</p>
+          <p className="pb-5 text-sm leading-7 text-muted-foreground">{item.a}</p>
         </div>
       </div>
     </div>
@@ -579,38 +598,38 @@ export function LandingPage() {
 
   // ── Features ────────────────────────────────────────────────────────────
   const featLabelRef = useFadeIn<HTMLParagraphElement>({ delay: 0 });
-  const featHeadRef  = useFadeIn<HTMLHeadingElement>({ delay: 80 });
-  const featBodyRef  = useFadeIn<HTMLParagraphElement>({ delay: 160 });
-  const reportRef    = useFadeIn<HTMLElement>({ delay: 280 });
-  const statsRef     = useFadeIn<HTMLDListElement>({ delay: 0, threshold: 0.2 });
+  const featHeadRef = useFadeIn<HTMLHeadingElement>({ delay: 80 });
+  const featBodyRef = useFadeIn<HTMLParagraphElement>({ delay: 160 });
+  const reportRef = useFadeIn<HTMLElement>({ delay: 280 });
+  const statsRef = useFadeIn<HTMLDListElement>({ delay: 0, threshold: 0.2 });
 
   // ── Workflow ─────────────────────────────────────────────────────────────
   const wfLabelRef = useFadeIn<HTMLParagraphElement>({ delay: 0 });
-  const wfHeadRef  = useFadeIn<HTMLHeadingElement>({ delay: 80 });
-  const wfBodyRef  = useFadeIn<HTMLParagraphElement>({ delay: 160 });
+  const wfHeadRef = useFadeIn<HTMLHeadingElement>({ delay: 80 });
+  const wfBodyRef = useFadeIn<HTMLParagraphElement>({ delay: 160 });
   const wfStepsRef = useFadeIn<HTMLOListElement>({ delay: 240 });
-  const wfCtaRef   = useFadeIn<HTMLDivElement>({ delay: 360 });
+  const wfCtaRef = useFadeIn<HTMLDivElement>({ delay: 360 });
   const wfPanelRef = useFadeIn<HTMLDivElement>({ delay: 180, distance: 48 });
 
   // ── Voice callout ────────────────────────────────────────────────────────
   // ── Security ─────────────────────────────────────────────────────────────
   const secCardRef = useFadeIn<HTMLDivElement>({ delay: 0 });
-  const secWhyRef  = useFadeIn<HTMLDivElement>({ delay: 140 });
+  const secWhyRef = useFadeIn<HTMLDivElement>({ delay: 140 });
 
   // ── FAQ ──────────────────────────────────────────────────────────────────
   const faqLabelRef = useFadeIn<HTMLParagraphElement>({ delay: 0 });
-  const faqHeadRef  = useFadeIn<HTMLHeadingElement>({ delay: 80 });
+  const faqHeadRef = useFadeIn<HTMLHeadingElement>({ delay: 80 });
 
   // ── Pricing ──────────────────────────────────────────────────────────────
   const prLabelRef = useFadeIn<HTMLParagraphElement>({ delay: 0 });
-  const prHeadRef  = useFadeIn<HTMLHeadingElement>({ delay: 80 });
-  const prBodyRef  = useFadeIn<HTMLParagraphElement>({ delay: 160 });
-  const prNoteRef  = useFadeIn<HTMLParagraphElement>({ delay: 480 });
+  const prHeadRef = useFadeIn<HTMLHeadingElement>({ delay: 80 });
+  const prBodyRef = useFadeIn<HTMLParagraphElement>({ delay: 160 });
+  const prNoteRef = useFadeIn<HTMLParagraphElement>({ delay: 480 });
 
   // ── CTA / footer ─────────────────────────────────────────────────────────
-  const ctaInnerRef    = useFadeIn<HTMLDivElement>({ delay: 0, threshold: 0.2 });
+  const ctaInnerRef = useFadeIn<HTMLDivElement>({ delay: 0, threshold: 0.2 });
   const footerBrandRef = useFadeIn<HTMLDivElement>({ delay: 0, threshold: 0.15 });
-  const footerBarRef   = useFadeIn<HTMLDivElement>({ delay: 200, threshold: 0.15 });
+  const footerBarRef = useFadeIn<HTMLDivElement>({ delay: 200, threshold: 0.15 });
 
   return (
     <>
@@ -623,12 +642,13 @@ export function LandingPage() {
       </a>
 
       <div className="min-h-screen bg-background text-foreground">
-
         {/* ══════════════════════════════════════════════════ NAV ═══ */}
         {/* Floating pill/capsule navbar matching Dimension visual design */}
         <header className="sticky top-4 z-40 mx-auto max-w-5xl px-4 sm:px-6">
           <div className="flex h-14 items-center justify-between gap-4 rounded-full border border-border bg-card/85 px-5 sm:px-6 backdrop-blur-xl shadow-[0_8px_30px_rgba(18,15,28,0.06)] dark:border-white/10 dark:bg-[#0d0a16]/80 dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-            <Link to="/" aria-label="ReviewX home"><Brand /></Link>
+            <Link to="/" aria-label="ReviewX home">
+              <Brand />
+            </Link>
 
             <nav aria-label="Primary navigation" className="hidden items-center gap-7 md:flex">
               {NAV_LINKS.map((link) => (
@@ -643,7 +663,12 @@ export function LandingPage() {
             </nav>
 
             <div className="flex items-center gap-2">
-              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex rounded-full text-muted-foreground hover:text-foreground hover:bg-accent">
+              <Button
+                asChild
+                variant="ghost"
+                size="sm"
+                className="hidden sm:inline-flex rounded-full text-muted-foreground hover:text-foreground hover:bg-accent"
+              >
                 <Link to="/auth">Sign in</Link>
               </Button>
 
@@ -651,7 +676,11 @@ export function LandingPage() {
               <LandingThemeToggle />
 
               {/* Primary CTA — consistent "Start free" everywhere in nav/hero/closing band */}
-              <Button asChild size="sm" className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_20px_rgba(217,70,239,0.35)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_28px_rgba(236,72,153,0.5)]">
+              <Button
+                asChild
+                size="sm"
+                className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_20px_rgba(217,70,239,0.35)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_28px_rgba(236,72,153,0.5)]"
+              >
                 <Link to="/register">Start free</Link>
               </Button>
               <button
@@ -686,8 +715,15 @@ export function LandingPage() {
                   </li>
                 ))}
                 <li className="pt-2">
-                  <Button asChild variant="outline" size="sm" className="w-full rounded-full border-border bg-card/60 text-foreground hover:bg-accent dark:border-white/10 dark:bg-white/[0.04]">
-                    <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>Sign in</Link>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="w-full rounded-full border-border bg-card/60 text-foreground hover:bg-accent dark:border-white/10 dark:bg-white/[0.04]"
+                  >
+                    <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>
+                      Sign in
+                    </Link>
                   </Button>
                 </li>
                 <li className="pt-1">
@@ -699,7 +735,6 @@ export function LandingPage() {
         </header>
 
         <main id="main-content">
-
           {/* ══════════════════════════════════════════════ HERO ═══ */}
           {/* bg: deep space-purple */}
           <section
@@ -728,7 +763,14 @@ export function LandingPage() {
                 className="w-full h-auto opacity-75 dark:opacity-85"
               >
                 <defs>
-                  <linearGradient id="hero-arc-gradient" x1="100" y1="360" x2="1100" y2="360" gradientUnits="userSpaceOnUse">
+                  <linearGradient
+                    id="hero-arc-gradient"
+                    x1="100"
+                    y1="360"
+                    x2="1100"
+                    y2="360"
+                    gradientUnits="userSpaceOnUse"
+                  >
                     <stop offset="0%" stopColor="#7c3aed" stopOpacity="0" />
                     <stop offset="25%" stopColor="#8b5cf6" stopOpacity="0.85" />
                     <stop offset="52%" stopColor="#d946ef" stopOpacity="0.95" />
@@ -748,7 +790,14 @@ export function LandingPage() {
                     <feGaussianBlur stdDeviation="60" />
                   </filter>
                 </defs>
-                <ellipse cx="600" cy="350" rx="480" ry="180" fill="url(#hero-ambient-glow)" filter="url(#arc-soft-blur)" />
+                <ellipse
+                  cx="600"
+                  cy="350"
+                  rx="480"
+                  ry="180"
+                  fill="url(#hero-ambient-glow)"
+                  filter="url(#arc-soft-blur)"
+                />
                 <path
                   d="M 80 470 Q 600 200 1120 470"
                   stroke="url(#hero-arc-gradient)"
@@ -788,36 +837,43 @@ export function LandingPage() {
 
                 {/* 3. Subheading paragraph */}
                 <p className="animate-hero-3 mt-7 max-w-[640px] text-center text-base leading-7 text-muted-foreground sm:text-lg">
-                  Paste or upload a source file. ReviewX scans it for security flaws, bugs,
-                  quality issues, and performance problems in under two minutes — then
-                  explains every finding and suggests a fix.
+                  Paste or upload a source file. ReviewX scans it for security flaws, bugs, quality
+                  issues, and performance problems in under two minutes — then explains every
+                  finding and suggests a fix.
                 </p>
 
                 {/* 4. CTA buttons */}
                 <div className="animate-hero-4 mt-8 flex flex-wrap items-center justify-center gap-3">
-                  <Button asChild size="lg" className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_28px_rgba(217,70,239,0.4)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_36px_rgba(236,72,153,0.6)]">
+                  <Button
+                    asChild
+                    size="lg"
+                    className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_28px_rgba(217,70,239,0.4)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_36px_rgba(236,72,153,0.6)]"
+                  >
                     <Link to="/register">
                       Start free
                       <ArrowRight className="size-4" aria-hidden="true" />
                     </Link>
                   </Button>
-                  <Button asChild variant="outline" size="lg" className="rounded-full border border-border bg-card/60 text-foreground hover:bg-accent hover:border-primary/40 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] dark:hover:border-purple-500/30">
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="lg"
+                    className="rounded-full border border-border bg-card/60 text-foreground hover:bg-accent hover:border-primary/40 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] dark:hover:border-purple-500/30"
+                  >
                     <Link to="/auth">Sign in to demo</Link>
                   </Button>
                 </div>
 
                 {/* 5. Trust checkmarks row */}
                 <div className="animate-hero-5 mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] text-muted-foreground">
-                  {[
-                    "Your code is never executed",
-                    "No credit card required",
-                    "Cancel anytime",
-                  ].map((t) => (
-                    <span key={t} className="flex items-center gap-1.5">
-                      <Check className="size-3.5 text-success" aria-hidden="true" />
-                      {t}
-                    </span>
-                  ))}
+                  {["Your code is never executed", "No credit card required", "Cancel anytime"].map(
+                    (t) => (
+                      <span key={t} className="flex items-center gap-1.5">
+                        <Check className="size-3.5 text-success" aria-hidden="true" />
+                        {t}
+                      </span>
+                    ),
+                  )}
                 </div>
               </div>
 
@@ -829,14 +885,19 @@ export function LandingPage() {
               {/* 7. Stats row below showcase — full-width */}
               <dl className="mt-16 grid grid-cols-2 gap-4 sm:grid-cols-4">
                 {[
-                  { stat: "94%",     desc: "Security findings caught" },
-                  { stat: "< 2 min", desc: "Average review time"      },
-                  { stat: "5",       desc: "Languages supported"       },
-                  { stat: "89%",     desc: "Fix acceptance rate"       },
+                  { stat: "94%", desc: "Security findings caught" },
+                  { stat: "< 2 min", desc: "Average review time" },
+                  { stat: "5", desc: "Languages supported" },
+                  { stat: "89%", desc: "Fix acceptance rate" },
                 ].map(({ stat, desc }) => (
-                  <div key={desc} className="rounded-2xl border border-border bg-card/75 p-4 backdrop-blur-md shadow-sm transition-all hover:border-primary/40 hover:shadow-[0_8px_30px_rgba(168,85,247,0.12)] dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:hover:border-purple-500/30 dark:hover:shadow-[0_0_24px_rgba(139,92,246,0.12)]">
+                  <div
+                    key={desc}
+                    className="rounded-2xl border border-border bg-card/75 p-4 backdrop-blur-md shadow-sm transition-all hover:border-primary/40 hover:shadow-[0_8px_30px_rgba(168,85,247,0.12)] dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:hover:border-purple-500/30 dark:hover:shadow-[0_0_24px_rgba(139,92,246,0.12)]"
+                  >
                     <dd className="font-mono text-2xl font-semibold text-foreground">{stat}</dd>
-                    <dt className="mt-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{desc}</dt>
+                    <dt className="mt-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                      {desc}
+                    </dt>
                   </div>
                 ))}
               </dl>
@@ -868,15 +929,18 @@ export function LandingPage() {
           >
             <div className="mx-auto max-w-7xl">
               <div className="mx-auto max-w-2xl text-center">
-                <p ref={featLabelRef} className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
+                <p
+                  ref={featLabelRef}
+                  className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-primary"
+                >
                   Everything you need
                 </p>
                 <SectionHeading ref={featHeadRef} id="features-heading">
                   A review workflow built for real engineering teams.
                 </SectionHeading>
                 <p ref={featBodyRef} className="mt-4 text-sm leading-7 text-muted-foreground">
-                  ReviewX covers the full loop from upload to patch — no context switching, no
-                  extra tooling.
+                  ReviewX covers the full loop from upload to patch — no context switching, no extra
+                  tooling.
                 </p>
               </div>
 
@@ -896,21 +960,30 @@ export function LandingPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-foreground">{REPORT_FEATURE.title}</h3>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{REPORT_FEATURE.description}</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {REPORT_FEATURE.description}
+                  </p>
                 </div>
               </article>
 
               {/* Stats strip — distinct from hero strip */}
-              <dl ref={statsRef} className="mt-16 grid divide-y divide-border sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+              <dl
+                ref={statsRef}
+                className="mt-16 grid divide-y divide-border sm:grid-cols-4 sm:divide-x sm:divide-y-0"
+              >
                 {[
-                  { stat: "6+",      desc: "Finding categories checked" },
-                  { stat: "5",       desc: "Languages supported"         },
-                  { stat: "24+",     desc: "Built-in security rules"     },
-                  { stat: "2 min",   desc: "Average review time"         },
+                  { stat: "6+", desc: "Finding categories checked" },
+                  { stat: "5", desc: "Languages supported" },
+                  { stat: "24+", desc: "Built-in security rules" },
+                  { stat: "2 min", desc: "Average review time" },
                 ].map(({ stat, desc }) => (
                   <div key={desc} className="px-6 py-5 first:pl-0 last:pr-0">
-                    <dt className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">{desc}</dt>
-                    <dd className="mt-2 font-mono text-3xl font-semibold text-foreground">{stat}</dd>
+                    <dt className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                      {desc}
+                    </dt>
+                    <dd className="mt-2 font-mono text-3xl font-semibold text-foreground">
+                      {stat}
+                    </dd>
                   </div>
                 ))}
               </dl>
@@ -927,15 +1000,18 @@ export function LandingPage() {
             <div className="mx-auto max-w-7xl">
               <div className="grid items-center gap-12 lg:grid-cols-2">
                 <div>
-                  <p ref={wfLabelRef} className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
+                  <p
+                    ref={wfLabelRef}
+                    className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-primary"
+                  >
                     Workflow
                   </p>
                   <SectionHeading ref={wfHeadRef} id="workflow-heading">
                     Review in minutes, not in follow-ups.
                   </SectionHeading>
                   <p ref={wfBodyRef} className="mt-4 text-sm leading-7 text-muted-foreground">
-                    One workflow from upload to patch: scan, assess, explain, and approve or
-                    reject the suggested fix alongside your team.
+                    One workflow from upload to patch: scan, assess, explain, and approve or reject
+                    the suggested fix alongside your team.
                   </p>
 
                   <ol ref={wfStepsRef} className="mt-10 space-y-7" aria-label="Workflow steps">
@@ -947,7 +1023,11 @@ export function LandingPage() {
                   </ol>
 
                   <div ref={wfCtaRef} className="mt-10">
-                    <Button asChild size="lg" className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_28px_rgba(217,70,239,0.4)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_36px_rgba(236,72,153,0.6)]">
+                    <Button
+                      asChild
+                      size="lg"
+                      className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_28px_rgba(217,70,239,0.4)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_36px_rgba(236,72,153,0.6)]"
+                    >
                       <Link to="/register">
                         Start free
                         <ArrowRight className="size-4" aria-hidden="true" />
@@ -956,13 +1036,19 @@ export function LandingPage() {
                   </div>
                 </div>
 
-                <div ref={wfPanelRef} className="overflow-hidden rounded-2xl border border-border bg-card/85 backdrop-blur-xl shadow-xl dark:border-white/[0.08] dark:bg-[#120f1c]/80" aria-hidden="true">
+                <div
+                  ref={wfPanelRef}
+                  className="overflow-hidden rounded-2xl border border-border bg-card/85 backdrop-blur-xl shadow-xl dark:border-white/[0.08] dark:bg-[#120f1c]/80"
+                  aria-hidden="true"
+                >
                   <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 dark:border-white/[0.08] dark:bg-[#161224]/70">
                     <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
                       <WandSparkles className="size-3.5 text-primary" aria-hidden="true" />
                       Analysis status
                     </div>
-                    <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[10px] font-medium text-success">live</span>
+                    <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[10px] font-medium text-success">
+                      live
+                    </span>
                   </div>
                   <div className="grid gap-5 p-5 sm:grid-cols-[1fr_0.85fr]">
                     <ol className="space-y-2.5">
@@ -973,15 +1059,24 @@ export function LandingPage() {
                         "Generating AI explanations",
                         "Calculating score",
                       ].map((item, i) => (
-                        <li key={item} className="flex items-center gap-3 rounded-xl border border-border bg-background/70 px-3 py-2 dark:border-white/[0.06] dark:bg-[#0c0915]/60">
-                          <div className={cn(
-                            "grid size-5 place-items-center rounded-full border font-mono text-[10px] font-semibold",
-                            i < 4 ? "border-success/40 bg-success/15 text-success" : "border-primary/50 bg-primary/15 text-primary shadow-[0_0_10px_rgba(168,85,247,0.25)]",
-                          )}>
+                        <li
+                          key={item}
+                          className="flex items-center gap-3 rounded-xl border border-border bg-background/70 px-3 py-2 dark:border-white/[0.06] dark:bg-[#0c0915]/60"
+                        >
+                          <div
+                            className={cn(
+                              "grid size-5 place-items-center rounded-full border font-mono text-[10px] font-semibold",
+                              i < 4
+                                ? "border-success/40 bg-success/15 text-success"
+                                : "border-primary/50 bg-primary/15 text-primary shadow-[0_0_10px_rgba(168,85,247,0.25)]",
+                            )}
+                          >
                             {i < 4 ? <Check className="size-3" /> : i + 1}
                           </div>
                           <span className="text-xs text-foreground">{item}</span>
-                          {i === 4 && <span className="ml-auto size-1.5 animate-pulse rounded-full bg-primary" />}
+                          {i === 4 && (
+                            <span className="ml-auto size-1.5 animate-pulse rounded-full bg-primary" />
+                          )}
                         </li>
                       ))}
                     </ol>
@@ -991,10 +1086,17 @@ export function LandingPage() {
                         <span className="font-mono font-semibold text-foreground">96%</span>
                       </div>
                       <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
-                        <div className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500 shadow-[0_0_12px_rgba(217,70,239,0.4)]" style={{ width: "96%" }} />
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500 shadow-[0_0_12px_rgba(217,70,239,0.4)]"
+                          style={{ width: "96%" }}
+                        />
                       </div>
                       <div className="mt-5 space-y-3 text-xs">
-                        {[{ l: "Security", v: 70 }, { l: "Bugs", v: 80 }, { l: "Quality", v: 85 }].map(({ l, v }) => (
+                        {[
+                          { l: "Security", v: 70 },
+                          { l: "Bugs", v: 80 },
+                          { l: "Quality", v: 85 },
+                        ].map(({ l, v }) => (
                           <div key={l} className="flex justify-between">
                             <span className="text-muted-foreground">{l}</span>
                             <span className="font-mono text-foreground">{v}</span>
@@ -1017,7 +1119,10 @@ export function LandingPage() {
           >
             <div className="mx-auto max-w-7xl">
               <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-                <div ref={secCardRef} className="rounded-2xl border border-border bg-card/85 backdrop-blur-xl p-7 sm:p-10 shadow-lg transition-all hover:border-primary/40 hover:shadow-[0_12px_40px_rgba(168,85,247,0.12)] dark:border-white/[0.08] dark:bg-[#120f1c]/75 dark:hover:border-purple-500/30 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.12)]">
+                <div
+                  ref={secCardRef}
+                  className="rounded-2xl border border-border bg-card/85 backdrop-blur-xl p-7 sm:p-10 shadow-lg transition-all hover:border-primary/40 hover:shadow-[0_12px_40px_rgba(168,85,247,0.12)] dark:border-white/[0.08] dark:bg-[#120f1c]/75 dark:hover:border-purple-500/30 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.12)]"
+                >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <SectionLabel>Security posture</SectionLabel>
@@ -1031,28 +1136,36 @@ export function LandingPage() {
                     </span>
                   </div>
                   <p className="mt-4 max-w-lg text-sm leading-7 text-muted-foreground">
-                    Every review is mapped to CWE categories, OWASP Top 10 (2021), and your
-                    custom rule set — so findings are actionable, not just informational.
+                    Every review is mapped to CWE categories, OWASP Top 10 (2021), and your custom
+                    rule set — so findings are actionable, not just informational.
                     <strong className="block mt-3 font-medium text-foreground">
-                      Your source code is never executed, stored, or used for model training.
-                      Each review session is isolated and discarded after processing.
+                      Your source code is never executed, stored, or used for model training. Each
+                      review session is isolated and discarded after processing.
                     </strong>
                   </p>
                   <dl className="mt-8 grid gap-4 sm:grid-cols-3">
                     {[
                       { value: "1", label: "Critical", cls: "text-critical" },
-                      { value: "2", label: "High",     cls: "text-high"     },
-                      { value: "3", label: "Other",    cls: "text-medium"   },
+                      { value: "2", label: "High", cls: "text-high" },
+                      { value: "3", label: "Other", cls: "text-medium" },
                     ].map((m) => (
-                      <div key={m.label} className="rounded-xl border border-border bg-surface/70 p-5 dark:border-white/[0.08] dark:bg-[#0c0915]/60">
+                      <div
+                        key={m.label}
+                        className="rounded-xl border border-border bg-surface/70 p-5 dark:border-white/[0.08] dark:bg-[#0c0915]/60"
+                      >
                         <dd className={cn("font-mono text-4xl font-semibold", m.cls)}>{m.value}</dd>
-                        <dt className="mt-2 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{m.label}</dt>
+                        <dt className="mt-2 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                          {m.label}
+                        </dt>
                       </div>
                     ))}
                   </dl>
                 </div>
 
-                <div ref={secWhyRef} className="rounded-2xl border border-border bg-card/85 backdrop-blur-xl p-7 shadow-lg transition-all hover:border-primary/40 hover:shadow-[0_12px_40px_rgba(168,85,247,0.12)] dark:border-white/[0.08] dark:bg-[#120f1c]/75 dark:hover:border-purple-500/30 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.12)]">
+                <div
+                  ref={secWhyRef}
+                  className="rounded-2xl border border-border bg-card/85 backdrop-blur-xl p-7 shadow-lg transition-all hover:border-primary/40 hover:shadow-[0_12px_40px_rgba(168,85,247,0.12)] dark:border-white/[0.08] dark:bg-[#120f1c]/75 dark:hover:border-purple-500/30 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.12)]"
+                >
                   <SectionLabel>Why teams switch</SectionLabel>
                   <ul className="mt-5 space-y-5" aria-label="Reasons to switch to ReviewX">
                     {[
@@ -1061,8 +1174,14 @@ export function LandingPage() {
                       "Track risk trends across repos and company-level rules",
                       "Maintain audit trails with timestamped finding records",
                     ].map((point) => (
-                      <li key={point} className="flex items-start gap-3 text-sm text-muted-foreground">
-                        <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-success/15 text-success" aria-hidden="true">
+                      <li
+                        key={point}
+                        className="flex items-start gap-3 text-sm text-muted-foreground"
+                      >
+                        <span
+                          className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-success/15 text-success"
+                          aria-hidden="true"
+                        >
                           <Check className="size-3" />
                         </span>
                         {point}
@@ -1083,7 +1202,10 @@ export function LandingPage() {
           >
             <div className="mx-auto max-w-7xl">
               <div className="mx-auto max-w-2xl text-center">
-                <p ref={prLabelRef} className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
+                <p
+                  ref={prLabelRef}
+                  className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-primary"
+                >
                   Simple pricing
                 </p>
                 <SectionHeading ref={prHeadRef} id="pricing-heading">
@@ -1102,7 +1224,10 @@ export function LandingPage() {
 
               <p ref={prNoteRef} className="mt-8 text-center text-xs text-muted-foreground">
                 Need a custom volume plan?{" "}
-                <a href="#" className="font-medium text-foreground underline-offset-4 hover:underline">
+                <a
+                  href="#"
+                  className="font-medium text-foreground underline-offset-4 hover:underline"
+                >
                   Get in touch
                 </a>
               </p>
@@ -1138,18 +1263,27 @@ export function LandingPage() {
                       Set your next release up for success.
                     </h2>
                     <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                      Join the developers who use ReviewX to catch what manual review misses.
-                      Free to start, no setup required, your code stays yours.
+                      Join the developers who use ReviewX to catch what manual review misses. Free
+                      to start, no setup required, your code stays yours.
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-3">
-                    <Button asChild size="lg" className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_28px_rgba(217,70,239,0.4)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_36px_rgba(236,72,153,0.6)]">
+                    <Button
+                      asChild
+                      size="lg"
+                      className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_28px_rgba(217,70,239,0.4)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_36px_rgba(236,72,153,0.6)]"
+                    >
                       <Link to="/register">
                         Start free
                         <ArrowRight className="size-4" aria-hidden="true" />
                       </Link>
                     </Button>
-                    <Button asChild variant="outline" size="lg" className="rounded-full border border-border bg-card/60 text-foreground hover:bg-accent hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] dark:hover:border-purple-500/30">
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="lg"
+                      className="rounded-full border border-border bg-card/60 text-foreground hover:bg-accent hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] dark:hover:border-purple-500/30"
+                    >
                       <Link to="/auth">Sign in</Link>
                     </Button>
                   </div>
@@ -1160,15 +1294,14 @@ export function LandingPage() {
 
           {/* ════════════════════════════════════════════ FAQ ═══ */}
           {/* bg: dark — directly above footer */}
-          <section
-            id="faq"
-            aria-labelledby="faq-heading"
-            className="px-5 py-24 sm:px-6 lg:px-8"
-          >
+          <section id="faq" aria-labelledby="faq-heading" className="px-5 py-24 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-7xl">
               <div className="grid gap-12 lg:grid-cols-[1fr_2fr]">
                 <div>
-                  <p ref={faqLabelRef} className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
+                  <p
+                    ref={faqLabelRef}
+                    className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-primary"
+                  >
                     FAQ
                   </p>
                   <SectionHeading ref={faqHeadRef} id="faq-heading">
@@ -1176,7 +1309,10 @@ export function LandingPage() {
                   </SectionHeading>
                   <p className="mt-4 text-sm leading-7 text-muted-foreground">
                     Can't find what you need?{" "}
-                    <a href="#" className="font-medium text-foreground underline-offset-4 hover:underline">
+                    <a
+                      href="#"
+                      className="font-medium text-foreground underline-offset-4 hover:underline"
+                    >
                       Get in touch
                     </a>
                   </p>
@@ -1199,10 +1335,12 @@ export function LandingPage() {
           <div className="mx-auto max-w-7xl">
             <div ref={footerBrandRef} className="grid gap-12 md:grid-cols-[1.5fr_repeat(3,1fr)]">
               <div>
-                <Link to="/" aria-label="ReviewX home"><Brand /></Link>
+                <Link to="/" aria-label="ReviewX home">
+                  <Brand />
+                </Link>
                 <p className="mt-4 max-w-xs text-sm leading-6 text-muted-foreground">
-                  Automated static code review that catches what manual review misses.
-                  Your code is never executed.
+                  Automated static code review that catches what manual review misses. Your code is
+                  never executed.
                 </p>
                 <div className="mt-5 flex items-center gap-3">
                   {SOCIAL_LINKS.map(({ label, href, icon: Icon }) => (
@@ -1256,8 +1394,12 @@ export function LandingPage() {
             >
               <p>© {new Date().getFullYear()} ReviewX. All rights reserved.</p>
               <div className="flex flex-wrap items-center gap-5">
-                <Link to="/privacy" className="transition-colors hover:text-foreground">Privacy</Link>
-                <Link to="/terms"   className="transition-colors hover:text-foreground">Terms</Link>
+                <Link to="/privacy" className="transition-colors hover:text-foreground">
+                  Privacy
+                </Link>
+                <Link to="/terms" className="transition-colors hover:text-foreground">
+                  Terms
+                </Link>
                 <span className="flex items-center gap-1.5">
                   <TrendingUp className="size-3" aria-hidden="true" />
                   Code review, simplified

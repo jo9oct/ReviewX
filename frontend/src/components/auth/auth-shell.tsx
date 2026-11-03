@@ -29,7 +29,10 @@ export function AuthShell({
               "Plain-language explanations",
               "Review-ready suggested fixes",
             ].map((item) => (
-              <div key={item} className="flex items-center gap-3 text-sm text-[oklch(0.64_0.018_255)]">
+              <div
+                key={item}
+                className="flex items-center gap-3 text-sm text-[oklch(0.64_0.018_255)]"
+              >
                 <span className="grid size-5 place-items-center rounded-full border border-[oklch(0.29_0.01_260)] bg-[oklch(0.22_0.009_260)]">
                   <Check className="size-3 text-success" />
                 </span>

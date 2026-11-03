@@ -26,7 +26,7 @@ function CallbackPage() {
   useEffect(() => {
     void (async () => {
       const destination = safeNext(
-        typeof window !== "undefined" ? sessionStorage.getItem(STORAGE_KEYS.AUTH_NEXT) : null
+        typeof window !== "undefined" ? sessionStorage.getItem(STORAGE_KEYS.AUTH_NEXT) : null,
       );
       if (typeof window !== "undefined") {
         sessionStorage.removeItem(STORAGE_KEYS.AUTH_NEXT);

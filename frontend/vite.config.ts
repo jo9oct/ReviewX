@@ -10,11 +10,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
 
-  const backendUrl = (
-    env["VITE_API_BASE_URL"] ||
-    env["VITE_API_URL"] ||
-    "http://localhost:5000"
-  )
+  const backendUrl = (env["VITE_API_BASE_URL"] || env["VITE_API_URL"] || "http://localhost:5000")
     .replace(/\/api\/v1\/?$/, "")
     .replace(/\/$/, "");
 
@@ -29,7 +25,7 @@ export default defineConfig(({ mode }) => {
         routeRules: {
           "/api/**": { proxy: `${backendUrl}/api/**` },
           "/health": { proxy: `${backendUrl}/health` },
-        }
+        },
       }),
       react(),
       tailwindcss(),

@@ -319,7 +319,10 @@ export type ApiEnvelope<T> = {
   meta?: { requestId?: string };
 };
 
-const responseEnvelopes = new WeakMap<object, { success: boolean; meta?: ApiEnvelope<unknown>["meta"] }>();
+const responseEnvelopes = new WeakMap<
+  object,
+  { success: boolean; meta?: ApiEnvelope<unknown>["meta"] }
+>();
 
 export class ApiRequestError extends Error {
   constructor(
@@ -369,7 +372,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error("Unexpected response from API");
   }
 
-  if (payload.data !== null && (typeof payload.data === "object" || typeof payload.data === "function")) {
+  if (
+    payload.data !== null &&
+    (typeof payload.data === "object" || typeof payload.data === "function")
+  ) {
     responseEnvelopes.set(payload.data, {
       success: payload.success,
       ...(payload.meta ? { meta: payload.meta } : {}),
@@ -378,7 +384,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return payload.data as T;
 }
 
-export async function getApiHealth(): Promise<{ status: string; service: string; version: string }> {
+export async function getApiHealth(): Promise<{
+  status: string;
+  service: string;
+  version: string;
+}> {
   const headers = new Headers({ Accept: "application/json" });
   const token = getAuthToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -386,7 +396,11 @@ export async function getApiHealth(): Promise<{ status: string; service: string;
     credentials: "include",
     headers,
   });
-  const payload = (await response.json().catch(() => null)) as ApiEnvelope<{ status: string; service: string; version: string }> | null;
+  const payload = (await response.json().catch(() => null)) as ApiEnvelope<{
+    status: string;
+    service: string;
+    version: string;
+  }> | null;
   if (response.status === 401) handleUnauthorized();
   if (!response.ok || !payload?.success || !payload.data) {
     const message = payload?.error?.message ?? `Health check failed (${response.status})`;
@@ -401,7 +415,9 @@ export async function getApiHealth(): Promise<{ status: string; service: string;
   return payload.data;
 }
 
-export function getApiEnvelopeMetadata(data: unknown): { success: boolean; meta?: ApiEnvelope<unknown>["meta"] } | undefined {
+export function getApiEnvelopeMetadata(
+  data: unknown,
+): { success: boolean; meta?: ApiEnvelope<unknown>["meta"] } | undefined {
   return data !== null && typeof data === "object" ? responseEnvelopes.get(data) : undefined;
 }
 
@@ -417,15 +433,16 @@ export const getGithubConnectUrlFn = createServerFn({ method: "GET" })
   .validator((token: string) => token)
   .handler(async ({ data: token }) => {
     // Determine absolute backend URL for server-side fetch
-    const backendUrl = process.env.VITE_API_BASE_URL || process.env.VITE_API_URL || "http://localhost:5000/api/v1";
+    const backendUrl =
+      process.env.VITE_API_BASE_URL || process.env.VITE_API_URL || "http://localhost:5000/api/v1";
     const absoluteUrl = backendUrl.replace(/\/$/, "") + "/github/connect";
 
     // We run on the server (Nitro) where Node's fetch can read Location headers from manual redirects!
     const response = await fetch(absoluteUrl, {
       method: "GET",
-      headers: { 
-        "Accept": "application/json",
-        "Authorization": `Bearer ${token}` 
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
       },
       redirect: "manual",
     });
@@ -434,18 +451,17 @@ export const getGithubConnectUrlFn = createServerFn({ method: "GET" })
       const location = response.headers.get("Location");
       if (location) return location;
     }
-    
+
     throw new Error("Failed to get GitHub redirect URL");
   });
 
 export async function startGithubConnect(): Promise<void> {
   const token = getAuthToken();
   if (!token) throw new ApiRequestError("Not authenticated", 401, null);
-  
+
   const location = await getGithubConnectUrlFn({ data: token });
   window.location.assign(location);
 }
-
 
 export async function completeGithubOAuth(params: {
   state?: string;
@@ -472,8 +488,16 @@ export async function completeGithubOAuth(params: {
   }>(`/github/callback?${query.toString()}`);
 }
 
-export async function createReview(payload: CreateReviewPayload): Promise<{ review: { id: string; status: string; jobId?: string }; status: string; project: { id: string; name: string; sourceType: string } }> {
-  return apiFetch<{ review: { id: string; status: string; jobId?: string }; status: string; project: { id: string; name: string; sourceType: string } }>("/reviews", {
+export async function createReview(payload: CreateReviewPayload): Promise<{
+  review: { id: string; status: string; jobId?: string };
+  status: string;
+  project: { id: string; name: string; sourceType: string };
+}> {
+  return apiFetch<{
+    review: { id: string; status: string; jobId?: string };
+    status: string;
+    project: { id: string; name: string; sourceType: string };
+  }>("/reviews", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -484,7 +508,9 @@ export async function getSubscription(): Promise<SubscriptionRecord> {
   return result.subscription;
 }
 
-export async function initiateSubscriptionPayment(plan: "pro" | "enterprise"): Promise<PaymentInitiation> {
+export async function initiateSubscriptionPayment(
+  plan: "pro" | "enterprise",
+): Promise<PaymentInitiation> {
   const endpoint = plan === "pro" ? "/payment/pro/initiate" : "/payment/enterprise/initiate";
   const payment = await apiFetch<PaymentInitiation>(endpoint, {
     method: "POST",
@@ -528,7 +554,7 @@ export function useSubscriptionQuery(
           const planOrder: Record<SubscriptionTier, number> = { free: 0, pro: 1, enterprise: 2 };
           return query.state.data && planOrder[query.state.data.plan] >= planOrder[untilPlan]
             ? false
-            : options?.pollIntervalMs ?? 3000;
+            : (options?.pollIntervalMs ?? 3000);
         }
       : false,
   });
@@ -543,7 +569,10 @@ export async function listProjects(limit = 50, skip = 0): Promise<ProjectRecord[
   return apiFetch<ProjectRecord[]>(`/projects?${query.toString()}`);
 }
 
-export async function listAllReviews(limit = 100, skip = 0): Promise<{ reviews: ReviewIndexRecord[] }> {
+export async function listAllReviews(
+  limit = 100,
+  skip = 0,
+): Promise<{ reviews: ReviewIndexRecord[] }> {
   const query = new URLSearchParams({ limit: String(limit), skip: String(skip) });
   return apiFetch<{ reviews: ReviewIndexRecord[] }>(`/reviews/all?${query.toString()}`);
 }
@@ -556,7 +585,10 @@ export async function getReport(reportId: string): Promise<ReviewReport> {
   return apiFetch<ReviewReport>(`/reports/${encodeURIComponent(reportId)}`);
 }
 
-export async function createReport(reviewId: string, format: ReviewReport["format"] = "json"): Promise<ReviewReport> {
+export async function createReport(
+  reviewId: string,
+  format: ReviewReport["format"] = "json",
+): Promise<ReviewReport> {
   return apiFetch<ReviewReport>(`/reviews/${encodeURIComponent(reviewId)}/reports`, {
     method: "POST",
     body: JSON.stringify({ format }),
@@ -587,16 +619,26 @@ export async function cancelScheduledReview(scheduleId: string): Promise<Schedul
   });
 }
 
-export async function getGithubConnectionUser(connectionId: string): Promise<{ githubUser: GithubUser }> {
-  return apiFetch<{ githubUser: GithubUser }>(`/github/connections/${encodeURIComponent(connectionId)}/user`);
+export async function getGithubConnectionUser(
+  connectionId: string,
+): Promise<{ githubUser: GithubUser }> {
+  return apiFetch<{ githubUser: GithubUser }>(
+    `/github/connections/${encodeURIComponent(connectionId)}/user`,
+  );
 }
 
-export async function listGithubRepositories(connectionId: string, page?: number, perPage?: number): Promise<{ repositories: GithubRepository[] }> {
+export async function listGithubRepositories(
+  connectionId: string,
+  page?: number,
+  perPage?: number,
+): Promise<{ repositories: GithubRepository[] }> {
   const search = new URLSearchParams();
   if (page) search.set("page", String(page));
   if (perPage) search.set("perPage", String(perPage));
   const query = search.toString() ? `?${search.toString()}` : "";
-  return apiFetch<{ repositories: GithubRepository[] }>(`/github/connections/${encodeURIComponent(connectionId)}/repositories${query}`);
+  return apiFetch<{ repositories: GithubRepository[] }>(
+    `/github/connections/${encodeURIComponent(connectionId)}/repositories${query}`,
+  );
 }
 
 export async function listGithubBranches(
@@ -610,7 +652,9 @@ export async function listGithubBranches(
   if (page) search.set("page", String(page));
   if (perPage) search.set("perPage", String(perPage));
   const query = search.toString() ? `?${search.toString()}` : "";
-  return apiFetch<{ branches: GithubBranch[] }>(`/github/connections/${encodeURIComponent(connectionId)}/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/branches${query}`);
+  return apiFetch<{ branches: GithubBranch[] }>(
+    `/github/connections/${encodeURIComponent(connectionId)}/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/branches${query}`,
+  );
 }
 
 export async function getGithubRepository(
@@ -620,7 +664,9 @@ export async function getGithubRepository(
   ref?: string,
 ): Promise<{ repository: GithubRepository }> {
   const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
-  return apiFetch<{ repository: GithubRepository }>(`/github/connections/${encodeURIComponent(connectionId)}/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(name)}${query}`);
+  return apiFetch<{ repository: GithubRepository }>(
+    `/github/connections/${encodeURIComponent(connectionId)}/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(name)}${query}`,
+  );
 }
 
 const getReviewIdentifier = (review: ReviewIndexRecord): string =>
@@ -649,10 +695,7 @@ async function getDashboardData(): Promise<{
   metrics: DashboardMetrics;
   reviews: DashboardReview[];
 }> {
-  const [reviewIndex, projects] = await Promise.all([
-    listAllReviews(100, 0),
-    listProjects(100, 0),
-  ]);
+  const [reviewIndex, projects] = await Promise.all([listAllReviews(100, 0), listProjects(100, 0)]);
   const records = reviewIndex.reviews;
   const latestRecords = records.slice(0, 20);
   const details = await Promise.all(
@@ -667,7 +710,12 @@ async function getDashboardData(): Promise<{
   const severityTotals = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
   let resolvedCount = 0;
   let findingTotal = 0;
-  const categoryScores = { security: [] as number[], bugs: [] as number[], quality: [] as number[], performance: [] as number[] };
+  const categoryScores = {
+    security: [] as number[],
+    bugs: [] as number[],
+    quality: [] as number[],
+    performance: [] as number[],
+  };
   const openFindings: DashboardFinding[] = [];
 
   for (const record of records) {
@@ -708,12 +756,14 @@ async function getDashboardData(): Promise<{
       }
     }
 
-    const score = item.score as (ReviewDetails["score"] & {
-      security?: number | null;
-      bugs?: number | null;
-      quality?: number | null;
-      performance?: number | null;
-    }) | null;
+    const score = item.score as
+      | (ReviewDetails["score"] & {
+          security?: number | null;
+          bugs?: number | null;
+          quality?: number | null;
+          performance?: number | null;
+        })
+      | null;
     for (const key of Object.keys(categoryScores) as Array<keyof typeof categoryScores>) {
       const value = score?.[key];
       if (typeof value === "number" && Number.isFinite(value)) categoryScores[key].push(value);
@@ -721,19 +771,27 @@ async function getDashboardData(): Promise<{
   }
 
   const toAverage = (scores: number[]) =>
-    scores.length ? Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length) : null;
+    scores.length
+      ? Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length)
+      : null;
   const dashboardReviews = records.map((record): DashboardReview => {
     const id = getReviewIdentifier(record);
     const item = detailsById.get(id);
     const project = projects.find((entry) => entry.id === item?.review.projectId);
     const counts = record.findingCounts ?? item?.review.findingCounts ?? {};
-    const unresolvedUrgent = item?.findings.some(
-      (finding) =>
-        finding.status?.toLowerCase() !== "resolved" &&
-        ["critical", "high"].includes(String(finding.severity ?? "").toLowerCase()),
-    ) ?? (Number(counts["critical"] ?? 0) + Number(counts["high"] ?? 0) > 0);
+    const unresolvedUrgent =
+      item?.findings.some(
+        (finding) =>
+          finding.status?.toLowerCase() !== "resolved" &&
+          ["critical", "high"].includes(String(finding.severity ?? "").toLowerCase()),
+      ) ?? Number(counts["critical"] ?? 0) + Number(counts["high"] ?? 0) > 0;
     const createdAt = item?.review.createdAt ?? record.createdAt ?? null;
-    const language = item?.review.languages?.[0] ?? record.languages?.[0] ?? item?.review.sourceType ?? record.sourceType ?? "Source";
+    const language =
+      item?.review.languages?.[0] ??
+      record.languages?.[0] ??
+      item?.review.sourceType ??
+      record.sourceType ??
+      "Source";
     const rawScore = getReviewScore(item, record.score);
     const score = rawScore ?? 0;
     const count = Object.values(counts).reduce((total, value) => total + Number(value || 0), 0);
@@ -746,7 +804,9 @@ async function getDashboardData(): Promise<{
       score,
       date: createdAt ? new Date(createdAt).toLocaleDateString() : "—",
       relativeDate: getRelativeDate(createdAt),
-      status: unresolvedUrgent ? "Needs attention" : item?.review.status ?? record.status ?? "unknown",
+      status: unresolvedUrgent
+        ? "Needs attention"
+        : (item?.review.status ?? record.status ?? "unknown"),
       findings: count || item?.findings.length || 0,
       severityCounts: {
         critical: Number(counts["critical"] ?? 0),
@@ -767,10 +827,15 @@ async function getDashboardData(): Promise<{
   }
   const scoreTrend = [...dashboardReviews]
     .filter((review) => review.createdAt && scoresByReviewId.has(review.id))
-    .sort((left, right) => new Date(left.createdAt!).getTime() - new Date(right.createdAt!).getTime())
+    .sort(
+      (left, right) => new Date(left.createdAt!).getTime() - new Date(right.createdAt!).getTime(),
+    )
     .slice(-7)
     .map((review) => ({
-      label: new Date(review.createdAt!).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      label: new Date(review.createdAt!).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      }),
       score: review.score,
     }));
 
@@ -789,7 +854,10 @@ async function getDashboardData(): Promise<{
           ? Math.round((resolvedCount / findingTotal) * 100)
           : null,
       averageScore: scoresByReviewId.size
-        ? Math.round([...scoresByReviewId.values()].reduce((sum, score) => sum + score, 0) / scoresByReviewId.size)
+        ? Math.round(
+            [...scoresByReviewId.values()].reduce((sum, score) => sum + score, 0) /
+              scoresByReviewId.size,
+          )
         : 0,
       categoryHealth: Object.values(categoryScores).some((scores) => scores.length > 0)
         ? {
@@ -836,7 +904,9 @@ export function useReviewsQuery(limit = 20, userId?: string) {
 }
 
 export function normalizeSeverity(value?: string | null): Severity {
-  const normalized = String(value ?? "").trim().toUpperCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
   if (normalized === "CRITICAL") return "CRITICAL";
   if (normalized === "HIGH") return "HIGH";
   if (normalized === "MEDIUM") return "MEDIUM";
@@ -845,7 +915,8 @@ export function normalizeSeverity(value?: string | null): Severity {
 }
 
 export function normalizeConfidence(value?: number | string | null): number {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.min(100, Math.round(value)));
+  if (typeof value === "number" && Number.isFinite(value))
+    return Math.max(0, Math.min(100, Math.round(value)));
   if (typeof value === "string") {
     const parsed = Number.parseInt(value, 10);
     if (Number.isFinite(parsed)) return Math.max(0, Math.min(100, parsed));
@@ -854,7 +925,9 @@ export function normalizeConfidence(value?: number | string | null): number {
 }
 
 export function normalizeCategory(value?: string | null): string {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   const map: Record<string, string> = {
     security: "Security",
     bug: "Bugs",

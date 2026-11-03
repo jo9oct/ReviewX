@@ -161,7 +161,12 @@ export type ProgressProps = Omit<ComponentProps<"div">, "children"> & {
   "aria-label"?: string | undefined;
 };
 
-export function Progress({ className, value = 0, "aria-label": ariaLabel, ...props }: ProgressProps) {
+export function Progress({
+  className,
+  value = 0,
+  "aria-label": ariaLabel,
+  ...props
+}: ProgressProps) {
   const percent = Math.min(100, Math.max(0, value));
 
   return (

@@ -28,9 +28,13 @@ function PaymentSuccessPage() {
   const user = useAuthStore((state) => state.user);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [verifyAttempt, setVerifyAttempt] = useState(0);
-  const [verificationStatus, setVerificationStatus] = useState<"checking" | "pending" | "paid" | "failed" | "error">("checking");
+  const [verificationStatus, setVerificationStatus] = useState<
+    "checking" | "pending" | "paid" | "failed" | "error"
+  >("checking");
   const [verificationError, setVerificationError] = useState<string | null>(null);
-  const planFromReference: SubscriptionTier | undefined = txRef?.toUpperCase().includes("ENTERPRISE")
+  const planFromReference: SubscriptionTier | undefined = txRef
+    ?.toUpperCase()
+    .includes("ENTERPRISE")
     ? "enterprise"
     : txRef?.toUpperCase().includes("PRO")
       ? "pro"
@@ -72,7 +76,9 @@ function PaymentSuccessPage() {
       } catch (error) {
         if (cancelled) return;
         setVerificationStatus("error");
-        setVerificationError(error instanceof Error ? error.message : "Unable to verify the Chapa transaction.");
+        setVerificationError(
+          error instanceof Error ? error.message : "Unable to verify the Chapa transaction.",
+        );
       }
     };
 
@@ -110,7 +116,8 @@ function PaymentSuccessPage() {
             <CheckCircle2 className="mx-auto size-10 text-success" />
             <h1 className="mt-4 text-xl font-semibold">Subscription upgraded</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Your {planFromReference ?? subscription.data?.plan} plan is active. Your updated features are ready to use.
+              Your {planFromReference ?? subscription.data?.plan} plan is active. Your updated
+              features are ready to use.
             </p>
           </>
         ) : verificationStatus === "failed" ? (
@@ -120,7 +127,11 @@ function PaymentSuccessPage() {
             <p role="alert" className="mt-2 text-sm text-muted-foreground">
               Chapa did not report a successful transaction. Your subscription has not been changed.
             </p>
-            <Button variant="outline" className="mt-5" onClick={() => void navigate({ to: "/dashboard" })}>
+            <Button
+              variant="outline"
+              className="mt-5"
+              onClick={() => void navigate({ to: "/dashboard" })}
+            >
               Return to workspace
             </Button>
           </>
@@ -134,28 +145,42 @@ function PaymentSuccessPage() {
                   ? subscription.error.message
                   : "Could not retrieve your subscription. Your payment is not being assumed successful.")}
             </p>
-            <Button variant="outline" className="mt-5" onClick={retryVerification}>Check again</Button>
+            <Button variant="outline" className="mt-5" onClick={retryVerification}>
+              Check again
+            </Button>
           </>
         ) : isWaiting ? (
           <>
             <LoaderCircle className="mx-auto size-10 animate-spin text-primary" />
             <h1 className="mt-4 text-xl font-semibold">Confirming your Chapa payment</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              The backend will activate your subscription after it verifies the payment. This may take a moment.
+              The backend will activate your subscription after it verifies the payment. This may
+              take a moment.
             </p>
-            {txRef && <p className="mt-4 break-all font-mono text-[10px] text-muted-foreground">Reference: {txRef}</p>}
+            {txRef && (
+              <p className="mt-4 break-all font-mono text-[10px] text-muted-foreground">
+                Reference: {txRef}
+              </p>
+            )}
           </>
         ) : (
           <>
             <CircleAlert className="mx-auto size-10 text-warning" />
             <h1 className="mt-4 text-xl font-semibold">Payment confirmation is still pending</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Your account has not shown the upgraded plan yet. No payment success is assumed; you can retry checking your subscription.
+              Your account has not shown the upgraded plan yet. No payment success is assumed; you
+              can retry checking your subscription.
             </p>
-            <Button variant="outline" className="mt-5" onClick={retryVerification}>Check again</Button>
+            <Button variant="outline" className="mt-5" onClick={retryVerification}>
+              Check again
+            </Button>
           </>
         )}
-        <Button className="mt-5 w-full" variant={isConfirmed ? "default" : "outline"} onClick={goToWorkspace}>
+        <Button
+          className="mt-5 w-full"
+          variant={isConfirmed ? "default" : "outline"}
+          onClick={goToWorkspace}
+        >
           Return to workspace
         </Button>
       </section>

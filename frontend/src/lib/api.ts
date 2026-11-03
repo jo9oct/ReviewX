@@ -34,6 +34,27 @@ export interface ReviewFinding {
   recommendation?: string | null;
   analyzer: string;
   fingerprint: string;
+  evidence?: {
+    snippet?: string;
+    location?: {
+      startLine?: number | null;
+    };
+  };
+  location?: {
+    startLine?: number | null;
+  };
+  snippet?: string;
+  aiAnalysis?: {
+    explanation?: string;
+    fix?: string;
+    improvedCode?: string;
+  };
+  explanation?: string;
+  fix?: string;
+  suggestedFix?: string;
+  cwe?: string;
+  cweId?: string;
+  owasp?: string;
 }
 
 export interface ReviewScore {
@@ -58,7 +79,15 @@ export interface ReviewSummary {
 
 export interface ReviewResult {
   reviewId: string;
-  status: "pending" | "parsing" | "analyzing" | "applying_rules" | "generating_ai" | "scoring" | "completed" | "failed";
+  status:
+    | "pending"
+    | "parsing"
+    | "analyzing"
+    | "applying_rules"
+    | "generating_ai"
+    | "scoring"
+    | "completed"
+    | "failed";
   progress?: number;
   summary: ReviewSummary;
   score: ReviewScore;
@@ -144,7 +173,6 @@ export interface DashboardMetrics {
   openFindings: DashboardFinding[];
 }
 
-
 export interface AuthUser {
   id: string;
   name: string;
@@ -214,7 +242,9 @@ export function getAuthToken(): string | null {
   const cookieToken = document.cookie
     .split(";")
     .map((cookie) => cookie.trim())
-    .find((cookie) => /^(reviewx_token|access_token|accesstoken|auth_token|token|jwt)=/i.test(cookie));
+    .find((cookie) =>
+      /^(reviewx_token|access_token|accesstoken|auth_token|token|jwt)=/i.test(cookie),
+    );
 
   if (cookieToken) {
     const separator = cookieToken.indexOf("=");
@@ -238,7 +268,14 @@ export function setAuthToken(token: string | null): void {
   } else {
     localStorage.removeItem("reviewx_token");
     sessionStorage.removeItem("reviewx_token");
-    for (const name of ["reviewx_token", "access_token", "accesstoken", "auth_token", "token", "jwt"]) {
+    for (const name of [
+      "reviewx_token",
+      "access_token",
+      "accesstoken",
+      "auth_token",
+      "token",
+      "jwt",
+    ]) {
       document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
     }
   }
@@ -265,7 +302,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (res.status === 401) {
-    const isAuthEndpoint = path.includes("/api/v1/auth/login") || path.includes("/api/v1/auth/register");
+    const isAuthEndpoint =
+      path.includes("/api/v1/auth/login") || path.includes("/api/v1/auth/register");
     if (!isAuthEndpoint) {
       handleUnauthorized();
     }
@@ -311,7 +349,7 @@ export async function pollReviewStatus(
     intervalMs?: number;
     maxAttempts?: number;
     onProgress?: (status: string, progress: number) => void;
-  } = {}
+  } = {},
 ): Promise<ReviewResult> {
   const { intervalMs = 1500, maxAttempts = 120, onProgress } = options;
 
@@ -328,7 +366,7 @@ export async function pollReviewStatus(
       throw new ApiClientError(
         (result as { errorMessage?: string }).errorMessage || "Analysis pipeline failed",
         "ANALYSIS_FAILED",
-        500
+        500,
       );
     }
     await new Promise((r) => setTimeout(r, intervalMs));
@@ -339,7 +377,10 @@ export async function pollReviewStatus(
 
 // ── Reports API ────────────────────────────────────────────────────────────
 
-export async function generateReport(reviewId: string, type: "json" | "pdf" = "json"): Promise<ReportResult> {
+export async function generateReport(
+  reviewId: string,
+  type: "json" | "pdf" = "json",
+): Promise<ReportResult> {
   return request<ReportResult>("/api/reports", {
     method: "POST",
     body: JSON.stringify({
@@ -412,7 +453,7 @@ export function useReviewQuery(
   options?: {
     refetchInterval?: number | false;
     enabled?: boolean;
-  }
+  },
 ) {
   return useQuery({
     queryKey: ["review", reviewId],
@@ -436,7 +477,6 @@ export function useGenerateReportMutation() {
       generateReport(reviewId, type),
   });
 }
-
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   return request<DashboardMetrics>("/api/reviews/metrics");
@@ -516,7 +556,7 @@ export async function createCompanyRule(data: CreateCompanyRuleInput): Promise<C
 
 export async function updateCompanyRule(
   id: string,
-  data: UpdateCompanyRuleInput
+  data: UpdateCompanyRuleInput,
 ): Promise<CompanyRuleItem> {
   return request<CompanyRuleItem>(`/api/company-rules/${id}`, {
     method: "PUT",
@@ -737,7 +777,7 @@ export async function listAdminUsers(params?: {
 
 export async function updateAdminUserRole(
   userId: string,
-  role: "member" | "company_admin" | "platform_admin"
+  role: "member" | "company_admin" | "platform_admin",
 ): Promise<AdminUserItem> {
   return request<AdminUserItem>(`/api/admin/users/${userId}/role`, {
     method: "PATCH",

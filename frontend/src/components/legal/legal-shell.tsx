@@ -50,9 +50,13 @@ export function LegalShell({
       <footer className="border-t border-border px-5 py-8 text-center text-xs text-muted-foreground sm:px-6 lg:px-8">
         © {new Date().getFullYear()} ReviewX. All rights reserved.
         <span className="mx-3">·</span>
-        <Link to="/privacy" className="hover:text-foreground">Privacy</Link>
+        <Link to="/privacy" className="hover:text-foreground">
+          Privacy
+        </Link>
         <span className="mx-3">·</span>
-        <Link to="/terms" className="hover:text-foreground">Terms</Link>
+        <Link to="/terms" className="hover:text-foreground">
+          Terms
+        </Link>
       </footer>
     </div>
   );
@@ -61,13 +65,7 @@ export function LegalShell({
 /**
  * A styled section heading inside legal pages.
  */
-export function LegalSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+export function LegalSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-10 first:mt-0">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-foreground">

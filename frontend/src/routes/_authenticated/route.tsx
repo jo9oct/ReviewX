@@ -62,7 +62,5 @@ function AuthenticatedLayout() {
     return <AuthLoadingScreen />;
   }
 
-  return (
-    <Outlet />
-  );
+  return <Outlet />;
 }

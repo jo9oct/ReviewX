@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import { getCurrentUser, setAuthToken, getAuthToken, setUnauthorizedHandler, type AuthUser } from "./api";
+import {
+  getCurrentUser,
+  setAuthToken,
+  getAuthToken,
+  setUnauthorizedHandler,
+  type AuthUser,
+} from "./api";
 import { useReviewStore } from "./review-store";
 
 export type Role = "member" | "company" | "platform" | "company_admin" | "platform_admin";

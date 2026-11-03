@@ -1,4 +1,5 @@
 import { redirect, isRedirect } from "@tanstack/react-router";
+import type { FileRouteTypes } from "../routeTree.gen";
 import { getAuthToken } from "./api";
 import { useAuthStore } from "./auth-store";
 
@@ -25,7 +26,7 @@ export async function redirectIfAuthenticated(next?: string | null) {
   if (user) {
     const destination = safeNext(next, "/dashboard");
     throw redirect({
-      to: destination as any,
+      to: destination as FileRouteTypes["to"],
     });
   }
 }

@@ -23,9 +23,7 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">
-          Page not found
-        </h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           The page you're looking for doesn't exist or has been moved.
         </p>
@@ -42,21 +40,13 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({
-  error,
-  reset,
-}: {
-  error: unknown;
-  reset: () => void;
-}) {
+function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   console.error(error);
   const router = useRouter();
 
-  const errorMessage =
-    error instanceof Error ? error.message : String(error);
+  const errorMessage = error instanceof Error ? error.message : String(error);
 
-  const errorStack =
-    error instanceof Error ? error.stack : undefined;
+  const errorStack = error instanceof Error ? error.stack : undefined;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -68,17 +58,17 @@ function ErrorComponent({
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
 
-{error != null && (
-  <div className="mt-4 max-h-48 overflow-auto rounded bg-destructive/10 p-3 text-left font-mono text-xs text-destructive">
-    <p className="font-semibold">{errorMessage}</p>
+        {error != null && (
+          <div className="mt-4 max-h-48 overflow-auto rounded bg-destructive/10 p-3 text-left font-mono text-xs text-destructive">
+            <p className="font-semibold">{errorMessage}</p>
 
-    {errorStack && (
-      <pre className="mt-2 whitespace-pre-wrap text-[10px] text-muted-foreground">
-        {errorStack}
-      </pre>
-    )}
-  </div>
-)}
+            {errorStack && (
+              <pre className="mt-2 whitespace-pre-wrap text-[10px] text-muted-foreground">
+                {errorStack}
+              </pre>
+            )}
+          </div>
+        )}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
