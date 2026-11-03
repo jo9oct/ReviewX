@@ -28,7 +28,6 @@ interface ReviewState {
   analyzing: boolean;
   progress: number;
   step: number;
-  theme: "dark" | "light";
   selectedFinding: string | null;
   findingStatuses: Record<string, string>;
   severity: string;
@@ -46,7 +45,6 @@ interface ReviewState {
   setAnalyzing: (value: boolean) => void;
   setProgress: (updater: number | ((prev: number) => number)) => void;
   setStep: (step: number) => void;
-  setTheme: (theme: "dark" | "light") => void;
   setSelectedFinding: (id: string) => void;
   setFindingStatus: (id: string, status: string) => void;
   setSeverity: (severity: string) => void;
@@ -63,11 +61,6 @@ interface ReviewState {
   setUserName: (name: string) => void;
   setUserEmail: (email: string) => void;
   resetSession: () => void;
-}
-
-function readTheme(): "dark" | "light" {
-  if (typeof window === "undefined") return "dark";
-  return localStorage.getItem(STORAGE_KEYS.THEME) === "light" ? "light" : "dark";
 }
 
 function readActiveReviewSession() {
@@ -90,7 +83,6 @@ export const useReviewStore = create<ReviewState>((set) => ({
   analyzing: Boolean(initialReviewSession.reviewId),
   progress: 0,
   step: 0,
-  theme: readTheme(),
   selectedFinding: null,
   findingStatuses: {},
   severity: "All",
@@ -112,10 +104,6 @@ export const useReviewStore = create<ReviewState>((set) => ({
       progress: typeof updater === "function" ? updater(state.progress) : updater,
     })),
   setStep: (step) => set({ step }),
-  setTheme: (theme) => {
-    if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEYS.THEME, theme);
-    set({ theme });
-  },
   setSelectedFinding: (selectedFinding) => set({ selectedFinding, view: "finding" }),
   setFindingStatus: (id, status) =>
     set((state) => ({ findingStatuses: { ...state.findingStatuses, [id]: status } })),

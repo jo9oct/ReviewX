@@ -1,23 +1,13 @@
-import { useEffect, useState } from "react";
 import { Toaster as SonnerToaster } from "sonner";
+import { useTheme } from "@/lib/use-theme";
 
 /**
  * Sonner's Toaster wired into the ReviewX design system. `ReviewPlatform`
- * toggles a `light` class on <html>, so a small observer keeps the toast theme
- * in sync. A mounted Toaster is required for the `toast.*` calls in the auth
- * flows (validation errors, reset confirmations) to actually be shown.
+ * and the landing page share the same theme state. A mounted Toaster is
+ * required for the `toast.*` calls in auth flows to be shown.
  */
 export function Toaster() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const sync = () => setTheme(root.classList.contains("light") ? "light" : "dark");
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
+  const { theme } = useTheme();
 
   return (
     <SonnerToaster

@@ -10,7 +10,6 @@
  * - Two key stats pulled up to hero (below fold strip)
  * - Language badges row added below hero
  * - Feature card "Health score at a glance" shows a mini score ring instead of plain icon
- * - Voice/Voxide callout section added (between Workflow and Security)
  * - Reports callout added as a feature point in Features section
  * - Security section reinforces "code never executed"
  * - Section backgrounds alternate: dark / surface / dark / surface …
@@ -19,11 +18,6 @@
  */
 
 import { Link } from "@tanstack/react-router";
-import {
-  AnimatePresence,
-  motion,
-  useReducedMotion,
-} from "framer-motion";
 import {
   ArrowRight,
   Bot,
@@ -35,7 +29,6 @@ import {
   Github,
   Lock,
   Menu,
-  Mic,
   Moon,
   ShieldCheck,
   Sparkles,
@@ -47,7 +40,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useState } from "react";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/primitives";
 import { useFadeIn } from "@/lib/use-fade-in";
@@ -197,7 +190,6 @@ const PLANS: Plan[] = [
       "Unlimited reviews",
       "Custom rules engine",
       "AI-explained findings",
-      "Voice questions via Voxide",
       "Priority support",
     ],
     featured: true,
@@ -405,43 +397,18 @@ function HeroCodePanel() {
 
 /** Feature card — supports a custom visual override for select cards. */
 function FeatureCard({ feature, index = 0 }: { feature: Feature; index?: number }) {
-  const shouldReduceMotion = useReducedMotion();
+  const ref = useFadeIn<HTMLElement>({
+    delay: index * 100,
+    distance: 16,
+    duration: 450,
+    once: true,
+  });
   const Icon = feature.icon;
 
-  /*
-   * Entrance: fade-in + upward translate, staggered by card index.
-   * Hover: lift the card -3px, shift border to primary/40.
-   * Icon box: scale up on card hover via Framer's `whileHover` parent propagation.
-   *
-   * When prefers-reduced-motion is set, translate/scale are zeroed out so only
-   * the opacity fade remains — content is never hidden, just cross-fades in.
-   */
-  const entranceVariants = {
-    hidden: {
-      opacity: 0,
-      y: shouldReduceMotion ? 0 : 16,
-    },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.45,
-        ease: [0.22, 1, 0.36, 1] as const, // ease-out quint
-        delay: index * 0.1,               // 100ms stagger between cards
-      },
-    },
-  };
-
   return (
-    <motion.article
-      variants={entranceVariants}
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, margin: "-80px" }}
-      {...(!shouldReduceMotion && {
-        whileHover: { y: -3, transition: { duration: 0.18, ease: "easeInOut" as const } },
-      })}
-      className="group relative flex flex-col p-6 rounded-2xl border border-border bg-card/85 backdrop-blur-xl shadow-sm transition-all duration-300 hover:border-primary/50 hover:shadow-[0_12px_40px_rgba(168,85,247,0.15)] dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:hover:border-purple-500/40 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.16)]"
+    <article
+      ref={ref}
+      className="group relative flex flex-col p-6 rounded-2xl border border-border bg-card/85 backdrop-blur-xl shadow-sm transition-all duration-300 hover:-translate-y-[3px] hover:border-primary/50 hover:shadow-[0_12px_40px_rgba(168,85,247,0.15)] motion-reduce:hover:translate-y-0 dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:hover:border-purple-500/40 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.16)]"
     >
       {/* Icon area — scales 1→1.08 on card hover, synced via group CSS */}
       {feature.visual ? (
@@ -455,7 +422,7 @@ function FeatureCard({ feature, index = 0 }: { feature: Feature; index?: number 
       )}
       <h3 className="text-sm font-semibold text-foreground">{feature.title}</h3>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{feature.description}</p>
-    </motion.article>
+    </article>
   );
 }
 
@@ -479,44 +446,19 @@ function WorkflowStep({ index, label, detail }: { index: number; label: string; 
 
 /** Pricing plan card. */
 function PlanCard({ plan, index = 0 }: { plan: Plan; index?: number }) {
-  const shouldReduceMotion = useReducedMotion();
-
-  /*
-   * Entrance: fade + upward translate, same timing as FeatureCard.
-   * The featured (Pro) card additionally scales 0.98 → 1 to reinforce emphasis.
-   * Hover: lift -3px + border strengthens (via CSS class swap).
-   * CTA button: scale 1 → 1.02 on hover, faster than card-level (120ms).
-   * No box-shadow blur/glow per brief — only border color shift.
-   */
-  const entranceVariants = {
-    hidden: {
-      opacity: 0,
-      y: shouldReduceMotion ? 0 : 16,
-      scale: plan.featured && !shouldReduceMotion ? 0.98 : 1,
-    },
-    visible: {
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: {
-        duration: 0.45,
-        ease: [0.22, 1, 0.36, 1] as const,
-        delay: index * 0.1,
-      },
-    },
-  };
+  const ref = useFadeIn<HTMLElement>({
+    delay: index * 100,
+    distance: 16,
+    duration: 450,
+    once: true,
+    scale: plan.featured ? 0.98 : 1,
+  });
 
   return (
-    <motion.article
-      variants={entranceVariants}
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, margin: "-80px" }}
-      {...(!shouldReduceMotion && {
-        whileHover: { y: -3, transition: { duration: 0.18, ease: "easeInOut" as const } },
-      })}
+    <article
+      ref={ref}
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl p-6 backdrop-blur-xl transition-all duration-300",
+        "group relative flex flex-col overflow-hidden rounded-2xl p-6 backdrop-blur-xl transition-all duration-300 hover:-translate-y-[3px] motion-reduce:hover:translate-y-0",
         plan.featured
           ? "border-2 border-primary/60 bg-gradient-to-b from-primary/[0.06] to-card shadow-[0_12px_40px_rgba(147,51,234,0.14)] dark:border-purple-500/50 dark:bg-[#161126]/90 dark:shadow-[0_0_40px_rgba(168,85,247,0.18)] dark:hover:border-purple-400"
           : "border border-border bg-card/85 shadow-sm hover:border-primary/40 hover:shadow-[0_12px_40px_rgba(168,85,247,0.15)] dark:border-white/[0.08] dark:bg-[#120f1c]/70 dark:hover:border-purple-500/40 dark:hover:shadow-[0_0_35px_rgba(139,92,246,0.16)]",
@@ -566,12 +508,7 @@ function PlanCard({ plan, index = 0 }: { plan: Plan; index?: number }) {
 
       {/* CTA — snappier 130ms scale on hover, independent of card lift */}
       <div className="relative mt-8">
-        <motion.div
-          {...(!shouldReduceMotion && {
-            whileHover: { scale: 1.02, transition: { duration: 0.13, ease: "easeInOut" as const } },
-            whileTap:   { scale: 0.98, transition: { duration: 0.10, ease: "easeInOut" as const } },
-          })}
-        >
+        <div className="transition-transform duration-150 ease-in-out hover:scale-[1.02] active:scale-[0.98] motion-reduce:transform-none">
           <Button
             asChild
             variant={plan.featured ? "default" : "outline"}
@@ -587,9 +524,9 @@ function PlanCard({ plan, index = 0 }: { plan: Plan; index?: number }) {
               <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
           </Button>
-        </motion.div>
+        </div>
       </div>
-    </motion.article>
+    </article>
   );
 }
 
@@ -617,22 +554,20 @@ function FaqRow({ item, delay = 0 }: { item: FaqItem; delay?: number }) {
           aria-hidden="true"
         />
       </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            id={answerId}
-            role="region"
-            aria-label={item.q}
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden"
-          >
-            <p className="pb-5 text-sm leading-7 text-muted-foreground">{item.a}</p>
-          </motion.div>
+      <div
+        id={answerId}
+        role="region"
+        aria-label={item.q}
+        aria-hidden={!open}
+        className={cn(
+          "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:duration-0",
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
         )}
-      </AnimatePresence>
+      >
+        <div className="min-h-0 overflow-hidden">
+            <p className="pb-5 text-sm leading-7 text-muted-foreground">{item.a}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -641,19 +576,6 @@ function FaqRow({ item, delay = 0 }: { item: FaqItem; delay?: number }) {
 
 export function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { theme, toggle } = useTheme();
-
-  // Add .theme-ready after mount so the CSS color-transition rule only applies
-  // after the initial theme has been set (prevents any transition on first paint).
-  useEffect(() => {
-    const t = setTimeout(() => {
-      document.documentElement.classList.add("theme-ready");
-    }, 100);
-    return () => {
-      clearTimeout(t);
-      document.documentElement.classList.remove("theme-ready");
-    };
-  }, []);
 
   // ── Features ────────────────────────────────────────────────────────────
   const featLabelRef = useFadeIn<HTMLParagraphElement>({ delay: 0 });
@@ -671,8 +593,6 @@ export function LandingPage() {
   const wfPanelRef = useFadeIn<HTMLDivElement>({ delay: 180, distance: 48 });
 
   // ── Voice callout ────────────────────────────────────────────────────────
-  const voiceRef = useFadeIn<HTMLElement>({ delay: 0, threshold: 0.15 });
-
   // ── Security ─────────────────────────────────────────────────────────────
   const secCardRef = useFadeIn<HTMLDivElement>({ delay: 0 });
   const secWhyRef  = useFadeIn<HTMLDivElement>({ delay: 140 });
@@ -728,31 +648,7 @@ export function LandingPage() {
               </Button>
 
               {/* Theme toggle — icon only, smooth Sun↔Moon crossfade */}
-              <button
-                type="button"
-                aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-                onClick={toggle}
-                className="relative grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                <Sun
-                  className={cn(
-                    "absolute size-4 transition-[opacity,transform] duration-200",
-                    theme === "light"
-                      ? "rotate-0 opacity-100"
-                      : "rotate-90 opacity-0",
-                  )}
-                  aria-hidden="true"
-                />
-                <Moon
-                  className={cn(
-                    "absolute size-4 transition-[opacity,transform] duration-200",
-                    theme === "dark"
-                      ? "rotate-0 opacity-100"
-                      : "-rotate-90 opacity-0",
-                  )}
-                  aria-hidden="true"
-                />
-              </button>
+              <LandingThemeToggle />
 
               {/* Primary CTA — consistent "Start free" everywhere in nav/hero/closing band */}
               <Button asChild size="sm" className="rounded-full border-0 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white font-medium shadow-[0_0_20px_rgba(217,70,239,0.35)] hover:from-violet-500 hover:via-fuchsia-400 hover:to-pink-400 hover:shadow-[0_0_28px_rgba(236,72,153,0.5)]">
@@ -795,17 +691,7 @@ export function LandingPage() {
                   </Button>
                 </li>
                 <li className="pt-1">
-                  <button
-                    type="button"
-                    aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-                    onClick={() => { toggle(); setMobileMenuOpen(false); }}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    {theme === "dark"
-                      ? <><Moon className="size-4" aria-hidden="true" /> Dark theme</>
-                      : <><Sun  className="size-4" aria-hidden="true" /> Light theme</>
-                    }
-                  </button>
+                  <LandingThemeToggle onToggle={() => setMobileMenuOpen(false)} />
                 </li>
               </ul>
             </nav>
@@ -1122,90 +1008,6 @@ export function LandingPage() {
             </div>
           </section>
 
-          {/* ════════════════════════════════ VOICE / VOXIDE ═══ */}
-          {/* bg: surface tint */}
-          <section
-            ref={voiceRef}
-            aria-labelledby="voice-heading"
-            className="bg-surface/50 px-5 py-20 sm:px-6 lg:px-8 dark:bg-[#0d0a16]/40"
-          >
-            <div className="mx-auto max-w-7xl">
-              <div className="overflow-hidden rounded-2xl border border-border bg-card/85 backdrop-blur-xl shadow-xl dark:border-white/[0.08] dark:bg-[#120f1c]/80">
-                <div className="grid gap-0 lg:grid-cols-2">
-                  {/* left: copy */}
-                  <div className="p-8 sm:p-10">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-purple-300">
-                      <Mic className="size-3 text-pink-400" aria-hidden="true" />
-                      Voxide — voice AI
-                    </div>
-                    <h2
-                      id="voice-heading"
-                      className="mt-5 text-2xl font-semibold tracking-[-0.04em] sm:text-3xl"
-                    >
-                      Ask about a finding
-                      <br />
-                      out loud.
-                    </h2>
-                    <p className="mt-4 max-w-sm text-sm leading-7 text-muted-foreground">
-                      Click the mic on any finding and speak your question. Voxide transcribes
-                      it, queries the AI context of that exact finding, and reads the answer
-                      back — no typing, no tab-switching.
-                    </p>
-                    <ul className="mt-6 space-y-3">
-                      {[
-                        "Why is this flagged as critical?",
-                        "Show me a safe version of this code.",
-                        "What CWE does this map to?",
-                      ].map((q) => (
-                        <li key={q} className="flex items-center gap-2.5 text-sm text-muted-foreground">
-                          <span className="grid size-4 shrink-0 place-items-center rounded-full bg-purple-500/15 text-purple-300" aria-hidden="true">
-                            <Check className="size-2.5" />
-                          </span>
-                          "{q}"
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* right: visual mock — bg-editor is always dark; all child colors hardcoded for dark surface */}
-                  <div
-                    className="flex flex-col items-center justify-center gap-6 border-t border-border bg-editor p-10 lg:border-l lg:border-t-0 dark:border-white/[0.06]"
-                    aria-hidden="true"
-                  >
-                    {/* mic button mock */}
-                    <div className="relative">
-                      <div className="absolute inset-0 animate-ping rounded-full bg-pink-500/20" />
-                      <button
-                        type="button"
-                        tabIndex={-1}
-                        className="relative grid size-16 place-items-center rounded-full bg-gradient-to-tr from-violet-600 to-pink-600 text-white ring-4 ring-pink-500/20 shadow-[0_0_28px_rgba(217,70,239,0.45)]"
-                      >
-                        <Mic className="size-7" />
-                      </button>
-                    </div>
-                    {/* transcript bubble — fixed dark-surface styling */}
-                    <div className="max-w-[220px] rounded-xl border border-white/[0.08] bg-[#161224]/80 px-4 py-3">
-                      <p className="font-mono text-[11px] text-purple-200">
-                        "Why is this flagged as critical?"
-                      </p>
-                    </div>
-                    {/* ai reply bubble — fixed dark-surface styling */}
-                    <div className="max-w-[220px] rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-3 shadow-[0_0_20px_rgba(168,85,247,0.1)]">
-                      <p className="text-[11px] leading-5 text-white/90">
-                        This is a SQL injection risk (CWE-89). User input is
-                        interpolated directly into the query string…
-                      </p>
-                      <div className="mt-2 flex items-center gap-1 text-[9px] uppercase tracking-[0.18em] text-pink-400">
-                        <Mic className="size-2.5" />
-                        Voxide
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
           {/* ══════════════════════════════════════════ SECURITY ═══ */}
           {/* bg: dark */}
           <section
@@ -1466,5 +1268,57 @@ export function LandingPage() {
         </footer>
       </div>
     </>
+  );
+}
+
+function LandingThemeToggle({ onToggle }: { onToggle?: () => void }) {
+  const { theme, toggle } = useTheme();
+
+  if (onToggle) {
+    return (
+      <button
+        type="button"
+        aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        onClick={() => {
+          toggle();
+          onToggle();
+        }}
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        {theme === "dark" ? (
+          <>
+            <Moon className="size-4" aria-hidden="true" /> Dark theme
+          </>
+        ) : (
+          <>
+            <Sun className="size-4" aria-hidden="true" /> Light theme
+          </>
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+      onClick={toggle}
+      className="relative grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+    >
+      <Sun
+        className={cn(
+          "absolute size-4 transition-[opacity,transform] duration-200",
+          theme === "light" ? "rotate-0 opacity-100" : "rotate-90 opacity-0",
+        )}
+        aria-hidden="true"
+      />
+      <Moon
+        className={cn(
+          "absolute size-4 transition-[opacity,transform] duration-200",
+          theme === "dark" ? "rotate-0 opacity-100" : "-rotate-90 opacity-0",
+        )}
+        aria-hidden="true"
+      />
+    </button>
   );
 }

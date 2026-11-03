@@ -1,0 +1,36 @@
+name: CD - Backend
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - master
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy backend to Render
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger backend deployment
+        env:
+          BACKEND_DEPLOY_WEBHOOK_URL: ${{ secrets.BACKEND_DEPLOY_WEBHOOK_URL }}
+        run: |
+          if [ -z "$BACKEND_DEPLOY_WEBHOOK_URL" ]; then
+            echo "::error::BACKEND_DEPLOY_WEBHOOK_URL is not configured."
+            exit 1
+          fi
+
+          if ! curl --proto '=https' --tlsv1.2 --fail --silent \
+            --output /dev/null --request POST "$BACKEND_DEPLOY_WEBHOOK_URL" 2>/dev/null; then
+            echo "::error::Backend deployment webhook request failed."
+            exit 1
+          fi

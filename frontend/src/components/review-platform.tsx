@@ -1,5 +1,4 @@
 import { toast } from "sonner";
-// import VoxideAssistant from "./ai/VoxideAssistant";
 import {
   ApiClientError,
   type ReviewResult,
@@ -52,7 +51,6 @@ import {
   LayoutDashboard,
   LoaderCircle,
   Menu,
-  Mic,
   Moon,
   MoreHorizontal,
   Plus,
@@ -119,6 +117,8 @@ import {
   type SubscriptionTier,
 } from "@/lib/review-api";
 import { useReviewStore, type Role, type View } from "@/lib/review-store";
+import { useTheme } from "@/lib/use-theme";
+import { useShallow } from "zustand/react/shallow";
 import { STORAGE_KEYS } from "@/lib/constants";
 import { readSourceFilesFromZip } from "@/lib/zip-archive";
 import { useAuthStore } from "@/lib/auth-store";
@@ -257,6 +257,18 @@ function toUiReviewResult(details: ReviewDetails): ReviewResult {
 }
 
 const defaultSource = "";
+
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedValue(value), delay);
+    return () => window.clearTimeout(timeout);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 const severityClass: Record<Severity, string> = {
   CRITICAL: "severity-critical",
   HIGH: "severity-high",
@@ -365,9 +377,17 @@ const roleNav: Record<Role, NavGroup[]> = {
 };
 
 export function ReviewPlatform() {
-  const { view, setView, theme, setTheme, role, userName, userEmail } = useReviewStore();
+  const { view, setView, role, userName, userEmail } = useReviewStore(
+    useShallow((state) => ({
+      view: state.view,
+      setView: state.setView,
+      role: state.role,
+      userName: state.userName,
+      userEmail: state.userEmail,
+    })),
+  );
   const [mobileNav, setMobileNav] = useState(false);
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
   const subscriptionQuery = useSubscriptionQuery(user?.id);
   const subscriptionTier = subscriptionQuery.data?.plan ?? "free";
   const setSubscriptionTier = useReviewStore((state) => state.setSubscriptionTier);
@@ -376,10 +396,6 @@ export function ReviewPlatform() {
   const setActiveReviewStatus = useReviewStore((state) => state.setActiveReviewStatus);
   const setAnalyzing = useReviewStore((state) => state.setAnalyzing);
   const setApiResponse = useReviewStore((state) => state.setApiResponse);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("light", theme === "light");
-  }, [theme]);
 
   useEffect(() => {
     if (subscriptionQuery.data) {
@@ -616,14 +632,7 @@ export function ReviewPlatform() {
             <Button variant="ghost" size="icon" title="Notifications">
               <Bell />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              title="Toggle theme"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            >
-              {theme === "dark" ? <Sun /> : <Moon />}
-            </Button>
+            <DashboardThemeToggle />
           </div>
         </header>
         <div className="mx-auto max-w-375 p-4 md:p-6">
@@ -648,6 +657,16 @@ export function ReviewPlatform() {
   );
 }
 
+function DashboardThemeToggle() {
+  const { theme, toggle } = useTheme();
+
+  return (
+    <Button variant="ghost" size="icon" title="Toggle theme" onClick={toggle}>
+      {theme === "dark" ? <Sun /> : <Moon />}
+    </Button>
+  );
+}
+
 function PageHeading({
   title,
   subtitle,
@@ -669,7 +688,14 @@ function PageHeading({
 }
 
 function GitHubIntegrationWorkspace() {
-  const { setActiveReview, setActiveReviewId, setView, setApiResponse } = useReviewStore();
+  const { setActiveReview, setActiveReviewId, setView, setApiResponse } = useReviewStore(
+    useShallow((state) => ({
+      setActiveReview: state.setActiveReview,
+      setActiveReviewId: state.setActiveReviewId,
+      setView: state.setView,
+      setApiResponse: state.setApiResponse,
+    })),
+  );
   const [connectionId, setConnectionId] = useState(() =>
     typeof window === "undefined" ? "" : window.sessionStorage.getItem(STORAGE_KEYS.GITHUB_CONNECTION_ID) ?? "",
   );
@@ -1012,7 +1038,7 @@ function GitHubIntegrationWorkspace() {
 }
 
 function Integrations() {
-  const { subscriptionTier } = useReviewStore();
+  const subscriptionTier = useReviewStore((state) => state.subscriptionTier);
   const githubAllowed = TIER_POLICIES[subscriptionTier].githubIntegration;
   return (
     <section className="panel flex min-h-16 items-center justify-between gap-4 p-5">
@@ -1039,7 +1065,23 @@ function Integrations() {
 }
 
 function Schedules() {
-  const { scheduledReviews, setScheduledReviews, projects, setProjects, subscriptionTier, setApiResponse } = useReviewStore();
+  const {
+    scheduledReviews,
+    setScheduledReviews,
+    projects,
+    setProjects,
+    subscriptionTier,
+    setApiResponse,
+  } = useReviewStore(
+    useShallow((state) => ({
+      scheduledReviews: state.scheduledReviews,
+      setScheduledReviews: state.setScheduledReviews,
+      projects: state.projects,
+      setProjects: state.setProjects,
+      subscriptionTier: state.subscriptionTier,
+      setApiResponse: state.setApiResponse,
+    })),
+  );
   const [reviewIndex, setReviewIndex] = useState<ReviewIndexRecord[]>([]);
   const [reviewId, setReviewId] = useState("");
   const [intervalSeconds, setIntervalSeconds] = useState("3600");
@@ -1243,7 +1285,18 @@ function NewReview() {
     setApiResponse,
     role,
     subscriptionTier,
-  } = useReviewStore();
+  } = useReviewStore(
+    useShallow((state) => ({
+      analyzing: state.analyzing,
+      setAnalyzing: state.setAnalyzing,
+      setView: state.setView,
+      setActiveReviewId: state.setActiveReviewId,
+      setActiveReview: state.setActiveReview,
+      setApiResponse: state.setApiResponse,
+      role: state.role,
+      subscriptionTier: state.subscriptionTier,
+    })),
+  );
   const tier = subscriptionTier;
   const policy = TIER_POLICIES[tier];
   const [language, setLanguage] = useState("typescript");
@@ -1261,6 +1314,15 @@ function NewReview() {
   const [githubCallbackResponse, setGithubCallbackResponse] = useState("");
   const [archiveFilename, setArchiveFilename] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<Array<{ filename: string; content: string }>>([]);
+  const selectedFileSummaries = useMemo(
+    () =>
+      selectedFiles.map(({ filename, content }) => ({
+        filename,
+        lineCount: content.split(/\r\n|\r|\n/).length,
+      })),
+    [selectedFiles],
+  );
+  const codeLineCount = useMemo(() => code.split("\n").length, [code]);
   const [options, setOptions] = useState({
     securityAnalysis: true,
     bugDetection: true,
@@ -1366,7 +1428,10 @@ function NewReview() {
     const fileLimit = policy.maxFilesPerReview;
     const lineLimit = policy.maxLinesPerReview;
     const sourceFiles = sourceMode === "paste" ? [{ content: code }] : selectedFiles;
-    const requestedLines = sourceFiles.reduce((total, file) => total + file.content.split(/\r\n|\r|\n/).length, 0);
+    const requestedLines =
+      sourceMode === "paste"
+        ? codeLineCount
+        : selectedFileSummaries.reduce((total, file) => total + file.lineCount, 0);
     const fileCount = sourceMode === "github" ? 0 : sourceFiles.length;
     if (fileCount > fileLimit || requestedLines > lineLimit) {
       setError(`The selected ${tier} plan allows ${Number.isFinite(fileLimit) ? fileLimit : "unlimited"} files and ${Number.isFinite(lineLimit) ? lineLimit : "unlimited"} lines.`);
@@ -1592,7 +1657,7 @@ function NewReview() {
               {archiveFilename && <p className="text-xs text-muted-foreground">{archiveFilename} · {selectedFiles.length} source files extracted</p>}
               {selectedFiles.length > 0 && (
                 <ul className="max-h-48 space-y-1 overflow-auto rounded border border-border p-3 text-xs text-muted-foreground">
-                  {selectedFiles.map((file) => <li key={file.filename} className="flex justify-between gap-3"><span className="truncate">{file.filename}</span><span>{file.content.split(/\r\n|\r|\n/).length} lines</span></li>)}
+                  {selectedFileSummaries.map((file) => <li key={file.filename} className="flex justify-between gap-3"><span className="truncate">{file.filename}</span><span>{file.lineCount} lines</span></li>)}
                 </ul>
               )}
               <div className="flex justify-end">
@@ -1666,7 +1731,7 @@ function NewReview() {
           </div>
           <div className="flex items-center justify-between border-t border-border px-4 py-3">
             <span className="font-mono text-[10px] text-muted-foreground">
-              UTF-8 · LF · {code.split("\n").length} lines
+              UTF-8 · LF · {codeLineCount} lines
             </span>
             <Button onClick={begin} disabled={sourceMode === "paste" ? !code.trim() : !selectedFiles.length}>
               <WandSparkles />
@@ -1716,7 +1781,7 @@ function NewReview() {
         <section className="panel mt-4 p-4">
           <h2 className="text-xs font-semibold">Selected source files ({selectedFiles.length})</h2>
           <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-            {selectedFiles.map((file) => <li key={file.filename} className="flex justify-between gap-3"><span className="truncate">{file.filename}</span><span>{file.content.split(/\r\n|\r|\n/).length} lines</span></li>)}
+            {selectedFileSummaries.map((file) => <li key={file.filename} className="flex justify-between gap-3"><span className="truncate">{file.filename}</span><span>{file.lineCount} lines</span></li>)}
           </ul>
         </section>
       )}
@@ -1784,7 +1849,29 @@ function ScoreRing({ score = 78, size = "large" }: { score?: number; size?: "lar
 }
 
 function ReviewResult() {
-  const { severity, setSeverity, setSelectedFinding, setView, activeReview, activeReviewId, activeReviewStatus, setApiResponse, subscriptionTier } = useReviewStore();
+  const {
+    severity,
+    setSeverity,
+    setSelectedFinding,
+    setView,
+    activeReview,
+    activeReviewId,
+    activeReviewStatus,
+    setApiResponse,
+    subscriptionTier,
+  } = useReviewStore(
+    useShallow((state) => ({
+      severity: state.severity,
+      setSeverity: state.setSeverity,
+      setSelectedFinding: state.setSelectedFinding,
+      setView: state.setView,
+      activeReview: state.activeReview,
+      activeReviewId: state.activeReviewId,
+      activeReviewStatus: state.activeReviewStatus,
+      setApiResponse: state.setApiResponse,
+      subscriptionTier: state.subscriptionTier,
+    })),
+  );
   const [generatingReport, setGeneratingReport] = useState<"json" | "html" | "pdf" | null>(null);
   const [reportLinks, setReportLinks] = useState<Partial<Record<"json" | "html" | "pdf", string>>>({});
 
@@ -2093,7 +2180,15 @@ function CodeEvidence({ rawFinding, finding }: { rawFinding?: any; finding: Find
 }
 
 function FindingDetail() {
-  const { selectedFinding, setView, findingStatuses, setFindingStatus, activeReview } = useReviewStore();
+  const { selectedFinding, setView, findingStatuses, setFindingStatus, activeReview } = useReviewStore(
+    useShallow((state) => ({
+      selectedFinding: state.selectedFinding,
+      setView: state.setView,
+      findingStatuses: state.findingStatuses,
+      setFindingStatus: state.setFindingStatus,
+      activeReview: state.activeReview,
+    })),
+  );
   const allFindings = useMemo(() => {
     if (activeReview?.findings && activeReview.findings.length > 0) {
       return activeReview.findings.map(mapBackendFindingToUi);
@@ -2242,16 +2337,6 @@ function FindingDetail() {
             </div>
           </div>
 
-          <button className="panel w-full p-4 text-left transition-colors hover:border-ai/50">
-            <div className="flex items-center gap-2 text-xs font-semibold">
-              <Mic className="size-4 text-ai" />
-              Ask about this finding
-            </div>
-            <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
-              Use Voxide to ask a voice question about the risk or suggested fix.
-            </p>
-          </button>
-
           <div className="panel p-4">
             <h2 className="text-xs font-semibold">Evidence & Rules</h2>
             <dl className="mt-3 space-y-3 text-[11px]">
@@ -2352,7 +2437,7 @@ function RecentReviewsCard({
   reviews: DashboardReview[];
   onSelectReview?: (id: string) => void;
 }) {
-  const { setView } = useReviewStore();
+  const setView = useReviewStore((state) => state.setView);
   return (
     <section className="panel overflow-hidden">
       {/* Header */}
@@ -2428,7 +2513,14 @@ function RecentReviewsCard({
 }
 
 function Dashboard() {
-  const { setView, setSelectedFinding, setActiveReview, userName } = useReviewStore();
+  const { setView, setSelectedFinding, setActiveReview, userName } = useReviewStore(
+    useShallow((state) => ({
+      setView: state.setView,
+      setSelectedFinding: state.setSelectedFinding,
+      setActiveReview: state.setActiveReview,
+      userName: state.userName,
+    })),
+  );
   const user = useAuthStore((s) => s.user);
   const metricsQuery = useDashboardMetricsQuery(user?.id);
   const { data: metricsData } = metricsQuery;
@@ -2812,7 +2904,12 @@ function Stat({
 }
 
 function ReviewTable() {
-  const { setView, setActiveReview } = useReviewStore();
+  const { setView, setActiveReview } = useReviewStore(
+    useShallow((state) => ({
+      setView: state.setView,
+      setActiveReview: state.setActiveReview,
+    })),
+  );
   const user = useAuthStore((s) => s.user);
   const reviewsQuery = useReviewsQuery(50, user?.id);
   const { data: reviews = [], isLoading } = reviewsQuery;
@@ -2896,7 +2993,12 @@ function ReviewTable() {
 /* ─────────────── company admin dashboard (Live Backend Data) ────────── */
 
 function CompanyDashboard() {
-  const { setView, setActiveReview } = useReviewStore();
+  const { setView, setActiveReview } = useReviewStore(
+    useShallow((state) => ({
+      setView: state.setView,
+      setActiveReview: state.setActiveReview,
+    })),
+  );
   const user = useAuthStore((s) => s.user);
   const metricsQuery = useDashboardMetricsQuery(user?.id);
   const { data: metricsData } = metricsQuery;
@@ -3162,9 +3264,10 @@ function CompanyDashboard() {
 function UsersView() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
+  const debouncedSearch = useDebouncedValue(search.trim(), 250);
 
   const { data, isLoading, isError, refetch } = useAdminUsersQuery({
-    search: search.trim() ? search.trim() : undefined,
+    search: debouncedSearch || undefined,
     role: roleFilter === "all" ? undefined : roleFilter,
   });
 
@@ -3474,7 +3577,7 @@ function PaymentsView() {
 }
 
 function HistoryView() {
-  const { setView } = useReviewStore();
+  const setView = useReviewStore((state) => state.setView);
   return (
     <>
       <PageHeading
@@ -3514,7 +3617,7 @@ function HistoryView() {
   );
 }
 function Rules() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
   const canManageRules =
     user?.role === "company_admin" ||
     user?.role === "platform_admin";
@@ -4315,7 +4418,13 @@ function Billing() {
   );
 }
 function Profile() {
-  const { userName, userEmail, role } = useReviewStore();
+  const { userName, userEmail, role } = useReviewStore(
+    useShallow((state) => ({
+      userName: state.userName,
+      userEmail: state.userEmail,
+      role: state.role,
+    })),
+  );
   const initials = userName
     .split(" ")
     .map((n) => n[0] ?? "")
@@ -4375,7 +4484,7 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 function Admin() {
-  const { setView } = useReviewStore();
+  const setView = useReviewStore((state) => state.setView);
   const {
     data: statsData,
     isLoading: isStatsLoading,

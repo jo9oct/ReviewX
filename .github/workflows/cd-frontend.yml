@@ -1,0 +1,36 @@
+name: CD - Frontend
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - master
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy frontend to Render
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger frontend deployment
+        env:
+          FRONTEND_DEPLOY_WEBHOOK_URL: ${{ secrets.FRONTEND_DEPLOY_WEBHOOK_URL }}
+        run: |
+          if [ -z "$FRONTEND_DEPLOY_WEBHOOK_URL" ]; then
+            echo "::error::FRONTEND_DEPLOY_WEBHOOK_URL is not configured."
+            exit 1
+          fi
+
+          if ! curl --proto '=https' --tlsv1.2 --fail --silent \
+            --output /dev/null --request POST "$FRONTEND_DEPLOY_WEBHOOK_URL" 2>/dev/null; then
+            echo "::error::Frontend deployment webhook request failed."
+            exit 1
+          fi

@@ -90,9 +90,6 @@ INTERACTION DETAILS THAT MATTER:
 
   like a genuine win, not a blank screen).
 
-- A voice-question entry point on the Review Result / Finding Detail screens
-
-  (mic icon → "Ask a question about this finding" — powered by Voxide).
 
 - Design for realistic mock data: findings have category, severity, confidence,
 

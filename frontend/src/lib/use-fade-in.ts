@@ -21,9 +21,18 @@ export function useFadeIn<T extends HTMLElement = HTMLElement>(
     delay?: number;
     distance?: number;
     duration?: number;
+    once?: boolean;
+    scale?: number;
   } = {},
 ) {
-  const { threshold = 0.1, delay = 0, distance = 40, duration = 650 } = options;
+  const {
+    threshold = 0.1,
+    delay = 0,
+    distance = 40,
+    duration = 650,
+    once = false,
+    scale = 1,
+  } = options;
   const ref = useRef<T>(null);
 
   useEffect(() => {
@@ -39,14 +48,14 @@ export function useFadeIn<T extends HTMLElement = HTMLElement>(
 
     const HIDDEN: Partial<CSSStyleDeclaration> = {
       opacity: "0",
-      transform: `translateY(${distance}px)`,
+      transform: `translateY(${distance}px) scale(${scale})`,
       transition: `opacity ${duration}ms cubic-bezier(0.22,1,0.36,1) ${delay}ms, transform ${duration}ms cubic-bezier(0.22,1,0.36,1) ${delay}ms`,
       willChange: "opacity, transform",
     };
 
     const VISIBLE: Partial<CSSStyleDeclaration> = {
       opacity: "1",
-      transform: "translateY(0)",
+      transform: "translateY(0) scale(1)",
     };
 
     function applyStyles(styles: Partial<CSSStyleDeclaration>) {
@@ -63,6 +72,9 @@ export function useFadeIn<T extends HTMLElement = HTMLElement>(
         if (entry.isIntersecting) {
           // Element entered the viewport — animate in.
           applyStyles(VISIBLE);
+          if (once) {
+            observer.unobserve(el);
+          }
           // Clean up will-change after the transition completes.
           const onEnd = () => {
             el.style.willChange = "auto";
@@ -89,7 +101,7 @@ export function useFadeIn<T extends HTMLElement = HTMLElement>(
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [threshold, delay, distance, duration]);
+  }, [threshold, delay, distance, duration, once, scale]);
 
   return ref;
 }

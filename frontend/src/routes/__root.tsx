@@ -14,6 +14,7 @@ import {
 import { type ReactNode } from "react";
 
 import { Toaster } from "@/components/toaster";
+import { STORAGE_KEYS } from "@/lib/constants";
 
 import appCss from "../styles.css?url";
 
@@ -104,25 +105,22 @@ function ErrorComponent({
  * Inline script injected into <head> before first paint.
  *
  * Reads the stored theme preference from localStorage and, if none is found,
- * falls back to the OS-level prefers-color-scheme. Applies the `light` class
- * to <html> synchronously so there is never a flash of the wrong theme.
+ * falls back to the OS-level prefers-color-scheme. Applies the matching theme
+ * classes to <html> synchronously so there is never a flash of the wrong theme.
  *
  * Runs as a blocking (non-deferred) script so it executes before any CSS is
  * applied. The storage key must be kept in sync with STORAGE_KEYS.THEME.
  */
 const THEME_INIT_SCRIPT = `(function(){
+  var stored = null;
   try {
-    var stored = localStorage.getItem('reviewx-theme');
-    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    var isLight = stored === 'light' || (!stored && !prefersDark);
-    if (isLight) {
-      document.documentElement.classList.add('light');
-      document.documentElement.classList.remove('dark');
-    } else {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
-    }
+    stored = localStorage.getItem(${JSON.stringify(STORAGE_KEYS.THEME)});
   } catch(e) {}
+  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var isLight = stored === 'light' || (!stored && !prefersDark);
+  document.documentElement.classList.toggle('light', isLight);
+  document.documentElement.classList.toggle('dark', !isLight);
+  document.documentElement.style.colorScheme = isLight ? 'light' : 'dark';
 })();`;
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
