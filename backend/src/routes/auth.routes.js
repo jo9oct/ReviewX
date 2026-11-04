@@ -1,37 +1,59 @@
-/**
- * Auth routes — mounted under /auth.
- *
- *   POST  /register   Create a new member account
- *   POST  /login      Authenticate and receive a JWT
- *   GET   /me         Return the authenticated user's profile
- */
+import express from "express";
+import rateLimit from "express-rate-limit";
+import isAuthenticated from "../middleware/isAuthenticated.js";
+import {
+  AuthRegister,
+  VerifyAuth,
+  AuthLogin,
+  checkAuth,
+  getMe,
+  Logout,
+  deleteAccount,
+  resendVerificationEmail,
+  forgotPassword,
+  resetPassword,
+  updateProfile,
+  changePassword,
+  getAllUser,
+  updateUser,
+  deleteUser,
+} from "../controllers/auth.controller.js";
 
-import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
-import { validate } from '../middleware/validate.js';
-import { authenticate } from '../middleware/authenticate.js';
-import { registerSchema, loginSchema } from '../validators/authValidators.js';
-import * as authCtrl from '../controllers/auth.controller.js';
-
-const router = Router();
+const router = express.Router();
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: 'draft-7',
+  max: 30,
+  standardHeaders: "draft-7",
   legacyHeaders: false,
   message: {
     success: false,
+    message: "Too many authentication attempts — please try again in 15 minutes.",
     error: {
-      message: 'Too many authentication attempts — please try again in 15 minutes.',
-      code: 'RATE_LIMITED',
+      message: "Too many authentication attempts — please try again in 15 minutes.",
+      code: "RATE_LIMITED",
     },
   },
-  skip: () => process.env.NODE_ENV === 'test',
+  skip: () => process.env.NODE_ENV === "test",
 });
 
-router.post('/register', authLimiter, validate(registerSchema), authCtrl.register);
-router.post('/login', authLimiter, validate(loginSchema), authCtrl.login);
-router.get('/me', authenticate, authCtrl.getMe);
+router.post("/register", authLimiter, AuthRegister);
+router.post("/verify", VerifyAuth);
+router.post("/login", authLimiter, AuthLogin);
+router.get("/check-auth", isAuthenticated, checkAuth);
+router.get("/me", isAuthenticated, getMe);
+router.post("/logout", isAuthenticated, Logout);
+router.delete("/remove-account", isAuthenticated, deleteAccount);
+router.post("/resend-verification-code", isAuthenticated, resendVerificationEmail);
+router.post("/forget-password", forgotPassword);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password/:token", resetPassword);
+router.put("/update-profile", isAuthenticated, updateProfile);
+router.put("/update-profile/:_id", isAuthenticated, updateProfile);
+router.post("/change-password", isAuthenticated, changePassword);
+router.post("/change-password/:_id", isAuthenticated, changePassword);
+router.get("/get-all-user", isAuthenticated, getAllUser);
+router.put("/update-user/:_id", isAuthenticated, updateUser);
+router.delete("/delete-user/:_id", isAuthenticated, deleteUser);
 
 export default router;

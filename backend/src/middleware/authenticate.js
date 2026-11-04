@@ -1,91 +1,49 @@
-// STATUS: UPDATED
+import isAuthenticated from "./isAuthenticated.js";
+import jwt from "jsonwebtoken";
+import Auth from "../model/auth.model.js";
 
-import jwt from 'jsonwebtoken';
-import { config } from '../config/env.js';
-import { findById } from '../database/repositories/user.repository.js';
-
-function authError(res, message, code = 'UNAUTHORIZED') {
-  return res.status(401).json({
-    success: false,
-    error: { message, code }
-  });
-}
-
-export async function authenticate(req, res, next) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader?.startsWith('Bearer ')) {
-    return authError(res, 'No token provided. Include "Authorization: Bearer <token>"');
-  }
-
-  const token = authHeader.slice(7).trim();
-
-  let payload;
-  try {
-    payload = jwt.verify(token, config.jwtSecret);
-  } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      return authError(res, 'Token has expired — please log in again', 'TOKEN_EXPIRED');
-    }
-    return authError(res, 'Invalid token', 'INVALID_TOKEN');
-  }
-
-  const userId = payload.userId || payload.sub;
-  const user = await findById(userId);
-
-  if (!user) {
-    return authError(
-      res,
-      'The account associated with this token no longer exists',
-      'USER_NOT_FOUND',
-    );
-  }
-
-  if (!user.isActive) {
-    return res.status(403).json({
-      success: false,
-      error: { message: 'Your account has been deactivated', code: 'ACCOUNT_DISABLED' },
-    });
-  }
-
-  req.user = {
-    _id: user._id.toString(),
-    id: user._id.toString(),
-    userId: user._id.toString(),
-    role: user.role,
-    company: user.company ? user.company.toString() : null,
-  };
-
-  next();
-}
+export const authenticate = isAuthenticated;
 
 export async function optionalAuthenticate(req, res, next) {
-  const authHeader = req.headers.authorization;
+  let token = null;
 
-  if (!authHeader?.startsWith('Bearer ')) {
-    req.user = null;
-    return next();
+  if (req.cookies && req.cookies.refreshToken) {
+    token = req.cookies.refreshToken;
+  } else if (req.headers.authorization?.startsWith("Bearer ")) {
+    token = req.headers.authorization.slice(7).trim();
   }
 
-  const token = authHeader.slice(7).trim();
   if (!token) {
     req.user = null;
     return next();
   }
 
   try {
-    const payload = jwt.verify(token, config.jwtSecret);
-    const userId = payload.userId || payload.sub;
-    const user = await findById(userId);
+    const secretKey =
+      process.env.Refresh_Secret_Key ||
+      process.env.JWT_SECRET ||
+      "Car-Rental-Secret-Key-123@";
 
-    if (user && user.isActive) {
-      req.user = {
-        _id: user._id.toString(),
-        id: user._id.toString(),
-        userId: user._id.toString(),
-        role: user.role,
-        company: user.company ? user.company.toString() : null,
-      };
+    let decoded;
+    try {
+      decoded = jwt.verify(token, secretKey);
+    } catch (_err) {
+      if (process.env.JWT_SECRET && process.env.JWT_SECRET !== secretKey) {
+        decoded = jwt.verify(token, process.env.JWT_SECRET);
+      } else {
+        req.user = null;
+        return next();
+      }
+    }
+
+    const userId = decoded.userID || decoded.userId || decoded.id || decoded.sub;
+    const user = await Auth.findById(userId).select("-password");
+
+    if (user && user.status !== "disabled" && user.status !== "suspended") {
+      req.user = user;
+      req.user.id = user._id.toString();
+      req.user.userId = user._id.toString();
+      req.user._id = user._id;
     } else {
       req.user = null;
     }
@@ -97,3 +55,4 @@ export async function optionalAuthenticate(req, res, next) {
 }
 
 export const protect = authenticate;
+export default authenticate;

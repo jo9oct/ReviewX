@@ -8,6 +8,10 @@ import express from 'express';
 
 import cors from 'cors';
 
+import cookieParser from 'cookie-parser';
+
+import passport from 'passport';
+
 import environment from './config/environment.js';
 
 import {
@@ -16,6 +20,8 @@ import {
 } from './database/connection.js';
 
 import authRoutes from './routes/auth.routes.js';
+
+import googleAuthRoutes from './routes/google-auth.routes.js';
 
 import reviewRoutes from './routes/review.routes.js';
 
@@ -66,10 +72,26 @@ app.use(
   securityMiddleware,
 );
 
+const allowedOrigins = [
+  process.env.CORS_ORIGIN,
+  process.env.FRONTEND_URL,
+  process.env.FRONT_END_BASE_URL,
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+].filter(Boolean);
+
 app.use(
   cors({
-    origin:
-      process.env.CORS_ORIGIN,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+        return callback(null, origin);
+      }
+      return callback(null, false);
+    },
     credentials: true,
   }),
 );
@@ -90,6 +112,9 @@ app.use(
       httpConfig.parameterLimit,
   }),
 );
+
+app.use(cookieParser());
+app.use(passport.initialize());
 
 app.get(
   '/health',
@@ -115,14 +140,29 @@ app.get(
 
 /*
  * Authentication routes
- *
- * POST /api/v1/auth/register
- * POST /api/v1/auth/login
- * GET  /api/v1/auth/me
+ * Both /api/v1/auth and /api/auth supported
  */
 app.use(
   '/api/v1/auth',
   authRoutes,
+);
+
+app.use(
+  '/api/auth',
+  authRoutes,
+);
+
+/*
+ * Google OAuth routes
+ */
+app.use(
+  '/',
+  googleAuthRoutes,
+);
+
+app.use(
+  '/api/v1/auth',
+  googleAuthRoutes,
 );
 
 app.use(
