@@ -1,9 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { ResetPasswordForm } from "@/components/auth/password-forms";
 import { redirectIfAuthenticated } from "@/lib/auth";
 
 export const Route = createFileRoute("/reset-password")({
   ssr: false,
+  validateSearch: z.object({
+    token: z.string().optional(),
+  }),
   beforeLoad: async () => {
     await redirectIfAuthenticated();
   },
@@ -17,5 +21,10 @@ export const Route = createFileRoute("/reset-password")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: ResetPasswordForm,
+  component: ResetPasswordRoutePage,
 });
+
+function ResetPasswordRoutePage() {
+  const search = Route.useSearch();
+  return <ResetPasswordForm token={search?.token} />;
+}

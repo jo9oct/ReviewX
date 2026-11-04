@@ -11,6 +11,7 @@ import {
   getCurrentUser,
   setAuthToken,
   getAuthToken,
+  getApiOrigin,
   ApiClientError,
 } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
@@ -139,7 +140,8 @@ export function AuthForm({
   }
 
   function continueWithGoogle() {
-    toast.info("Google OAuth is coming soon. Please sign in with email and password.");
+    const origin = getApiOrigin();
+    window.location.href = `${origin}/auth/google`;
   }
 
   const isRegister = mode === "register";

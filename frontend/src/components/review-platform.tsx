@@ -21,6 +21,10 @@ import {
   useCompanyMembersQuery,
   useInviteCompanyMemberMutation,
   type CompanyMember,
+  updateProfile,
+  changePassword,
+  deleteAccount,
+  deleteAuthUser,
 } from "@/lib/api";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
@@ -3922,6 +3926,19 @@ function UsersView() {
     }
   };
 
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!window.confirm(`Are you sure you want to delete user "${userName}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await deleteAuthUser(userId);
+      toast.success(`User ${userName} deleted`);
+      void refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete user");
+    }
+  };
+
   const users: AdminUserItem[] = data?.users || [];
 
   const handleExportCSV = () => {
@@ -4103,15 +4120,25 @@ function UsersView() {
                       </span>
                     </td>
                     <td>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => handleToggleStatus(u.id, u.isActive, u.name)}
-                        disabled={toggleStatusMutation.isPending}
-                      >
-                        {u.isActive ? "Deactivate" : "Activate"}
-                      </Button>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => handleToggleStatus(u.id, u.isActive, u.name)}
+                          disabled={toggleStatusMutation.isPending}
+                        >
+                          {u.isActive ? "Deactivate" : "Activate"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => void handleDeleteUser(u.id, u.name)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -5160,51 +5187,269 @@ function Profile() {
       role: state.role,
     })),
   );
+
+  const [name, setName] = useState(userName);
+  const [email, setEmail] = useState(userEmail);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Change Password state
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  // Delete Account state
+  const [deletePass, setDeletePass] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    setName(userName);
+    setEmail(userEmail);
+  }, [userName, userEmail]);
+
   const initials =
-    userName
+    (name || userName || "?")
       .split(" ")
       .map((n) => n[0] ?? "")
       .join("")
       .slice(0, 2)
       .toUpperCase() || "?";
+
   const roleLabel =
     role === "platform" ? "Platform admin" : role === "company" ? "Company admin" : "Member";
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      toast.error("Name cannot be empty");
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      await updateProfile({ name: name.trim(), email: email.trim() });
+      useReviewStore.getState().setUserName(name.trim());
+      useReviewStore.getState().setUserEmail(email.trim());
+      toast.success("Profile updated successfully");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!oldPassword || !newPassword) {
+      toast.error("Please enter both your current and new password");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("New password must be at least 8 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("New passwords do not match");
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      await changePassword({ oldPassword, newPassword });
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Password changed successfully");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to change password");
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePass) {
+      toast.error("Please enter your password to confirm account deletion");
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteAccount(deletePass);
+      toast.success("Account deleted successfully");
+      useAuthStore.getState().logout();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete account");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <>
       <PageHeading
-        title="Profile"
-        subtitle="Manage your personal details and review preferences."
+        title="Profile & Account Settings"
+        subtitle="Manage your personal details, credentials, and account settings."
       />
-      <div className="grid max-w-4xl gap-4 md:grid-cols-[220px_1fr]">
-        <div className="panel p-5 text-center">
+
+      <div className="grid max-w-4xl gap-6 md:grid-cols-[220px_1fr]">
+        <div className="panel p-5 text-center h-fit">
           <div className="mx-auto grid size-20 place-items-center rounded-full bg-primary text-xl font-semibold text-primary-foreground">
             {initials}
           </div>
-          <h2 className="mt-3 text-sm font-semibold">{userName}</h2>
+          <h2 className="mt-3 text-sm font-semibold">{name || userName}</h2>
           <p className="mt-1 text-[11px] text-muted-foreground">{roleLabel}</p>
-          <Button variant="outline" size="sm" className="mt-4">
-            Change photo
-          </Button>
-        </div>
-        <div className="panel p-5">
-          <h2 className="text-sm font-semibold">Personal information</h2>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <Field label="Full name" value={userName} />
-            <Field label="Email" value={userEmail} />
-            <Field label="Role" value={roleLabel} />
-            <Field label="Default language" value="TypeScript" />
-          </div>
-          <div className="mt-6 flex items-center justify-between">
+          <div className="mt-5 border-t border-border pt-4">
             <Button
               type="button"
               variant="outline"
-              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border-red-500/20"
+              size="sm"
+              className="w-full text-red-400 hover:text-red-300 hover:bg-red-500/10 border-red-500/20 text-xs"
               onClick={() => useAuthStore.getState().logout()}
             >
               <LogOut className="mr-1.5 size-3.5" />
               Sign out
             </Button>
-            <Button>Save changes</Button>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* Personal Information */}
+          <form onSubmit={handleSaveProfile} className="panel p-5 space-y-4">
+            <h2 className="text-sm font-semibold">Personal information</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="text-[11px] text-muted-foreground block">
+                Full name
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="mt-1.5 text-foreground"
+                  required
+                />
+              </label>
+              <label className="text-[11px] text-muted-foreground block">
+                Email
+                <Input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="mt-1.5 text-foreground"
+                  type="email"
+                  required
+                />
+              </label>
+              <div className="text-[11px] text-muted-foreground">
+                Role
+                <div className="mt-1.5 h-9 flex items-center px-3 rounded-md border border-input bg-muted/30 text-xs text-foreground">
+                  {roleLabel}
+                </div>
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                Default language
+                <div className="mt-1.5 h-9 flex items-center px-3 rounded-md border border-input bg-muted/30 text-xs text-foreground">
+                  TypeScript
+                </div>
+              </div>
+            </div>
+            <div className="pt-2 flex justify-end">
+              <Button type="submit" disabled={savingProfile}>
+                {savingProfile && <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />}
+                Save changes
+              </Button>
+            </div>
+          </form>
+
+          {/* Change Password */}
+          <form onSubmit={handleChangePassword} className="panel p-5 space-y-4">
+            <h2 className="text-sm font-semibold">Security & Password</h2>
+            <div className="space-y-3">
+              <label className="text-[11px] text-muted-foreground block">
+                Current password
+                <Input
+                  type="password"
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  className="mt-1.5 text-foreground"
+                />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-[11px] text-muted-foreground block">
+                  New password
+                  <Input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min 8 characters"
+                    className="mt-1.5 text-foreground"
+                  />
+                </label>
+                <label className="text-[11px] text-muted-foreground block">
+                  Confirm new password
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat new password"
+                    className="mt-1.5 text-foreground"
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="pt-2 flex justify-end">
+              <Button type="submit" variant="outline" disabled={savingPassword || !oldPassword || !newPassword}>
+                {savingPassword && <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />}
+                Update password
+              </Button>
+            </div>
+          </form>
+
+          {/* Danger Zone: Delete Account */}
+          <div className="panel p-5 border-destructive/20 space-y-3">
+            <h2 className="text-sm font-semibold text-destructive">Danger zone</h2>
+            <p className="text-xs text-muted-foreground">
+              Permanently delete your account and all associated personal data. This action cannot be undone.
+            </p>
+            {showDeleteConfirm ? (
+              <div className="space-y-3 pt-2">
+                <Input
+                  type="password"
+                  placeholder="Enter your password to confirm deletion"
+                  value={deletePass}
+                  onChange={(e) => setDeletePass(e.target.value)}
+                  className="text-xs"
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={deleting || !deletePass}
+                    onClick={() => void handleDeleteAccount()}
+                  >
+                    {deleting && <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />}
+                    Confirm permanent deletion
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeletePass("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                Delete account
+              </Button>
+            )}
           </div>
         </div>
       </div>

@@ -47,6 +47,7 @@ router.delete("/remove-account", isAuthenticated, deleteAccount);
 router.post("/resend-verification-code", isAuthenticated, resendVerificationEmail);
 router.post("/forget-password", forgotPassword);
 router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 router.post("/reset-password/:token", resetPassword);
 router.put("/update-profile", isAuthenticated, updateProfile);
 router.put("/update-profile/:_id", isAuthenticated, updateProfile);

@@ -4,7 +4,8 @@ import { LoaderCircle } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { safeNext } from "@/lib/auth";
 import { STORAGE_KEYS } from "@/lib/constants";
-import { getAuthToken } from "@/lib/api";
+import { getAuthToken, setAuthToken } from "@/lib/api";
+import { useAuthStore } from "@/lib/auth-store";
 
 export const Route = createFileRoute("/auth_/callback")({
   head: () => ({
@@ -32,7 +33,19 @@ function CallbackPage() {
         sessionStorage.removeItem(STORAGE_KEYS.AUTH_NEXT);
       }
 
-      const token = getAuthToken();
+      let token = getAuthToken();
+      if (!token && typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const queryToken = params.get("token");
+        if (queryToken) {
+          setAuthToken(queryToken);
+          token = queryToken;
+          try {
+            await useAuthStore.getState().initialize();
+          } catch (_e) {}
+        }
+      }
+
       if (token) {
         await navigate({ to: destination });
       } else {

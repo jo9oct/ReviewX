@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   getCurrentUser,
+  logoutUser,
   setAuthToken,
   getAuthToken,
   setUnauthorizedHandler,
@@ -70,6 +71,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
+    void logoutUser().catch(() => {});
     setAuthToken(null);
     set({
       user: null,

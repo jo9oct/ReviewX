@@ -534,7 +534,7 @@ export const forgotPassword = async (req, res) => {
 
 export const resetPassword = async (req, res) => {
   try {
-    const { token } = req.params;
+    const token = req.params.token || req.body.token;
     const sanitizedData = sanitizeObject(req.body);
 
     const { error } = resetPasswordSchema.validate(sanitizedData);
