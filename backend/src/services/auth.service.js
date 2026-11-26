@@ -54,13 +54,13 @@ export async function register(dto) {
 
 export async function login(dto) {
   const { email, password } = dto;
-  const user = await Auth.findOne({ email: email.toLowerCase().trim() });
+  const user = await Auth.findOne({ email: email.toLowerCase().trim() }).select("+password");
 
   if (!user) {
     throw ApiError.unauthorized("Invalid credentials");
   }
 
-  const isMatch = await bcrypt.compare(password, user.password);
+  const isMatch = await user.verifyPassword(password);
   if (!isMatch) {
     throw ApiError.unauthorized("Invalid credentials");
   }

@@ -202,7 +202,14 @@ userSchema.methods.setPassword = async function (plainPassword) {
 };
 
 userSchema.methods.verifyPassword = async function (plainPassword) {
-  if (!this.password) return false;
+  if (
+    typeof plainPassword !== "string" ||
+    typeof this.password !== "string" ||
+    this.password.length === 0
+  ) {
+    return false;
+  }
+
   return bcrypt.compare(plainPassword, this.password);
 };
 

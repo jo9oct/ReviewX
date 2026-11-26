@@ -327,7 +327,9 @@ export const AuthLogin = async (req, res) => {
   const { email, password } = sanitizedData;
 
   try {
-    const existingUser = await Auth.findOne({ email: email.toLowerCase().trim() });
+    const existingUser = await Auth.findOne({
+      email: email.toLowerCase().trim(),
+    }).select("+password");
 
     if (!existingUser) {
       return res.status(401).json({
@@ -337,7 +339,7 @@ export const AuthLogin = async (req, res) => {
       });
     }
 
-    const isMatch = await bcrypt.compare(password, existingUser.password);
+    const isMatch = await existingUser.verifyPassword(password);
 
     if (!isMatch) {
       return res.status(401).json({
