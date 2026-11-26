@@ -432,11 +432,12 @@ import { createServerFn } from "@tanstack/react-start";
 export const getGithubConnectUrlFn = createServerFn({ method: "GET" })
   .validator((token: string) => token)
   .handler(async ({ data: token }) => {
-    // Determine absolute backend URL for server-side fetch
-    const backendUrl =
-      process.env["VITE_API_BASE_URL"] ||
-      process.env["VITE_API_URL"] ||
-      "http://localhost:5000/api/v1";
+    const backendUrl = process.env["VITE_API_BASE_URL"] || process.env["VITE_API_URL"];
+
+    if (!backendUrl) {
+      throw new Error("VITE_API_BASE_URL or VITE_API_URL must be set to the backend API URL.");
+    }
+
     const absoluteUrl = backendUrl.replace(/\/$/, "") + "/github/connect";
 
     // We run on the server (Nitro) where Node's fetch can read Location headers from manual redirects!

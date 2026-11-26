@@ -13,6 +13,7 @@ import passport from 'passport';
 import environment from './config/environment.js';
 import {
   createCorsMiddleware,
+  isProductionEnvironment,
   resolveFrontendOrigin,
 } from './config/cors.config.js';
 
@@ -76,13 +77,9 @@ app.use(
   securityMiddleware,
 );
 
-const isProduction =
-  process.env.NODE_ENV === 'production' ||
-  process.env.RENDER === 'true' ||
-  Boolean(process.env.RENDER_SERVICE_ID);
 const frontendOrigin = resolveFrontendOrigin(
   process.env.FRONTEND_URL,
-  isProduction,
+  isProductionEnvironment(),
 );
 
 process.stdout.write(

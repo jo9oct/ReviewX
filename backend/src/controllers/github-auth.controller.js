@@ -8,6 +8,10 @@ import {
   isGithubConfigured,
 } from "../integrations/github/github.auth.js";
 import { githubRequest } from "../integrations/github/github.client.js";
+import {
+  isProductionEnvironment,
+  resolveFrontendOrigin,
+} from "../config/cors.config.js";
 
 const STATE_COOKIE = "reviewx_github_oauth_state";
 const STATE_COOKIE_PATH = "/api/v1/github/callback";
@@ -39,12 +43,12 @@ function consumeLoginState(req, res, state) {
   }
 }
 
-function getFrontendCallbackUrl({ token, error } = {}) {
-  const frontendUrl =
-    process.env.FRONTEND_URL ||
-    process.env.FRONT_END_BASE_URL ||
-    "http://localhost:5173";
-  const callbackUrl = new URL("/auth/callback", frontendUrl);
+export function getGithubFrontendCallbackUrl({ token, error } = {}) {
+  const frontendOrigin = resolveFrontendOrigin(
+    process.env.FRONTEND_URL,
+    isProductionEnvironment(),
+  );
+  const callbackUrl = new URL("/auth/callback", frontendOrigin);
 
   if (token) {
     callbackUrl.searchParams.set("token", token);
@@ -185,7 +189,7 @@ export async function completeGithubLogin(req, res, next) {
     consumeLoginState(req, res, state);
 
     if (error) {
-      return res.redirect(getFrontendCallbackUrl({ error: "github" }));
+      return res.redirect(getGithubFrontendCallbackUrl({ error: "github" }));
     }
     if (typeof code !== "string" || !code.trim()) {
       throw createAuthError("GitHub authorization code is required.", "GITHUB_AUTHORIZATION_CODE_REQUIRED", 400);
@@ -220,11 +224,21 @@ export async function completeGithubLogin(req, res, next) {
     user.sessionToken = token;
     await user.save();
 
-    return res.redirect(getFrontendCallbackUrl({ token }));
+    return res.redirect(getGithubFrontendCallbackUrl({ token }));
   } catch (error) {
-    if (error.statusCode >= 400 && error.statusCode < 500) {
-      return res.redirect(getFrontendCallbackUrl({ error: "github" }));
+    if (!(error?.statusCode >= 400 && error.statusCode < 500)) {
+      console.error(
+        "GitHub OAuth callback failed:",
+        error instanceof Error ? error.message : String(error),
+      );
     }
-    return next(error);
+
+    try {
+      return res.redirect(
+        getGithubFrontendCallbackUrl({ error: "github" }),
+      );
+    } catch (redirectError) {
+      return next(redirectError);
+    }
   }
 }

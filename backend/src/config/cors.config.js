@@ -14,6 +14,14 @@ const isLoopbackHostname = (hostname) => {
   );
 };
 
+const isProductionEnvironment = () => {
+  return (
+    process.env.NODE_ENV === 'production' ||
+    process.env.RENDER === 'true' ||
+    Boolean(process.env.RENDER_SERVICE_ID)
+  );
+};
+
 const resolveFrontendOrigin = (
   frontendUrl,
   production = false,
@@ -87,5 +95,6 @@ const createCorsMiddleware = (frontendOrigin) => {
 
 export {
   createCorsMiddleware,
+  isProductionEnvironment,
   resolveFrontendOrigin,
 };

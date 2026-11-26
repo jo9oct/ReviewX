@@ -3,6 +3,10 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth2";
 import Auth from "../model/auth.model.js";
 import generateTokenAndSetCookie from "../utils/token.utils.js";
 import { createFreeSubscription } from "../services/subscription.service.js";
+import {
+  isProductionEnvironment,
+  resolveFrontendOrigin,
+} from "../config/cors.config.js";
 
 function makeUniqueUsername(baseName) {
   const nameStr = String(baseName || "user");
@@ -13,12 +17,16 @@ function makeUniqueUsername(baseName) {
 
 const clientID = process.env.GOOGLE_CLIENT_ID;
 const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-const port = process.env.PORT || 5000;
-const backendUrl = process.env.BACKEND_URL || `http://localhost:${port}`;
+const backendUrl = process.env.BACKEND_URL?.trim().replace(/\/+$/, "");
 const callbackURL =
-  process.env.GOOGLE_CALLBACK_URL || `${backendUrl}/auth/google/callback`;
+  process.env.GOOGLE_CALLBACK_URL?.trim() ||
+  (backendUrl ? `${backendUrl}/api/v1/auth/google/callback` : "");
 
-if (clientID && clientSecret) {
+export const isGoogleOAuthConfigured = () => {
+  return Boolean(clientID && clientSecret && callbackURL);
+};
+
+if (isGoogleOAuthConfigured()) {
   passport.use(
     new GoogleStrategy(
       {
@@ -89,10 +97,14 @@ export const googleCallback = async (req, res) => {
   req.user.sessionToken = refreshToken;
   await req.user.save();
 
-  const frontendURL =
-    process.env.FRONTEND_URL || process.env.FRONT_END_BASE_URL || "http://localhost:5173";
+  const frontendOrigin = resolveFrontendOrigin(
+    process.env.FRONTEND_URL,
+    isProductionEnvironment(),
+  );
+  const callbackUrl = new URL("/auth/callback", frontendOrigin);
+  callbackUrl.searchParams.set("token", refreshToken);
 
-  return res.redirect(`${frontendURL}/auth/callback?token=${refreshToken}`);
+  return res.redirect(callbackUrl.toString());
 };
 
 export const Profile = (req, res) => {

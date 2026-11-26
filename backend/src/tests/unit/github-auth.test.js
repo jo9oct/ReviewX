@@ -4,9 +4,12 @@ import assert from "node:assert/strict";
 process.env.GITHUB_CLIENT_ID = "github-test-client";
 process.env.GITHUB_CLIENT_SECRET = "github-test-secret";
 process.env.GITHUB_REDIRECT_URI = "http://localhost:5000/api/v1/github/callback";
+process.env.FRONTEND_URL = "http://localhost:5173";
+process.env.NODE_ENV = "test";
 
 const {
   getVerifiedPrimaryGithubEmail,
+  getGithubFrontendCallbackUrl,
   isGithubLoginState,
   startGithubLogin,
 } = await import("../../controllers/github-auth.controller.js");
@@ -70,6 +73,44 @@ test("GitHub email selection requires a verified primary address", () => {
     ]),
     null,
   );
+});
+
+test("GitHub OAuth success and failure redirect to the configured frontend callback", () => {
+  const localFailure = new URL(
+    getGithubFrontendCallbackUrl({ error: "github" }),
+  );
+  assert.equal(localFailure.origin, "http://localhost:5173");
+  assert.equal(localFailure.pathname, "/auth/callback");
+  assert.equal(localFailure.searchParams.get("error"), "github");
+
+  const previousFrontendUrl = process.env.FRONTEND_URL;
+  const previousNodeEnv = process.env.NODE_ENV;
+
+  try {
+    process.env.FRONTEND_URL = "https://review-x.vercel.app";
+    process.env.NODE_ENV = "production";
+
+    const productionSuccess = new URL(
+      getGithubFrontendCallbackUrl({ token: "session-token" }),
+    );
+    const productionFailure = new URL(
+      getGithubFrontendCallbackUrl({ error: "github" }),
+    );
+
+    assert.equal(
+      productionSuccess.toString().startsWith(
+        "https://review-x.vercel.app/auth/callback?token=",
+      ),
+      true,
+    );
+    assert.equal(
+      productionFailure.toString(),
+      "https://review-x.vercel.app/auth/callback?error=github",
+    );
+  } finally {
+    process.env.FRONTEND_URL = previousFrontendUrl;
+    process.env.NODE_ENV = previousNodeEnv;
+  }
 });
 
 test("GitHub accounts can be created without passwords while local accounts still require one", () => {

@@ -6,6 +6,7 @@ import {
   googleCallback,
   Profile,
   fail,
+  isGoogleOAuthConfigured,
 } from "../controllers/google-auth.controller.js";
 
 const router = express.Router();
@@ -13,7 +14,7 @@ const router = express.Router();
 router.get("/google/intro", intro);
 
 router.get("/auth/google", (req, res, next) => {
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+  if (!isGoogleOAuthConfigured()) {
     return res.status(503).json({
       success: false,
       message: "Google OAuth is not configured on this server.",
@@ -23,7 +24,7 @@ router.get("/auth/google", (req, res, next) => {
 });
 
 router.get("/google", (req, res, next) => {
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+  if (!isGoogleOAuthConfigured()) {
     return res.status(503).json({
       success: false,
       message: "Google OAuth is not configured on this server.",

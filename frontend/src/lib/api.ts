@@ -211,11 +211,10 @@ function normalizeApiOrigin(apiUrl: string): string {
     .replace(/\/api\/v1$/, "");
 }
 
-const configuredApiUrl =
-  import.meta.env["VITE_API_BASE_URL"] ||
-  import.meta.env["VITE_API_URL"] ||
-  (import.meta.env.DEV ? "/api/v1" : "http://localhost:5000/api/v1");
-const configuredApiOrigin = normalizeApiOrigin(configuredApiUrl);
+const configuredApiUrl = import.meta.env["VITE_API_BASE_URL"] || import.meta.env["VITE_API_URL"];
+const configuredApiOrigin = normalizeApiOrigin(
+  configuredApiUrl || (import.meta.env.DEV ? "/api/v1" : ""),
+);
 const API_ORIGIN = import.meta.env.DEV ? "" : configuredApiOrigin;
 const API_BASE_URL = `${API_ORIGIN}/api/v1`;
 
@@ -224,11 +223,15 @@ export function getApiBaseUrl(): string {
 }
 
 export function getApiOrigin(): string {
-  return normalizeApiOrigin(
-    import.meta.env["VITE_API_BASE_URL"] ||
-      import.meta.env["VITE_API_URL"] ||
-      "http://localhost:5000",
-  );
+  if (!configuredApiUrl) {
+    if (import.meta.env.DEV) {
+      return "";
+    }
+
+    throw new Error("VITE_API_BASE_URL or VITE_API_URL must be set to the backend API URL.");
+  }
+
+  return normalizeApiOrigin(configuredApiUrl);
 }
 
 function resolveApiUrl(path: string): string {

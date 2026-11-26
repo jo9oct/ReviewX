@@ -9,9 +9,33 @@ import { defineConfig, loadEnv } from "vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
 
-  const backendUrl = (env["VITE_API_BASE_URL"] || env["VITE_API_URL"] || "http://localhost:5000")
-    .replace(/\/api\/v1\/?$/, "")
-    .replace(/\/$/, "");
+  const configuredBackendUrl = env["VITE_API_BASE_URL"] || env["VITE_API_URL"];
+  const backendUrl = configuredBackendUrl
+    ? configuredBackendUrl.replace(/\/api\/v1\/?$/, "").replace(/\/$/, "")
+    : "";
+
+  if (!backendUrl && (mode === "development" || process.env["VERCEL"])) {
+    throw new Error("Set VITE_API_BASE_URL or VITE_API_URL to the backend API URL.");
+  }
+
+  const proxyRules = backendUrl
+    ? {
+        "/api/**": { proxy: `${backendUrl}/api/**` },
+        "/health": { proxy: `${backendUrl}/health` },
+      }
+    : {};
+  const developmentProxy = backendUrl
+    ? {
+        "/api": {
+          target: backendUrl,
+          changeOrigin: true,
+        },
+        "/health": {
+          target: backendUrl,
+          changeOrigin: true,
+        },
+      }
+    : {};
 
   return {
     plugins: [
@@ -22,10 +46,7 @@ export default defineConfig(({ mode }) => {
       }),
 
       nitro({
-        routeRules: {
-          "/api/**": { proxy: `${backendUrl}/api/**` },
-          "/health": { proxy: `${backendUrl}/health` },
-        },
+        routeRules: proxyRules,
       }),
 
       react(),
@@ -40,17 +61,7 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       strictPort: true,
 
-      proxy: {
-        "/api": {
-          target: backendUrl,
-          changeOrigin: true,
-        },
-
-        "/health": {
-          target: backendUrl,
-          changeOrigin: true,
-        },
-      },
+      proxy: developmentProxy,
     },
   };
 });
