@@ -240,11 +240,15 @@ function mapBackendFindingToUi(bf: AnyFinding, index: number): Finding {
     id: bf._id || bf.id || `FND-${1042 + index}`,
     title: bf.title || bf.ruleId || "Security Finding",
     severity: sevMap[String(bf.severity ?? "").toLowerCase()] || "MEDIUM",
-    category: bf.category ? String(bf.category).charAt(0).toUpperCase() + String(bf.category).slice(1) : "Security",
+    category: bf.category
+      ? String(bf.category).charAt(0).toUpperCase() + String(bf.category).slice(1)
+      : "Security",
     file: filePath,
     line: String(lineStart),
     confidence,
-    status: bf.status ? String(bf.status).charAt(0).toUpperCase() + String(bf.status).slice(1) : "Detected",
+    status: bf.status
+      ? String(bf.status).charAt(0).toUpperCase() + String(bf.status).slice(1)
+      : "Detected",
     description: bf.description || bf.title || "",
   };
 }
@@ -267,7 +271,8 @@ function toUiReviewResult(details: ReviewDetails): ReviewResult {
     const status = String(f.status ?? "detected").toLowerCase();
     const severity = String(f.severity ?? "info").toLowerCase();
     const filePath = f.filePath || f.file || null;
-    const lineStart = typeof f.lineStart === "number" ? f.lineStart : typeof f.line === "number" ? f.line : null;
+    const lineStart =
+      typeof f.lineStart === "number" ? f.lineStart : typeof f.line === "number" ? f.line : null;
 
     return {
       ...(f._id ? { _id: String(f._id) } : {}),
@@ -295,11 +300,10 @@ function toUiReviewResult(details: ReviewDetails): ReviewResult {
       column: null,
       code: f.code ?? null,
       ...(f.snippet ? { snippet: String(f.snippet) } : {}),
-      recommendation: (typeof f.remediation === "string" ? f.remediation : f.recommendation) ?? null,
+      recommendation:
+        (typeof f.remediation === "string" ? f.remediation : f.recommendation) ?? null,
       analyzer: "backend",
-      fingerprint: String(
-        f._id ?? f.id ?? `${reviewId}-${f.ruleId ?? "finding"}`,
-      ),
+      fingerprint: String(f._id ?? f.id ?? `${reviewId}-${f.ruleId ?? "finding"}`),
       ...(lineStart !== null ? { location: { startLine: lineStart } } : {}),
       ...(f.snippet ? { evidence: { snippet: String(f.snippet) } } : {}),
       ...(f.cwe ? { cwe: f.cwe } : {}),
@@ -2712,22 +2716,46 @@ function SummaryCount({ n, label, s }: { n: string; label: string; s: Severity }
 
 const RULE_SECURITY_STANDARDS: Record<string, { cwe?: string; owasp?: string }> = {
   "sql-injection": { cwe: "CWE-89 (SQL Injection)", owasp: "A03:2021 - Injection" },
-  "sqli": { cwe: "CWE-89 (SQL Injection)", owasp: "A03:2021 - Injection" },
-  "xss": { cwe: "CWE-79 (Cross-site Scripting)", owasp: "A03:2021 - Injection" },
+  sqli: { cwe: "CWE-89 (SQL Injection)", owasp: "A03:2021 - Injection" },
+  xss: { cwe: "CWE-79 (Cross-site Scripting)", owasp: "A03:2021 - Injection" },
   "cross-site-scripting": { cwe: "CWE-79 (Cross-site Scripting)", owasp: "A03:2021 - Injection" },
   "command-injection": { cwe: "CWE-78 (OS Command Injection)", owasp: "A03:2021 - Injection" },
   "path-traversal": { cwe: "CWE-22 (Path Traversal)", owasp: "A01:2021 - Broken Access Control" },
-  "hardcoded-credentials": { cwe: "CWE-798 (Hard-coded Credentials)", owasp: "A07:2021 - Identification & Auth Failures" },
-  "insecure-deserialization": { cwe: "CWE-502 (Insecure Deserialization)", owasp: "A08:2021 - Software & Data Integrity Failures" },
-  "csrf": { cwe: "CWE-352 (Cross-Site Request Forgery)", owasp: "A01:2021 - Broken Access Control" },
-  "ssrf": { cwe: "CWE-918 (Server-Side Request Forgery)", owasp: "A10:2021 - Server-Side Request Forgery" },
-  "broken-auth": { cwe: "CWE-287 (Improper Authentication)", owasp: "A07:2021 - Identification & Auth Failures" },
-  "security-misconfiguration": { cwe: "CWE-16 (Configuration)", owasp: "A05:2021 - Security Misconfiguration" },
-  "crypto-weakness": { cwe: "CWE-327 (Broken/Risky Crypto Algorithm)", owasp: "A02:2021 - Cryptographic Failures" },
+  "hardcoded-credentials": {
+    cwe: "CWE-798 (Hard-coded Credentials)",
+    owasp: "A07:2021 - Identification & Auth Failures",
+  },
+  "insecure-deserialization": {
+    cwe: "CWE-502 (Insecure Deserialization)",
+    owasp: "A08:2021 - Software & Data Integrity Failures",
+  },
+  csrf: { cwe: "CWE-352 (Cross-Site Request Forgery)", owasp: "A01:2021 - Broken Access Control" },
+  ssrf: {
+    cwe: "CWE-918 (Server-Side Request Forgery)",
+    owasp: "A10:2021 - Server-Side Request Forgery",
+  },
+  "broken-auth": {
+    cwe: "CWE-287 (Improper Authentication)",
+    owasp: "A07:2021 - Identification & Auth Failures",
+  },
+  "security-misconfiguration": {
+    cwe: "CWE-16 (Configuration)",
+    owasp: "A05:2021 - Security Misconfiguration",
+  },
+  "crypto-weakness": {
+    cwe: "CWE-327 (Broken/Risky Crypto Algorithm)",
+    owasp: "A02:2021 - Cryptographic Failures",
+  },
   "prototype-pollution": { cwe: "CWE-1321 (Prototype Pollution)", owasp: "A03:2021 - Injection" },
-  "eval-usage": { cwe: "CWE-95 (Improper Neutralization of Directives in Evaluated Code)", owasp: "A03:2021 - Injection" },
-  "dos": { cwe: "CWE-400 (Uncontrolled Resource Consumption)", owasp: "A04:2021 - Insecure Design" },
-  "rate-limit": { cwe: "CWE-799 (Improper Control of Interaction Frequency)", owasp: "A04:2021 - Insecure Design" },
+  "eval-usage": {
+    cwe: "CWE-95 (Improper Neutralization of Directives in Evaluated Code)",
+    owasp: "A03:2021 - Injection",
+  },
+  dos: { cwe: "CWE-400 (Uncontrolled Resource Consumption)", owasp: "A04:2021 - Insecure Design" },
+  "rate-limit": {
+    cwe: "CWE-799 (Improper Control of Interaction Frequency)",
+    owasp: "A04:2021 - Insecure Design",
+  },
 };
 
 function CodeEvidence({
@@ -2738,12 +2766,10 @@ function CodeEvidence({
   finding: Finding;
 }) {
   const [copied, setCopied] = useState(false);
-  const snippet =
-    rawFinding?.snippet ||
-    rawFinding?.evidence?.snippet ||
-    rawFinding?.code ||
-    null;
-  const startLine = Number(rawFinding?.lineStart || rawFinding?.location?.startLine || finding.line || 1);
+  const snippet = rawFinding?.snippet || rawFinding?.evidence?.snippet || rawFinding?.code || null;
+  const startLine = Number(
+    rawFinding?.lineStart || rawFinding?.location?.startLine || finding.line || 1,
+  );
   const endLine = Number(rawFinding?.lineEnd || startLine);
   const filePath = rawFinding?.filePath || rawFinding?.file || finding.file || "Source code";
 
@@ -2811,7 +2837,8 @@ function CodeEvidence({
           </div>
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Flagged during automated static code inspection. Refer to the file location and line numbers above.
+          Flagged during automated static code inspection. Refer to the file location and line
+          numbers above.
         </p>
       </div>
     </section>
@@ -2951,40 +2978,85 @@ function FindingDetail() {
     toast.success(`Finding status marked as "${s}"`);
   };
 
+  // STATUS: UPDATED
   // AI analysis records
-  const aiRecords = apiDetails?.aiAnalysis || (activeReview as { rawDetails?: ReviewDetails })?.rawDetails?.aiAnalysis || [];
+  type AiAnalysisEntry = {
+    ruleId?: string;
+    id?: string;
+    explanation?: string;
+    reason?: string;
+    assessment?: string;
+    remediation?: string;
+    suggestion?: string;
+    [key: string]: unknown;
+  };
+
+  type AiAnalysisRecord = {
+    provider?: string;
+    model?: string;
+    result?: {
+      findings?: unknown[];
+      improvements?: unknown[];
+    };
+  };
+
+  const aiRecords = useMemo<AiAnalysisRecord[]>(
+    () =>
+      (apiDetails?.aiAnalysis ||
+        (activeReview as { rawDetails?: ReviewDetails })?.rawDetails?.aiAnalysis ||
+        []) as AiAnalysisRecord[],
+    [apiDetails?.aiAnalysis, activeReview],
+  );
 
   const aiFinding = useMemo(() => {
     if (!rawFinding) return null;
+
     for (const record of aiRecords) {
       const findings = record.result?.findings;
+
       if (Array.isArray(findings)) {
-        const match = findings.find(
-          (item: any) =>
-            item.ruleId === rawFinding.ruleId ||
-            item.ruleId === rawFinding.title ||
-            item.id === rawFinding._id,
-        );
+        const match = findings.find((item: unknown): item is AiAnalysisEntry => {
+          if (!item || typeof item !== "object") return false;
+
+          const candidate = item as AiAnalysisEntry;
+
+          return (
+            candidate.ruleId === rawFinding.ruleId ||
+            candidate.ruleId === rawFinding.title ||
+            candidate.id === rawFinding._id
+          );
+        });
+
         if (match) return match;
       }
     }
+
     return null;
   }, [aiRecords, rawFinding]);
 
   const aiImprovement = useMemo(() => {
     if (!rawFinding) return null;
+
     for (const record of aiRecords) {
       const improvements = record.result?.improvements;
+
       if (Array.isArray(improvements)) {
-        const match = improvements.find((item: any) => item.ruleId === rawFinding.ruleId);
+        const match = improvements.find((item: unknown): item is AiAnalysisEntry => {
+          if (!item || typeof item !== "object") return false;
+
+          return (item as AiAnalysisEntry).ruleId === rawFinding.ruleId;
+        });
+
         if (match) return match;
       }
     }
+
     return null;
   }, [aiRecords, rawFinding]);
 
   const aiModelInfo = useMemo(() => {
     const rec = aiRecords.find((r) => r.provider || r.model);
+
     return rec ? { provider: rec.provider, model: rec.model } : null;
   }, [aiRecords]);
 
@@ -3074,7 +3146,10 @@ function FindingDetail() {
             Back to review result
           </Button>
           {targetReviewId && (
-            <Button onClick={() => fetchFindingDetailsFromApi(targetReviewId)} disabled={isCallingApi}>
+            <Button
+              onClick={() => fetchFindingDetailsFromApi(targetReviewId)}
+              disabled={isCallingApi}
+            >
               <RefreshCw className={cn("size-3 mr-1", isCallingApi && "animate-spin")} />
               Retry API call
             </Button>
@@ -3205,7 +3280,9 @@ function FindingDetail() {
             </div>
 
             <div className="mt-4 border-t border-border/60 pt-4">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</h3>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Description
+              </h3>
               <p className="mt-2 text-sm leading-6 text-foreground/90">{f.description}</p>
             </div>
           </section>
@@ -3287,7 +3364,8 @@ function FindingDetail() {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        const text = typeof fixDiff === "string" ? fixDiff : JSON.stringify(fixDiff, null, 2);
+                        const text =
+                          typeof fixDiff === "string" ? fixDiff : JSON.stringify(fixDiff, null, 2);
                         navigator.clipboard.writeText(text);
                         toast.success("Fix code copied to clipboard");
                       }}
@@ -3309,7 +3387,9 @@ function FindingDetail() {
                         height="100%"
                         theme="vs-dark"
                         language="typescript"
-                        value={typeof fixDiff === "string" ? fixDiff : JSON.stringify(fixDiff, null, 2)}
+                        value={
+                          typeof fixDiff === "string" ? fixDiff : JSON.stringify(fixDiff, null, 2)
+                        }
                         options={{
                           readOnly: true,
                           minimap: { enabled: false },
@@ -3451,15 +3531,21 @@ function FindingDetail() {
               <dl className="mt-3 space-y-2 text-[11px]">
                 <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Review Status</dt>
-                  <dd className="font-mono uppercase text-foreground">{apiDetails.review.status}</dd>
+                  <dd className="font-mono uppercase text-foreground">
+                    {apiDetails.review.status}
+                  </dd>
                 </div>
                 <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Review Score</dt>
-                  <dd className="font-mono font-semibold text-primary">{apiDetails.review.score ?? "--"}/100</dd>
+                  <dd className="font-mono font-semibold text-primary">
+                    {apiDetails.review.score ?? "--"}/100
+                  </dd>
                 </div>
                 <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Total Findings</dt>
-                  <dd className="font-mono text-foreground">{apiDetails.findings?.length ?? allFindings.length}</dd>
+                  <dd className="font-mono text-foreground">
+                    {apiDetails.findings?.length ?? allFindings.length}
+                  </dd>
                 </div>
               </dl>
             </div>

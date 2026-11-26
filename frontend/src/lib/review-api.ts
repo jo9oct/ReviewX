@@ -434,7 +434,9 @@ export const getGithubConnectUrlFn = createServerFn({ method: "GET" })
   .handler(async ({ data: token }) => {
     // Determine absolute backend URL for server-side fetch
     const backendUrl =
-      process.env["VITE_API_BASE_URL"] || process.env["VITE_API_URL"] || "http://localhost:5000/api/v1";
+      process.env["VITE_API_BASE_URL"] ||
+      process.env["VITE_API_URL"] ||
+      "http://localhost:5000/api/v1";
     const absoluteUrl = backendUrl.replace(/\/$/, "") + "/github/connect";
 
     // We run on the server (Nitro) where Node's fetch can read Location headers from manual redirects!
