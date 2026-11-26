@@ -6,13 +6,15 @@ import http from 'node:http';
 
 import express from 'express';
 
-import cors from 'cors';
-
 import cookieParser from 'cookie-parser';
 
 import passport from 'passport';
 
 import environment from './config/environment.js';
+import {
+  createCorsMiddleware,
+  resolveFrontendOrigin,
+} from './config/cors.config.js';
 
 import {
   connectDatabase,
@@ -74,19 +76,21 @@ app.use(
   securityMiddleware,
 );
 
-const frontendUrl = process.env.FRONTEND_URL?.trim();
-const frontendOrigin = frontendUrl
-  ? new URL(frontendUrl).origin
-  : undefined;
+const isProduction =
+  process.env.NODE_ENV === 'production' ||
+  process.env.RENDER === 'true' ||
+  Boolean(process.env.RENDER_SERVICE_ID);
+const frontendOrigin = resolveFrontendOrigin(
+  process.env.FRONTEND_URL,
+  isProduction,
+);
+
+process.stdout.write(
+  `CORS allowed origin configured from FRONTEND_URL: ${frontendOrigin}\n`,
+);
 
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, false);
-      return callback(null, origin === frontendOrigin);
-    },
-    credentials: true,
-  }),
+  createCorsMiddleware(frontendOrigin),
 );
 
 app.use(
