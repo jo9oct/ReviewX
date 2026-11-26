@@ -52,22 +52,12 @@ if (!["development", "test", "production"].includes(nodeEnv)) {
   );
 }
 
-const corsOrigins = getString(
-  "CORS_ORIGINS",
-  "http://localhost:5173"
-)
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
 export const env = Object.freeze({
   nodeEnv,
 
   port: getPositiveNumber("PORT", 5000),
 
   apiPrefix: getString("API_PREFIX", "/api"),
-
-  corsOrigins,
 
   maxJsonSize,
 

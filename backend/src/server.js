@@ -74,25 +74,16 @@ app.use(
   securityMiddleware,
 );
 
-const allowedOrigins = [
-  process.env.CORS_ORIGIN,
-  process.env.FRONTEND_URL,
-  process.env.FRONT_END_BASE_URL,
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-].filter(Boolean);
+const frontendUrl = process.env.FRONTEND_URL?.trim();
+const frontendOrigin = frontendUrl
+  ? new URL(frontendUrl).origin
+  : undefined;
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-        return callback(null, origin);
-      }
-      return callback(null, false);
+      if (!origin) return callback(null, false);
+      return callback(null, origin === frontendOrigin);
     },
     credentials: true,
   }),

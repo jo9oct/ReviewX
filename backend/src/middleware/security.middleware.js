@@ -2,8 +2,6 @@
 
 import crypto from 'node:crypto';
 
-import environment from '../config/environment.js';
-
 const createRequestId = () => {
   return crypto.randomUUID();
 };
@@ -25,31 +23,6 @@ const securityMiddleware = (req, res, next) => {
     'Content-Security-Policy',
     "default-src 'none'; frame-ancestors 'none'"
   );
-
-  const configuredOrigin = environment.security.corsOrigin;
-
-  if (configuredOrigin !== '*') {
-    res.setHeader('Access-Control-Allow-Origin', configuredOrigin);
-    res.setHeader('Vary', 'Origin');
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-  res.setHeader(
-    'Access-Control-Allow-Methods',
-    'GET,POST,PUT,PATCH,DELETE,OPTIONS'
-  );
-
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-Request-ID'
-  );
-
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
 
   return next();
 };

@@ -355,11 +355,6 @@ const environment = Object.freeze({
       false,
     ),
 
-    corsOrigin: normalizeString(
-      process.env.CORS_ORIGIN,
-      '*',
-    ),
-
     maxArchiveFiles: parseInteger(
       process.env.MAX_ARCHIVE_FILES,
       1000,
