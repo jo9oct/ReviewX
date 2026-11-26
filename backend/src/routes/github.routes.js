@@ -12,8 +12,14 @@ import {
   getGithubBranches,
   getGithubRepository,
 } from '../controllers/github.controller.js';
+import { startGithubLogin } from '../controllers/github-auth.controller.js';
 
 const router = Router();
+
+router.get(
+  '/auth',
+  startGithubLogin,
+);
 
 router.get(
   '/connect',

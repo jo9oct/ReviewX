@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import Auth from "../model/auth.model.js";
 
-const isAuthenticated = async (req, res, next) => {
+const isAuthenticated = async (req, res, next, { allowInactive = false } = {}) => {
   try {
     let token = null;
 
@@ -42,7 +42,7 @@ const isAuthenticated = async (req, res, next) => {
     }
 
     const userId = decoded.userID || decoded.userId || decoded.id || decoded.sub;
-    const user = await Auth.findById(userId).select("-password");
+    const user = await Auth.findById(userId).select("+password");
 
     if (!user) {
       return res.status(404).json({
@@ -68,7 +68,20 @@ const isAuthenticated = async (req, res, next) => {
       });
     }
 
-    if (user.status === "disabled" || user.status === "suspended" || user.isActive === false) {
+    const pendingVerification = allowInactive && user.status === "inactive";
+    if (user.status === "inactive" && !allowInactive) {
+      return res.status(403).json({
+        success: false,
+        message: "Please verify your email before accessing your account.",
+        error: { message: "Please verify your email before accessing your account.", code: "EMAIL_NOT_VERIFIED" },
+      });
+    }
+
+    if (
+      user.status === "disabled" ||
+      user.status === "suspended" ||
+      (user.isActive === false && !pendingVerification)
+    ) {
       return res.status(403).json({
         success: false,
         message: "Your account has been deactivated",
@@ -76,7 +89,13 @@ const isAuthenticated = async (req, res, next) => {
       });
     }
 
-    req.user = user;
+    const authenticatedUser = user.toObject({ transform: false });
+    const hasPassword = Boolean(authenticatedUser.password);
+    delete authenticatedUser.password;
+    delete authenticatedUser.passwordHash;
+    authenticatedUser.hasPassword = hasPassword;
+
+    req.user = authenticatedUser;
     req.user.id = user._id.toString();
     req.user.userId = user._id.toString();
     req.user._id = user._id;
@@ -100,4 +119,3 @@ const isAuthenticated = async (req, res, next) => {
 };
 
 export default isAuthenticated;
-

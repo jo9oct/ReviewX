@@ -6,14 +6,30 @@ services:
 
     command: ["node", "src/server.js"]
 
+    dns:
+      - ${DOCKER_DNS_PRIMARY:-1.1.1.1}
+      - ${DOCKER_DNS_SECONDARY:-8.8.8.8}
+
+    env_file:
+      - .env
+
     environment:
       NODE_ENV: ${NODE_ENV}
       APP_NAME: ${APP_NAME}
       APP_VERSION: ${APP_VERSION}
       HOST: ${HOST}
       PORT: ${PORT}
+      FEEDBACK_RECIPIENT_EMAIL: ${FEEDBACK_RECIPIENT_EMAIL}
 
       USER_TIER: ${USER_TIER}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-ReviewX}
+      SMTP_REPLY_TO_EMAIL: ${SMTP_REPLY_TO_EMAIL:-}
 
       MONGODB_URI: ${MONGODB_URI}
       MONGODB_SERVER_SELECTION_TIMEOUT_MS: ${MONGODB_SERVER_SELECTION_TIMEOUT_MS}
@@ -88,7 +104,8 @@ services:
       - "5000:5000"
 
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
     restart: unless-stopped
 
@@ -99,6 +116,13 @@ services:
 
     command: ["node", "worker.js"]
 
+    dns:
+      - ${DOCKER_DNS_PRIMARY:-1.1.1.1}
+      - ${DOCKER_DNS_SECONDARY:-8.8.8.8}
+
+    env_file:
+      - .env
+
     environment:
       NODE_ENV: ${NODE_ENV}
       APP_NAME: ${APP_NAME}
@@ -106,6 +130,14 @@ services:
       HOST: ${HOST}
 
       USER_TIER: ${USER_TIER}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-ReviewX}
+      SMTP_REPLY_TO_EMAIL: ${SMTP_REPLY_TO_EMAIL:-}
 
       MONGODB_URI: ${MONGODB_URI}
       MONGODB_SERVER_SELECTION_TIMEOUT_MS: ${MONGODB_SERVER_SELECTION_TIMEOUT_MS}
@@ -175,7 +207,8 @@ services:
       PAYMENT_CURRENCY: ${PAYMENT_CURRENCY}
 
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
     restart: unless-stopped
 
@@ -183,6 +216,13 @@ services:
     image: redis:8-alpine
 
     restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
 
     volumes:
       - redis_data:/data

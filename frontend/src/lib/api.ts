@@ -178,6 +178,8 @@ export interface AuthUser {
   name: string;
   email: string;
   role: "member" | "company_admin" | "platform_admin";
+  provider?: "local" | "google" | "github";
+  hasPassword?: boolean;
   company?: string | null;
   createdAt?: string;
 }
@@ -202,12 +204,18 @@ export class ApiClientError extends Error {
   }
 }
 
-const configuredApiUrl = (
+function normalizeApiOrigin(apiUrl: string): string {
+  return apiUrl
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/api\/v1$/, "");
+}
+
+const configuredApiUrl =
   import.meta.env["VITE_API_BASE_URL"] ||
   import.meta.env["VITE_API_URL"] ||
-  (import.meta.env.DEV ? "/api/v1" : "http://localhost:5000/api/v1")
-).replace(/\/$/, "");
-const configuredApiOrigin = configuredApiUrl.replace(/\/api\/v1$/, "");
+  (import.meta.env.DEV ? "/api/v1" : "http://localhost:5000/api/v1");
+const configuredApiOrigin = normalizeApiOrigin(configuredApiUrl);
 const API_ORIGIN = import.meta.env.DEV ? "" : configuredApiOrigin;
 const API_BASE_URL = `${API_ORIGIN}/api/v1`;
 
@@ -216,11 +224,11 @@ export function getApiBaseUrl(): string {
 }
 
 export function getApiOrigin(): string {
-  return (
+  return normalizeApiOrigin(
     import.meta.env["VITE_API_BASE_URL"] ||
-    import.meta.env["VITE_API_URL"] ||
-    "http://localhost:5000"
-  ).replace(/\/api\/v1$/, "").replace(/\/$/, "");
+      import.meta.env["VITE_API_URL"] ||
+      "http://localhost:5000",
+  );
 }
 
 function resolveApiUrl(path: string): string {
@@ -448,10 +456,16 @@ export async function getCurrentUser(): Promise<AuthUser> {
   return res.user;
 }
 
-export async function verifyEmail(verificationToken: string): Promise<AuthResponseData> {
+export async function verifyEmail(
+  verificationToken: string,
+  email?: string,
+): Promise<AuthResponseData> {
   const data = await request<AuthResponseData>("/api/v1/auth/verify", {
     method: "POST",
-    body: JSON.stringify({ verificationToken }),
+    body: JSON.stringify({
+      verificationToken,
+      ...(email ? { email } : {}),
+    }),
   });
   if (data.token) {
     setAuthToken(data.token);
@@ -459,30 +473,46 @@ export async function verifyEmail(verificationToken: string): Promise<AuthRespon
   return data;
 }
 
-export async function resendVerificationCode(): Promise<{ success: boolean; message: string }> {
+export async function resendVerificationCode(
+  email?: string,
+): Promise<{ success: boolean; message: string }> {
   return request<{ success: boolean; message: string }>("/api/v1/auth/resend-verification-code", {
     method: "POST",
+    ...(email ? { body: JSON.stringify({ email }) } : {}),
   });
 }
 
-export async function forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+export async function forgotPassword(
+  email: string,
+): Promise<{ success: boolean; message: string }> {
   return request<{ success: boolean; message: string }>("/api/v1/auth/forgot-password", {
     method: "POST",
     body: JSON.stringify({ email }),
   });
 }
 
+export async function submitFeedback(input: {
+  category: "general" | "bug" | "feature";
+  email?: string;
+  message: string;
+}): Promise<{ success: boolean; message: string }> {
+  return request<{ success: boolean; message: string }>("/feedback", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function resetPassword(params: {
   token: string;
   password: string;
-  confirmPassword?: string;
+  confirmPassword: string;
 }): Promise<{ success: boolean; message: string }> {
-  return request<{ success: boolean; message: string }>(`/api/v1/auth/reset-password/${params.token}`, {
+  return request<{ success: boolean; message: string }>("/api/v1/auth/reset-password", {
     method: "POST",
     body: JSON.stringify({
+      token: params.token,
       password: params.password,
       confirmPassword: params.confirmPassword,
-      token: params.token,
     }),
   });
 }
@@ -492,14 +522,17 @@ export async function updateProfile(data: {
   userName?: string;
   email?: string;
 }): Promise<{ success: boolean; message: string; user?: AuthUser }> {
-  return request<{ success: boolean; message: string; user?: AuthUser }>("/api/v1/auth/update-profile", {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
+  return request<{ success: boolean; message: string; user?: AuthUser }>(
+    "/api/v1/auth/update-profile",
+    {
+      method: "PUT",
+      body: JSON.stringify(data),
+    },
+  );
 }
 
 export async function changePassword(params: {
-  oldPassword: string;
+  oldPassword?: string;
   newPassword: string;
 }): Promise<{ success: boolean; message: string }> {
   return request<{ success: boolean; message: string }>("/api/v1/auth/change-password", {
@@ -508,7 +541,9 @@ export async function changePassword(params: {
   });
 }
 
-export async function deleteAccount(password: string): Promise<{ success: boolean; message: string }> {
+export async function deleteAccount(
+  password: string,
+): Promise<{ success: boolean; message: string }> {
   const res = await request<{ success: boolean; message: string }>("/api/v1/auth/remove-account", {
     method: "DELETE",
     body: JSON.stringify({ password }),
@@ -536,7 +571,7 @@ export async function getAuthUsers(): Promise<AuthUser[]> {
 
 export async function updateAuthUser(
   userId: string,
-  data: { role?: string; status?: string }
+  data: { role?: string; status?: string },
 ): Promise<{ success: boolean; user: AuthUser }> {
   return request<{ success: boolean; user: AuthUser }>(`/api/v1/auth/update-user/${userId}`, {
     method: "PUT",
@@ -544,7 +579,9 @@ export async function updateAuthUser(
   });
 }
 
-export async function deleteAuthUser(userId: string): Promise<{ success: boolean; message: string }> {
+export async function deleteAuthUser(
+  userId: string,
+): Promise<{ success: boolean; message: string }> {
   return request<{ success: boolean; message: string }>(`/api/v1/auth/delete-user/${userId}`, {
     method: "DELETE",
   });

@@ -28,10 +28,10 @@ export function TermsPage() {
           You are responsible for maintaining the confidentiality of your credentials and for all
           activity that occurs under your account. Notify us immediately at{" "}
           <a
-            href="mailto:security@reviewx.dev"
+            href="mailto:jops7326@gmail.com"
             className="font-medium text-foreground underline-offset-4 hover:underline"
           >
-            security@reviewx.dev
+            jops7326@gmail.com
           </a>{" "}
           if you suspect unauthorised access.
         </p>
@@ -110,10 +110,10 @@ export function TermsPage() {
         <p>
           Questions about these Terms?{" "}
           <a
-            href="mailto:legal@reviewx.dev"
+            href="mailto:jops7326@gmail.com"
             className="font-medium text-foreground underline-offset-4 hover:underline"
           >
-            legal@reviewx.dev
+            jops7326@gmail.com
           </a>
         </p>
       </LegalSection>

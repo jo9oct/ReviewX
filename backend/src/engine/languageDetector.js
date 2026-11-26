@@ -45,6 +45,53 @@ const detectLanguageFromPath = (
   );
 };
 
+const detectLanguageFromContent = (content) => {
+  if (typeof content !== 'string' || !content.trim()) {
+    return 'text';
+  }
+
+  const trimmed = content.trim();
+
+  // Python indicators (def/class without braces, imports, elif, print without semicolons)
+  if (
+    /(?:^|\n)\s*(?:def\s+\w+\s*\(|import\s+\w+|from\s+\w+\s+import|class\s+\w+.*:|if\s+__name__\s*==\s*['"]__main__['"]:|elif\s+|print\s*\()/.test(trimmed) &&
+    !/[{}]/.test(trimmed)
+  ) {
+    return 'python';
+  }
+
+  // JavaScript/TypeScript indicators
+  if (
+    /(?:^|\n)\s*(?:import\s+.*?\s+from\s+['"]|export\s+(?:default|const|function|class)|const\s+\w+\s*=|let\s+\w+\s*=|function\s+\w+\s*\(|console\.(?:log|debug|info|error)\s*\()/.test(trimmed)
+  ) {
+    return /:\s*(?:string|number|boolean|any|unknown)\b/.test(trimmed) ? 'typescript' : 'javascript';
+  }
+
+  // Java indicators
+  if (
+    /(?:^|\n)\s*(?:package\s+[\w.]+|import\s+java\.|public\s+class\s+\w+|public\s+static\s+void\s+main\s*\()/.test(trimmed)
+  ) {
+    return 'java';
+  }
+
+  // C / C++ indicators
+  if (/(?:^|\n)\s*#include\s*<[\w.]+>/.test(trimmed)) {
+    return 'cpp';
+  }
+
+  // Go indicators
+  if (/(?:^|\n)\s*(?:package\s+\w+|func\s+\w+\s*\()/.test(trimmed)) {
+    return 'go';
+  }
+
+  // PHP indicators
+  if (/<\?php/.test(trimmed)) {
+    return 'php';
+  }
+
+  return 'text';
+};
+
 const detectLanguage = (file) => {
   if (
     typeof file === 'string'
@@ -65,9 +112,22 @@ const detectLanguage = (file) => {
     });
   }
 
-  return detectLanguageFromPath(
+  const detectedFromPath = detectLanguageFromPath(
     file.path,
   );
+
+  if (
+    detectedFromPath === 'text' &&
+    typeof file.content === 'string' &&
+    file.content.trim()
+  ) {
+    const detectedFromContent = detectLanguageFromContent(file.content);
+    if (detectedFromContent !== 'text') {
+      return detectedFromContent;
+    }
+  }
+
+  return detectedFromPath;
 };
 
 const detectLanguages = (files) => {
@@ -82,14 +142,14 @@ const detectLanguages = (files) => {
 
   return files.map((file) => ({
     path: file.path,
-    language:
-      detectLanguageFromPath(file.path),
+    language: detectLanguage(file),
   }));
 };
 
 export {
   EXTENSION_LANGUAGE_MAP,
   detectLanguage,
+  detectLanguageFromContent,
   detectLanguageFromPath,
   detectLanguages,
 };

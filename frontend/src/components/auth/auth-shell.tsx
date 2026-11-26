@@ -7,11 +7,13 @@ export function AuthShell({
   eyebrow,
   title,
   description,
+  illustration,
   children,
 }: {
   eyebrow: string;
   title: string;
   description: string;
+  illustration?: "login" | "register";
   children: ReactNode;
 }) {
   return (
@@ -23,6 +25,13 @@ export function AuthShell({
           <h2 className="mt-5 text-4xl font-semibold leading-tight text-[oklch(0.94_0.006_255)]">
             One workspace for safer, clearer code.
           </h2>
+          {illustration && (
+            <img
+              src={illustration === "login" ? "/auth-login.svg" : "/auth-register.svg"}
+              alt=""
+              className="my-7 block max-h-52 w-full object-contain"
+            />
+          )}
           <div className="mt-8 space-y-4">
             {[
               "Security and reliability findings",

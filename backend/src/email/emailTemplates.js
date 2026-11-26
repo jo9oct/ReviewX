@@ -375,7 +375,7 @@ export const PASSWORD_RESET_REQUEST_TEMPLATE = `
                 <td class="hero">
                     <h1>Reset your password</h1>
                     <p>Hi {{first_name}},</p>
-                    <p>We received a request to reset the password for your CarRental account. Click the button below to choose a new password.</p>
+                    <p>We received a request to reset the password for your ReviewX account. Use the button below to choose a new password.</p>
                 </td>
                 </tr>
 
@@ -384,11 +384,9 @@ export const PASSWORD_RESET_REQUEST_TEMPLATE = `
                 <td class="button-wrap">
                     <a href="{{reset_link}}" class="btn" target="_blank" rel="noopener">Reset Password</a>
                     <p class="muted" style="margin-top:16px;">
-                    This link will expire in <strong>1 hour</strong> for your security.
+                    This link will expire in <strong>10 minutes</strong> for your security.
                     </p>
-                    <p class="muted">
-                    If the button doesn’t work, copy and paste this link into your browser:
-                    </p>
+                    <p class="muted">If the button doesn’t work, copy and paste this link into your browser:</p>
                     <p style="word-break:break-all;" class="muted">
                     <a href="{{reset_link}}" target="_blank" rel="noopener">{{reset_link}}</a>
                     </p>

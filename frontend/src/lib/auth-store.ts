@@ -20,6 +20,7 @@ export interface AuthState {
   token: string | null;
   status: AuthStatus;
   setUser: (user: User | null) => void;
+  setHasPassword: (hasPassword: boolean) => void;
   setToken: (token: string | null) => void;
   setStatus: (status: AuthStatus) => void;
   setAuth: (user: User, token: string) => void;
@@ -52,6 +53,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user });
     syncReviewStore(user);
   },
+
+  setHasPassword: (hasPassword) =>
+    set((state) => ({
+      user: state.user ? { ...state.user, hasPassword } : null,
+    })),
 
   setToken: (token) => {
     setAuthToken(token);

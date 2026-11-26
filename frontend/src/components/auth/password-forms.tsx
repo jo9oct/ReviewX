@@ -1,48 +1,29 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { CheckCircle2, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { AuthShell } from "./auth-shell";
+import { PasswordStrengthIndicator } from "./password-strength";
 import { Button, Input } from "@/components/primitives";
-import { getAuthToken, forgotPassword, resetPassword } from "@/lib/api";
-import { useAuthStore } from "@/lib/auth-store";
+import { forgotPassword, resetPassword } from "@/lib/api";
+import { getPasswordStrength } from "@/lib/password-strength";
 
 export function ForgotPasswordForm() {
-  const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
-
-  useEffect(() => {
-    const token = getAuthToken();
-    if (token || user) {
-      void (async () => {
-        let activeUser = user;
-        if (!activeUser && token) {
-          try {
-            activeUser = await useAuthStore.getState().initialize();
-          } catch {
-            return;
-          }
-        }
-        if (activeUser) {
-          void navigate({ to: "/dashboard" });
-        }
-      })();
-    }
-  }, [navigate, user]);
+  const [requested, setRequested] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     try {
-      if (!email.trim()) throw new Error("Please enter your email address.");
-      await forgotPassword(email.trim());
-      setSent(true);
-      toast.success("Password reset instructions sent.");
+      const cleanEmail = email.trim().toLowerCase();
+      await forgotPassword(cleanEmail);
+      setEmail(cleanEmail);
+      setRequested(true);
+      toast.success("If an account exists for that email, a reset link has been sent.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to send reset link");
+      toast.error(error instanceof Error ? error.message : "Unable to request a reset code.");
     } finally {
       setBusy(false);
     }
@@ -51,32 +32,41 @@ export function ForgotPasswordForm() {
   return (
     <AuthShell
       eyebrow="Account recovery"
-      title={sent ? "Check your inbox" : "Reset your password"}
+      title="Reset your password"
       description={
-        sent
-          ? `If an account exists for ${email}, a secure reset link is on its way.`
-          : "Enter your email and we’ll send you a secure reset link."
+        requested
+          ? "Check your email for a password reset link."
+          : "Enter your account email. If it is registered, we’ll send a password reset link."
       }
     >
-      {sent ? (
-        <div className="space-y-5">
-          <div className="flex items-center gap-3 border border-border bg-surface p-4 text-sm">
-            <CheckCircle2 className="size-5 text-success" />
-            Reset instructions sent
-          </div>
-          <Button asChild variant="outline" className="w-full">
-            <Link to="/auth">Return to sign in</Link>
-          </Button>
+      {requested ? (
+        <div className="space-y-4 text-center text-sm">
+          <p>
+            If an account exists for <strong>{email}</strong>, a reset link has been sent.
+          </p>
+          <button
+            type="button"
+            className="text-primary hover:underline"
+            onClick={() => setRequested(false)}
+          >
+            Use a different email
+          </button>
+          <p>
+            <Link to="/auth" className="text-muted-foreground hover:text-foreground">
+              Back to sign in
+            </Link>
+          </p>
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-4">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium">Work email</span>
+            <span className="mb-1.5 block text-xs font-medium">Email address</span>
             <Input
               required
               type="email"
+              autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(event) => setEmail(event.target.value)}
               placeholder="you@company.com"
             />
           </label>
@@ -84,82 +74,54 @@ export function ForgotPasswordForm() {
             {busy && <LoaderCircle className="animate-spin" />}
             Send reset link
           </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            Remembered your password?{" "}
+            <Link to="/auth" className="text-primary hover:underline">
+              Sign in
+            </Link>
+          </p>
         </form>
       )}
     </AuthShell>
   );
 }
 
-export function ResetPasswordForm({ token: initialToken }: { token?: string | undefined }) {
+export function ResetPasswordForm({ token }: { token?: string | undefined }) {
   const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
-  const [tokenInput, setTokenInput] = useState(initialToken || "");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (initialToken) {
-      setTokenInput(initialToken);
-    } else if (typeof window !== "undefined") {
-      const searchParams = new URLSearchParams(window.location.search);
-      const urlToken = searchParams.get("token");
-      if (urlToken) {
-        setTokenInput(urlToken);
-      } else {
-        const parts = window.location.pathname.split("/");
-        const lastPart = parts[parts.length - 1];
-        if (lastPart && lastPart !== "reset-password") {
-          setTokenInput(lastPart);
-        }
-      }
-    }
-  }, [initialToken]);
-
-  useEffect(() => {
-    const token = getAuthToken();
-    if (token || user) {
-      void (async () => {
-        let activeUser = user;
-        if (!activeUser && token) {
-          try {
-            activeUser = await useAuthStore.getState().initialize();
-          } catch {
-            return;
-          }
-        }
-        if (activeUser) {
-          void navigate({ to: "/dashboard" });
-        }
-      })();
-    }
-  }, [navigate, user]);
-
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!tokenInput.trim()) {
-      toast.error("Reset token is required");
+    if (!token) {
+      toast.error("This password reset link is invalid or expired. Request a new one.");
       return;
     }
     if (password !== confirm) {
-      toast.error("Passwords do not match");
+      toast.error("Passwords do not match.");
       return;
     }
     if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
+      toast.error("Password must be at least 8 characters.");
       return;
     }
+    if (getPasswordStrength(password) === "weak") {
+      toast.error("Password is weak. Use at least 8 characters and a mix of character types.");
+      return;
+    }
+
     setBusy(true);
     try {
       await resetPassword({
-        token: tokenInput.trim(),
+        token: token.trim(),
         password,
         confirmPassword: confirm,
       });
-      toast.success("Password updated successfully! Please sign in.");
+      toast.success("Password reset successfully. Please sign in.");
       await navigate({ to: "/auth" });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update password");
+      toast.error(error instanceof Error ? error.message : "Unable to reset password.");
     } finally {
       setBusy(false);
     }
@@ -167,50 +129,63 @@ export function ResetPasswordForm({ token: initialToken }: { token?: string | un
 
   return (
     <AuthShell
-      eyebrow="Choose a new password"
-      title="Secure your account"
-      description="Use at least eight characters and avoid a password you use elsewhere."
+      eyebrow="Account recovery"
+      title="Choose a new password"
+      description={
+        token
+          ? "Choose a new password. This reset link expires after 10 minutes."
+          : "This password reset link is missing or invalid. Request a new link to continue."
+      }
     >
-      <form onSubmit={submit} className="space-y-4">
-        {!initialToken && (
+      {token ? (
+        <form onSubmit={submit} className="space-y-4">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium">Reset token</span>
+            <span className="mb-1.5 block text-xs font-medium">New password</span>
             <Input
               required
-              type="text"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder="Paste token from email"
+              minLength={8}
+              maxLength={128}
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
             />
           </label>
-        )}
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium">New password</span>
-          <Input
-            required
-            minLength={8}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium">Confirm password</span>
-          <Input
-            required
-            minLength={8}
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            autoComplete="new-password"
-          />
-        </label>
-        <Button type="submit" className="w-full" disabled={busy}>
-          {busy && <LoaderCircle className="animate-spin" />}
-          Update password
-        </Button>
-      </form>
+          <PasswordStrengthIndicator password={password} />
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium">Confirm new password</span>
+            <Input
+              required
+              minLength={8}
+              maxLength={128}
+              type="password"
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(event) => setConfirm(event.target.value)}
+            />
+          </label>
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy && <LoaderCircle className="animate-spin" />}
+            Reset password
+          </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            <Link to="/auth" className="text-muted-foreground hover:text-foreground">
+              Back to sign in
+            </Link>
+          </p>
+        </form>
+      ) : (
+        <div className="space-y-4 text-center text-sm">
+          <Link to="/forgot-password" className="text-primary hover:underline">
+            Request a new reset link
+          </Link>
+          <p>
+            <Link to="/auth" className="text-muted-foreground hover:text-foreground">
+              Back to sign in
+            </Link>
+          </p>
+        </div>
+      )}
     </AuthShell>
   );
 }

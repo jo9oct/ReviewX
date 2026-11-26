@@ -1,5 +1,6 @@
 import {
-  detectLanguageFromPath
+  detectLanguage,
+  detectLanguageFromPath,
 } from '../engine/languageDetector.js';
 
 import {
@@ -62,9 +63,8 @@ const parseFile = (
   }
 
   const language =
-    detectLanguageFromPath(
-      file.path
-    );
+    file.language ||
+    detectLanguage(file);
 
   if (!hasLanguage(language)) {
     return {

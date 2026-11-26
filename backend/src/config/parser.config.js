@@ -4,6 +4,7 @@ const parserConfig = Object.freeze({
   supportedLanguages: Object.freeze([
     'javascript',
     'typescript',
+    'tsx',
     'python',
     'java',
     'c',

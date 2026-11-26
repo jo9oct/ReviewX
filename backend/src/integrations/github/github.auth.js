@@ -42,6 +42,7 @@ const getGithubAuthorizationHeaders = (
 
 const createGithubAuthorizationUrl = (
   state,
+  scopes = githubOAuthScopes,
 ) => {
   if (!isGithubConfigured()) {
     const error = new Error(
@@ -90,7 +91,7 @@ const createGithubAuthorizationUrl = (
 
   authorizationUrl.searchParams.set(
     'scope',
-    githubOAuthScopes.join(' '),
+    scopes.join(' '),
   );
 
   authorizationUrl.searchParams.set(

@@ -344,8 +344,10 @@ bootstrap().catch(
       error,
     );
 
-    process.exit(
-      1,
-    );
+    setTimeout(() => {
+      process.exit(
+        1,
+      );
+    }, 5000);
   },
 );

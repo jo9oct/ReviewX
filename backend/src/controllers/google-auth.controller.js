@@ -92,7 +92,7 @@ export const googleCallback = async (req, res) => {
   const frontendURL =
     process.env.FRONTEND_URL || process.env.FRONT_END_BASE_URL || "http://localhost:5173";
 
-  return res.redirect(`${frontendURL}/auth_/callback?token=${refreshToken}`);
+  return res.redirect(`${frontendURL}/auth/callback?token=${refreshToken}`);
 };
 
 export const Profile = (req, res) => {
@@ -109,4 +109,3 @@ export default {
   Profile,
   fail,
 };
-

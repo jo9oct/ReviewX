@@ -1,10 +1,13 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Eye, EyeOff, LoaderCircle, AlertCircle } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Github, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Input } from "@/components/primitives";
+import { PasswordStrengthIndicator } from "./password-strength";
 import { AuthShell } from "./auth-shell";
 import { safeNext } from "@/lib/auth";
+import { STORAGE_KEYS } from "@/lib/constants";
+import { getPasswordStrength } from "@/lib/password-strength";
 import {
   loginUser,
   registerUser,
@@ -74,6 +77,11 @@ export function AuthForm({
       return;
     }
 
+    if (mode === "register" && getPasswordStrength(password) === "weak") {
+      setFormError("Password is weak. Use at least 8 characters and a mix of character types.");
+      return;
+    }
+
     if (mode === "register" && password.length > 128) {
       setFormError("Password must be 128 characters or fewer.");
       return;
@@ -82,21 +90,19 @@ export function AuthForm({
     setBusy(true);
     try {
       if (mode === "register") {
-        const payload = await registerUser({
+        await registerUser({
           name: cleanName,
           email: cleanEmail,
           password,
         });
 
-        if (payload.token) {
-          setAuthToken(payload.token);
-        }
-
-        const user = await getCurrentUser();
-        useAuthStore.getState().setAuth(user, payload.token);
-
-        toast.success("Account created successfully!");
-        await navigate({ to: destination });
+        toast.success(
+          "Account created! Please enter the 6-digit verification code sent to your email.",
+        );
+        await navigate({
+          to: "/verify",
+          search: { email: cleanEmail },
+        });
         return;
       }
 
@@ -119,6 +125,19 @@ export function AuthForm({
       let message = "Unable to complete request. Please try again.";
 
       if (error instanceof ApiClientError) {
+        if (
+          error.statusCode === 403 &&
+          (error.code === "EMAIL_NOT_VERIFIED" ||
+            error.message.toLowerCase().includes("verify your email"))
+        ) {
+          toast.error("Please verify your email before signing in.");
+          await navigate({
+            to: "/verify",
+            search: { email: cleanEmail },
+          });
+          return;
+        }
+
         if (error.statusCode === 401) {
           message = "Invalid email or password. Please verify your credentials.";
         } else if (error.statusCode === 409) {
@@ -140,13 +159,21 @@ export function AuthForm({
   }
 
   function continueWithGoogle() {
+    sessionStorage.setItem(STORAGE_KEYS.AUTH_NEXT, destination);
     const origin = getApiOrigin();
     window.location.href = `${origin}/auth/google`;
+  }
+
+  function continueWithGithub() {
+    sessionStorage.setItem(STORAGE_KEYS.AUTH_NEXT, destination);
+    const origin = getApiOrigin();
+    window.location.href = `${origin}/api/v1/github/auth`;
   }
 
   const isRegister = mode === "register";
   return (
     <AuthShell
+      illustration={mode}
       eyebrow={isRegister ? "Create account" : "Welcome back"}
       title={isRegister ? "Start reviewing with ReviewX" : "Sign in to your workspace"}
       description={
@@ -155,8 +182,24 @@ export function AuthForm({
           : "Continue to your reviews, findings, and team workspace."
       }
     >
-      <Button variant="outline" className="w-full" onClick={continueWithGoogle} disabled={busy}>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={continueWithGoogle}
+        disabled={busy}
+      >
         <span className="font-semibold">G</span> Continue with Google
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-2 w-full"
+        onClick={continueWithGithub}
+        disabled={busy}
+      >
+        <Github className="size-4" aria-hidden="true" />
+        Continue with GitHub
       </Button>
       <div className="my-6 flex items-center gap-3 text-[10px] uppercase text-muted-foreground">
         <span className="h-px flex-1 bg-border" />
@@ -236,6 +279,7 @@ export function AuthForm({
             </button>
           </div>
         </Field>
+        {isRegister && <PasswordStrengthIndicator password={password} />}
         <Button className="w-full" type="submit" disabled={busy}>
           {busy && <LoaderCircle className="animate-spin" />}
           {isRegister ? "Create account" : "Sign in"}

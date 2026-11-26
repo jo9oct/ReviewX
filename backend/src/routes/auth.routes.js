@@ -37,18 +37,36 @@ const authLimiter = rateLimit({
   skip: () => process.env.NODE_ENV === "test",
 });
 
+const handleResendAuth = (req, res, next) => {
+  if (req.body?.email || req.query?.email) {
+    return next();
+  }
+  return isAuthenticatedForVerification(req, res, next);
+};
+
 router.post("/register", authLimiter, AuthRegister);
-router.post("/verify", VerifyAuth);
+router.post("/verify", authLimiter, VerifyAuth);
 router.post("/login", authLimiter, AuthLogin);
 router.get("/check-auth", isAuthenticated, checkAuth);
 router.get("/me", isAuthenticated, getMe);
 router.post("/logout", isAuthenticated, Logout);
 router.delete("/remove-account", isAuthenticated, deleteAccount);
-router.post("/resend-verification-code", isAuthenticated, resendVerificationEmail);
-router.post("/forget-password", forgotPassword);
-router.post("/forgot-password", forgotPassword);
-router.post("/reset-password", resetPassword);
-router.post("/reset-password/:token", resetPassword);
+router.post(
+  "/resend-verification-code",
+  authLimiter,
+  handleResendAuth,
+  resendVerificationEmail,
+);
+router.post(
+  "/resend-verification",
+  authLimiter,
+  handleResendAuth,
+  resendVerificationEmail,
+);
+router.post("/forget-password", authLimiter, forgotPassword);
+router.post("/forgot-password", authLimiter, forgotPassword);
+router.post("/reset-password", authLimiter, resetPassword);
+router.post("/reset-password/:token", authLimiter, resetPassword);
 router.put("/update-profile", isAuthenticated, updateProfile);
 router.put("/update-profile/:_id", isAuthenticated, updateProfile);
 router.post("/change-password", isAuthenticated, changePassword);

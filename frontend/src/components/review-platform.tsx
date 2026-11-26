@@ -26,7 +26,7 @@ import {
   deleteAccount,
   deleteAuthUser,
 } from "@/lib/api";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
 import {
   Activity,
@@ -40,10 +40,13 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
   Clock3,
   Code2,
   Command,
+  Copy,
   CreditCard,
   Download,
   FileCode2,
@@ -89,6 +92,9 @@ import {
   SelectValue,
   Switch,
 } from "@/components/primitives";
+import { PasswordStrengthIndicator } from "@/components/auth/password-strength";
+import { getPasswordStrength } from "@/lib/password-strength";
+import { SUPPORTED_LANGUAGES } from "@/lib/languages";
 import {
   createReview,
   createReport,
@@ -164,7 +170,52 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function mapBackendFindingToUi(bf: ReviewFinding, index: number): Finding {
+interface AnyFinding {
+  _id?: string;
+  id?: string;
+  ruleId?: string;
+  title?: string;
+  description?: string;
+  severity?: string;
+  confidence?: number | string | null;
+  category?: string;
+  file?: string | null;
+  filePath?: string | null;
+  line?: number | string | null;
+  lineStart?: number | null;
+  lineEnd?: number | null;
+  status?: string;
+  code?: string | null;
+  snippet?: string | null;
+  remediation?: unknown;
+  recommendation?: string | null;
+  suggestedFix?: string;
+  fix?: string;
+  cwe?: string;
+  cweId?: string;
+  owasp?: string;
+  explanation?: string;
+  aiAssessment?: string;
+  assessment?: string;
+  aiAnalysis?: {
+    explanation?: string;
+    fix?: string;
+    improvedCode?: string;
+  };
+  evidence?: {
+    snippet?: string;
+    location?: {
+      startLine?: number | null;
+    };
+  };
+  location?: {
+    startLine?: number | null;
+  };
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+function mapBackendFindingToUi(bf: AnyFinding, index: number): Finding {
   const sevMap: Record<string, Severity> = {
     critical: "CRITICAL",
     high: "HIGH",
@@ -177,16 +228,24 @@ function mapBackendFindingToUi(bf: ReviewFinding, index: number): Finding {
     medium: 80,
     low: 60,
   };
+  const filePath = bf.filePath || bf.file || "src/code.ts";
+  const lineStart = bf.lineStart ?? bf.line ?? 1;
+  const rawConf = String(bf.confidence ?? "").toLowerCase();
+  const confidence =
+    typeof bf.confidence === "number" && Number.isFinite(bf.confidence)
+      ? bf.confidence
+      : confMap[rawConf] || 85;
+
   return {
     id: bf._id || bf.id || `FND-${1042 + index}`,
     title: bf.title || bf.ruleId || "Security Finding",
-    severity: sevMap[bf.severity?.toLowerCase()] || "MEDIUM",
-    category: bf.category ? bf.category.charAt(0).toUpperCase() + bf.category.slice(1) : "Security",
-    file: bf.file || "src/code.ts",
-    line: bf.line ? String(bf.line) : "1",
-    confidence: confMap[bf.confidence?.toLowerCase()] || 90,
-    status: bf.status ? bf.status.charAt(0).toUpperCase() + bf.status.slice(1) : "Detected",
-    description: bf.description || bf.title,
+    severity: sevMap[String(bf.severity ?? "").toLowerCase()] || "MEDIUM",
+    category: bf.category ? String(bf.category).charAt(0).toUpperCase() + String(bf.category).slice(1) : "Security",
+    file: filePath,
+    line: String(lineStart),
+    confidence,
+    status: bf.status ? String(bf.status).charAt(0).toUpperCase() + String(bf.status).slice(1) : "Detected",
+    description: bf.description || bf.title || "",
   };
 }
 
@@ -202,13 +261,17 @@ function toUiReviewResult(details: ReviewDetails): ReviewResult {
       })
     | null;
   const findings: ReviewFinding[] = details.findings.map((finding) => {
-    const category = String(finding.category ?? "quality").toLowerCase();
-    const confidence = String(finding.confidence ?? "medium").toLowerCase();
-    const status = String(finding.status ?? "detected").toLowerCase();
-    const severity = String(finding.severity ?? "info").toLowerCase();
+    const f = finding as AnyFinding;
+    const category = String(f.category ?? "quality").toLowerCase();
+    const confidence = String(f.confidence ?? "medium").toLowerCase();
+    const status = String(f.status ?? "detected").toLowerCase();
+    const severity = String(f.severity ?? "info").toLowerCase();
+    const filePath = f.filePath || f.file || null;
+    const lineStart = typeof f.lineStart === "number" ? f.lineStart : typeof f.line === "number" ? f.line : null;
+
     return {
-      ...(finding._id ? { _id: finding._id } : {}),
-      ...(finding.id ? { id: finding.id } : {}),
+      ...(f._id ? { _id: String(f._id) } : {}),
+      ...(f.id ? { id: String(f.id) } : {}),
       category:
         category === "security" ||
         category === "bug" ||
@@ -216,10 +279,10 @@ function toUiReviewResult(details: ReviewDetails): ReviewResult {
         category === "performance"
           ? category
           : "quality",
-      type: finding.ruleId ?? category,
-      ruleId: finding.ruleId ?? "review-finding",
-      title: finding.title ?? finding.ruleId ?? "Review finding",
-      description: finding.description ?? "",
+      type: f.ruleId ?? category,
+      ruleId: f.ruleId ?? "review-finding",
+      title: f.title ?? f.ruleId ?? "Review finding",
+      description: f.description ?? "",
       severity: ["critical", "high", "medium", "low", "info"].includes(severity)
         ? (severity as ReviewFinding["severity"])
         : "info",
@@ -227,15 +290,21 @@ function toUiReviewResult(details: ReviewDetails): ReviewResult {
       status: ["detected", "verified", "false_positive", "accepted", "resolved"].includes(status)
         ? (status as ReviewFinding["status"])
         : "detected",
-      file: finding.filePath ?? null,
-      line: finding.lineStart ?? null,
+      file: filePath,
+      line: lineStart,
       column: null,
-      code: null,
-      recommendation: finding.remediation ?? null,
+      code: f.code ?? null,
+      ...(f.snippet ? { snippet: String(f.snippet) } : {}),
+      recommendation: (typeof f.remediation === "string" ? f.remediation : f.recommendation) ?? null,
       analyzer: "backend",
       fingerprint: String(
-        finding._id ?? finding.id ?? `${reviewId}-${finding.ruleId ?? "finding"}`,
+        f._id ?? f.id ?? `${reviewId}-${f.ruleId ?? "finding"}`,
       ),
+      ...(lineStart !== null ? { location: { startLine: lineStart } } : {}),
+      ...(f.snippet ? { evidence: { snippet: String(f.snippet) } } : {}),
+      ...(f.cwe ? { cwe: f.cwe } : {}),
+      ...(f.owasp ? { owasp: f.owasp } : {}),
+      ...(typeof f.remediation === "string" ? { suggestedFix: f.remediation } : {}),
     };
   });
   const countSeverity = (severity: string) =>
@@ -2084,18 +2153,11 @@ function NewReview() {
                     value={language}
                     onValueChange={(val) => {
                       setLanguage(val);
-                      const ext =
-                        val === "python"
-                          ? "py"
-                          : val === "javascript"
-                            ? "js"
-                            : val === "java"
-                              ? "java"
-                              : val === "php"
-                                ? "php"
-                                : "ts";
+                      const selectedLanguage = SUPPORTED_LANGUAGES.find(
+                        (item) => item.value === val,
+                      );
                       if (filename.startsWith("src/code.")) {
-                        setFilename(`src/code.${ext}`);
+                        setFilename(`src/code.${selectedLanguage?.extension ?? "txt"}`);
                       }
                     }}
                   >
@@ -2103,11 +2165,11 @@ function NewReview() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="typescript">TypeScript</SelectItem>
-                      <SelectItem value="javascript">JavaScript</SelectItem>
-                      <SelectItem value="python">Python</SelectItem>
-                      <SelectItem value="java">Java</SelectItem>
-                      <SelectItem value="php">c++</SelectItem>
+                      {SUPPORTED_LANGUAGES.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   {sourceMode === "upload" && (
@@ -2128,7 +2190,7 @@ function NewReview() {
                 >
                   <Editor
                     height="100%"
-                    language={language}
+                    language={language === "tsx" ? "typescript" : language}
                     value={code}
                     onChange={(v) => setCode(v ?? "")}
                     theme="vs-dark"
@@ -2648,25 +2710,73 @@ function SummaryCount({ n, label, s }: { n: string; label: string; s: Severity }
   );
 }
 
+const RULE_SECURITY_STANDARDS: Record<string, { cwe?: string; owasp?: string }> = {
+  "sql-injection": { cwe: "CWE-89 (SQL Injection)", owasp: "A03:2021 - Injection" },
+  "sqli": { cwe: "CWE-89 (SQL Injection)", owasp: "A03:2021 - Injection" },
+  "xss": { cwe: "CWE-79 (Cross-site Scripting)", owasp: "A03:2021 - Injection" },
+  "cross-site-scripting": { cwe: "CWE-79 (Cross-site Scripting)", owasp: "A03:2021 - Injection" },
+  "command-injection": { cwe: "CWE-78 (OS Command Injection)", owasp: "A03:2021 - Injection" },
+  "path-traversal": { cwe: "CWE-22 (Path Traversal)", owasp: "A01:2021 - Broken Access Control" },
+  "hardcoded-credentials": { cwe: "CWE-798 (Hard-coded Credentials)", owasp: "A07:2021 - Identification & Auth Failures" },
+  "insecure-deserialization": { cwe: "CWE-502 (Insecure Deserialization)", owasp: "A08:2021 - Software & Data Integrity Failures" },
+  "csrf": { cwe: "CWE-352 (Cross-Site Request Forgery)", owasp: "A01:2021 - Broken Access Control" },
+  "ssrf": { cwe: "CWE-918 (Server-Side Request Forgery)", owasp: "A10:2021 - Server-Side Request Forgery" },
+  "broken-auth": { cwe: "CWE-287 (Improper Authentication)", owasp: "A07:2021 - Identification & Auth Failures" },
+  "security-misconfiguration": { cwe: "CWE-16 (Configuration)", owasp: "A05:2021 - Security Misconfiguration" },
+  "crypto-weakness": { cwe: "CWE-327 (Broken/Risky Crypto Algorithm)", owasp: "A02:2021 - Cryptographic Failures" },
+  "prototype-pollution": { cwe: "CWE-1321 (Prototype Pollution)", owasp: "A03:2021 - Injection" },
+  "eval-usage": { cwe: "CWE-95 (Improper Neutralization of Directives in Evaluated Code)", owasp: "A03:2021 - Injection" },
+  "dos": { cwe: "CWE-400 (Uncontrolled Resource Consumption)", owasp: "A04:2021 - Insecure Design" },
+  "rate-limit": { cwe: "CWE-799 (Improper Control of Interaction Frequency)", owasp: "A04:2021 - Insecure Design" },
+};
+
 function CodeEvidence({
   rawFinding,
   finding,
 }: {
-  rawFinding: ReviewFinding | undefined;
+  rawFinding: AnyFinding | undefined;
   finding: Finding;
 }) {
-  const snippet = rawFinding?.evidence?.snippet || rawFinding?.snippet;
-  const startLine = Number(rawFinding?.location?.startLine || finding.line || 1);
+  const [copied, setCopied] = useState(false);
+  const snippet =
+    rawFinding?.snippet ||
+    rawFinding?.evidence?.snippet ||
+    rawFinding?.code ||
+    null;
+  const startLine = Number(rawFinding?.lineStart || rawFinding?.location?.startLine || finding.line || 1);
+  const endLine = Number(rawFinding?.lineEnd || startLine);
+  const filePath = rawFinding?.filePath || rawFinding?.file || finding.file || "Source code";
+
+  const handleCopyPath = () => {
+    if (filePath) {
+      navigator.clipboard.writeText(filePath);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success("File path copied to clipboard");
+    }
+  };
 
   if (snippet) {
     const lines = String(snippet).split("\n");
     return (
       <section className="panel overflow-hidden">
-        <div className="border-b border-border px-4 py-3 text-xs font-semibold">Offending code</div>
-        <div className="bg-editor py-3 font-mono text-xs">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <FileCode2 className="size-4 text-muted-foreground" />
+            <span className="font-mono text-xs font-semibold">{filePath}</span>
+            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              {startLine === endLine ? `Line ${startLine}` : `Lines ${startLine}–${endLine}`}
+            </span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={handleCopyPath} className="h-7 text-xs">
+            {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
+            {copied ? "Copied" : "Copy path"}
+          </Button>
+        </div>
+        <div className="bg-editor py-3 font-mono text-xs overflow-x-auto">
           {lines.map((lineText: string, idx: number) => (
             <div key={idx} className="code-line code-critical">
-              <span>{startLine + idx}</span>
+              <span className="select-none text-muted-foreground/60">{startLine + idx}</span>
               <code> {lineText}</code>
             </div>
           ))}
@@ -2677,168 +2787,574 @@ function CodeEvidence({
 
   return (
     <section className="panel overflow-hidden">
-      <div className="border-b border-border px-4 py-3 text-xs font-semibold">Code location</div>
-      <div className="bg-editor px-4 py-3 font-mono text-xs text-muted-foreground">
-        <span>
-          {finding.file} : line {finding.line}
-        </span>
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center gap-2">
+          <FileCode2 className="size-4 text-primary" />
+          <h2 className="text-xs font-semibold">Code Location</h2>
+        </div>
+        <Button variant="ghost" size="sm" onClick={handleCopyPath} className="h-7 text-xs">
+          {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
+          {copied ? "Copied" : "Copy path"}
+        </Button>
+      </div>
+      <div className="bg-editor/50 p-4 font-mono text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border/60 bg-background/50 p-3">
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">File:</span>
+            <span className="font-medium text-foreground">{filePath}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">Location:</span>
+            <span className="rounded bg-primary/10 px-2 py-0.5 font-semibold text-primary">
+              {startLine === endLine ? `Line ${startLine}` : `Lines ${startLine}–${endLine}`}
+            </span>
+          </div>
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Flagged during automated static code inspection. Refer to the file location and line numbers above.
+        </p>
       </div>
     </section>
   );
 }
 
 function FindingDetail() {
-  const { selectedFinding, setView, findingStatuses, setFindingStatus, activeReview } =
-    useReviewStore(
-      useShallow((state) => ({
-        selectedFinding: state.selectedFinding,
-        setView: state.setView,
-        findingStatuses: state.findingStatuses,
-        setFindingStatus: state.setFindingStatus,
-        activeReview: state.activeReview,
-      })),
-    );
-  const allFindings = useMemo(() => {
+  const {
+    selectedFinding,
+    setSelectedFinding,
+    setView,
+    findingStatuses,
+    setFindingStatus,
+    activeReview,
+    activeReviewId,
+    setActiveReview,
+  } = useReviewStore(
+    useShallow((state) => ({
+      selectedFinding: state.selectedFinding,
+      setSelectedFinding: state.setSelectedFinding,
+      setView: state.setView,
+      findingStatuses: state.findingStatuses,
+      setFindingStatus: state.setFindingStatus,
+      activeReview: state.activeReview,
+      activeReviewId: state.activeReviewId,
+      setActiveReview: state.setActiveReview,
+    })),
+  );
+
+  const [apiDetails, setApiDetails] = useState<ReviewDetails | null>(null);
+  const [isCallingApi, setIsCallingApi] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState(false);
+
+  const targetReviewId =
+    activeReview?.reviewId ||
+    activeReviewId ||
+    (typeof window !== "undefined" ? sessionStorage.getItem(STORAGE_KEYS.ACTIVE_REVIEW_ID) : null);
+
+  // Function to call the backend API for full finding and review details
+  const fetchFindingDetailsFromApi = useCallback(
+    async (reviewId: string) => {
+      if (!reviewId) return;
+      setIsCallingApi(true);
+      setApiError(null);
+      try {
+        const details = await getReviewDetails(reviewId);
+        setApiDetails(details);
+        if (details.review.status === "completed" || details.review.status === "failed") {
+          setActiveReview(toUiReviewResult(details));
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to fetch finding details from API";
+        setApiError(msg);
+      } finally {
+        setIsCallingApi(false);
+      }
+    },
+    [setActiveReview],
+  );
+
+  // Call the API on mount or when targetReviewId changes
+  useEffect(() => {
+    if (targetReviewId) {
+      fetchFindingDetailsFromApi(targetReviewId);
+    } else {
+      setIsCallingApi(true);
+      listAllReviews(10, 0)
+        .then((res) => {
+          const reviews = res?.reviews;
+          if (reviews && reviews.length > 0) {
+            const first = reviews[0];
+            const revId = first?.reviewId || first?.id || (first as { _id?: string })?._id;
+            if (revId) {
+              fetchFindingDetailsFromApi(revId);
+            }
+          }
+        })
+        .catch((err) => {
+          setApiError(err instanceof Error ? err.message : "Could not load reviews");
+        })
+        .finally(() => {
+          setIsCallingApi(false);
+        });
+    }
+  }, [targetReviewId, fetchFindingDetailsFromApi]);
+
+  // Combined list of findings: prefer fresh apiDetails, then activeReview
+  const rawFindingsList = useMemo<AnyFinding[]>(() => {
+    if (apiDetails?.findings && apiDetails.findings.length > 0) {
+      return apiDetails.findings as AnyFinding[];
+    }
     if (activeReview?.findings && activeReview.findings.length > 0) {
-      return activeReview.findings.map(mapBackendFindingToUi);
+      return activeReview.findings as AnyFinding[];
     }
     return [];
-  }, [activeReview]);
+  }, [apiDetails, activeReview]);
 
-  const f = allFindings.find((x) => x.id === selectedFinding) ?? allFindings[0];
-  if (!f) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-muted-foreground">No finding selected.</p>
-        <Button onClick={() => setView("result")} variant="outline" className="mt-4">
-          <ArrowLeft className="size-3 mr-1" />
-          Back to review result
-        </Button>
-      </div>
+  const allFindings = useMemo<Finding[]>(() => {
+    return rawFindingsList.map(mapBackendFindingToUi);
+  }, [rawFindingsList]);
+
+  // Index of current finding
+  const currentIndex = useMemo(() => {
+    if (!selectedFinding || allFindings.length === 0) return 0;
+    const idx = allFindings.findIndex(
+      (x, i) =>
+        x.id === selectedFinding ||
+        rawFindingsList[i]?.ruleId === selectedFinding ||
+        rawFindingsList[i]?._id === selectedFinding ||
+        rawFindingsList[i]?.id === selectedFinding,
     );
-  }
+    return idx >= 0 ? idx : 0;
+  }, [allFindings, rawFindingsList, selectedFinding]);
 
-  const rawFinding = activeReview?.findings?.find(
-    (finding) => (finding._id || finding.id) === f.id,
-  );
-  const status = findingStatuses[f.id] ?? f.status;
-  const setStatus = (s: string) => setFindingStatus(f.id, s);
+  const f = allFindings[currentIndex] || allFindings[0];
+  const rawFinding: AnyFinding | undefined = rawFindingsList[currentIndex] || rawFindingsList[0];
 
+  // Navigation handlers
+  const handlePrevFinding = () => {
+    if (currentIndex > 0 && allFindings[currentIndex - 1]) {
+      setSelectedFinding(allFindings[currentIndex - 1]!.id);
+    }
+  };
+
+  const handleNextFinding = () => {
+    if (currentIndex < allFindings.length - 1 && allFindings[currentIndex + 1]) {
+      setSelectedFinding(allFindings[currentIndex + 1]!.id);
+    }
+  };
+
+  // Status management
+  const status = (f ? findingStatuses[f.id] : null) ?? f?.status ?? "Detected";
+  const setStatus = (s: string) => {
+    if (!f) return;
+    setFindingStatus(f.id, s);
+    toast.success(`Finding status marked as "${s}"`);
+  };
+
+  // AI analysis records
+  const aiRecords = apiDetails?.aiAnalysis || (activeReview as { rawDetails?: ReviewDetails })?.rawDetails?.aiAnalysis || [];
+
+  const aiFinding = useMemo(() => {
+    if (!rawFinding) return null;
+    for (const record of aiRecords) {
+      const findings = record.result?.findings;
+      if (Array.isArray(findings)) {
+        const match = findings.find(
+          (item: any) =>
+            item.ruleId === rawFinding.ruleId ||
+            item.ruleId === rawFinding.title ||
+            item.id === rawFinding._id,
+        );
+        if (match) return match;
+      }
+    }
+    return null;
+  }, [aiRecords, rawFinding]);
+
+  const aiImprovement = useMemo(() => {
+    if (!rawFinding) return null;
+    for (const record of aiRecords) {
+      const improvements = record.result?.improvements;
+      if (Array.isArray(improvements)) {
+        const match = improvements.find((item: any) => item.ruleId === rawFinding.ruleId);
+        if (match) return match;
+      }
+    }
+    return null;
+  }, [aiRecords, rawFinding]);
+
+  const aiModelInfo = useMemo(() => {
+    const rec = aiRecords.find((r) => r.provider || r.model);
+    return rec ? { provider: rec.provider, model: rec.model } : null;
+  }, [aiRecords]);
+
+  // Derived fields to display EVERYTHING
   const aiExplanation =
-    rawFinding?.aiAnalysis?.explanation || rawFinding?.explanation || f.description;
+    (aiFinding?.explanation as string) ||
+    (rawFinding?.explanation as string) ||
+    (rawFinding?.aiAnalysis?.explanation as string) ||
+    (aiImprovement?.reason as string) ||
+    f?.description;
+
+  const aiAssessment =
+    (aiFinding?.assessment as string) ||
+    (rawFinding?.aiAssessment as string) ||
+    (rawFinding?.assessment as string) ||
+    null;
+
+  const rawRemediation = rawFinding?.remediation || rawFinding?.recommendation;
+  const remediationGuidance =
+    (aiFinding?.remediation as string) ||
+    (aiImprovement?.suggestion as string) ||
+    (typeof rawRemediation === "string" ? rawRemediation : null) ||
+    (typeof rawFinding?.suggestedFix === "string" ? rawFinding.suggestedFix : null);
+
   const fixDiff =
     rawFinding?.aiAnalysis?.fix ||
     rawFinding?.aiAnalysis?.improvedCode ||
     rawFinding?.fix ||
-    rawFinding?.suggestedFix;
-  const rule = rawFinding?.ruleId || f.id;
-  const cwe = rawFinding?.cwe || rawFinding?.cweId || null;
-  const owasp = rawFinding?.owasp || null;
+    rawFinding?.suggestedFix ||
+    aiImprovement?.suggestion ||
+    (typeof rawRemediation === "object" && rawRemediation !== null ? rawRemediation : null) ||
+    (typeof rawRemediation === "string" &&
+    (rawRemediation.includes("\n") || rawRemediation.includes("{") || rawRemediation.includes(";"))
+      ? rawRemediation
+      : null);
+
+  const rule = (rawFinding?.ruleId as string) || f?.id || "N/A";
+
+  const standards = useMemo(() => {
+    if (!rawFinding) return { cwe: null, owasp: null };
+    const ruleKey = String(rawFinding.ruleId || f?.id || "").toLowerCase();
+    const explicitCwe = (rawFinding.cwe as string) || (rawFinding.cweId as string) || null;
+    const explicitOwasp = (rawFinding.owasp as string) || null;
+    if (explicitCwe || explicitOwasp) {
+      return { cwe: explicitCwe, owasp: explicitOwasp };
+    }
+    for (const [key, val] of Object.entries(RULE_SECURITY_STANDARDS)) {
+      if (ruleKey.includes(key)) {
+        return val;
+      }
+    }
+    if (String(rawFinding.category ?? "").toLowerCase() === "security") {
+      return { cwe: "CWE-699 (Software Security)", owasp: "OWASP Top 10" };
+    }
+    return { cwe: null, owasp: null };
+  }, [rawFinding, f]);
+
+  const copyFindingId = () => {
+    if (f?.id) {
+      navigator.clipboard.writeText(f.id);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+      toast.success("Finding ID copied to clipboard");
+    }
+  };
+
+  // If loading and no finding yet
+  if (isCallingApi && !f) {
+    return (
+      <div className="panel p-12 text-center">
+        <LoaderCircle className="size-8 animate-spin mx-auto text-primary mb-3" />
+        <p className="text-sm font-medium">Fetching finding details from API…</p>
+        <p className="text-xs text-muted-foreground mt-1">Connecting to backend review service</p>
+      </div>
+    );
+  }
+
+  // If no finding found at all
+  if (!f) {
+    return (
+      <div className="panel p-8 text-center">
+        <p className="text-muted-foreground">No finding selected or found in review.</p>
+        {apiError && <p className="mt-2 text-xs text-critical">{apiError}</p>}
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Button onClick={() => setView("result")} variant="outline">
+            <ArrowLeft className="size-3 mr-1" />
+            Back to review result
+          </Button>
+          {targetReviewId && (
+            <Button onClick={() => fetchFindingDetailsFromApi(targetReviewId)} disabled={isCallingApi}>
+              <RefreshCw className={cn("size-3 mr-1", isCallingApi && "animate-spin")} />
+              Retry API call
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
-      <button
-        onClick={() => setView("result")}
-        className="mb-4 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3" />
-        Back to all findings
-      </button>
+      {/* ── Top Navigation Toolbar ── */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setView("result")}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-3.5" />
+            Back to all findings
+          </Button>
+          {targetReviewId && (
+            <span className="font-mono text-[10px] text-muted-foreground/70 hidden sm:inline">
+              Review: {targetReviewId}
+            </span>
+          )}
+        </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => targetReviewId && fetchFindingDetailsFromApi(targetReviewId)}
+            disabled={isCallingApi}
+            title="Refresh details directly from backend API"
+            className="h-8 gap-1.5 text-xs"
+          >
+            <RefreshCw className={cn("size-3.5", isCallingApi && "animate-spin text-primary")} />
+            {isCallingApi ? "Calling API…" : "Reload from API"}
+          </Button>
+
+          {allFindings.length > 1 && (
+            <div className="flex items-center gap-1 rounded border border-border bg-background p-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handlePrevFinding}
+                disabled={currentIndex === 0}
+                className="size-7"
+                title="Previous finding"
+              >
+                <ChevronLeft className="size-3.5" />
+              </Button>
+              <span className="px-2 font-mono text-[11px] text-muted-foreground">
+                {currentIndex + 1} / {allFindings.length}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleNextFinding}
+                disabled={currentIndex >= allFindings.length - 1}
+                className="size-7"
+                title="Next finding"
+              >
+                <ChevronRight className="size-3.5" />
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {apiError && (
+        <div className="mb-4 rounded border border-warning/30 bg-warning/10 p-3 text-xs text-warning flex items-center gap-2">
+          <AlertTriangle className="size-4 shrink-0" />
+          <span>Notice: {apiError}. Showing cached finding details.</span>
+        </div>
+      )}
+
+      {/* ── Main Detail Grid ── */}
+      <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="space-y-4">
+          {/* Finding Overview */}
           <section className="panel p-5">
             <div className="flex flex-wrap items-center gap-2">
               <SeverityBadge severity={f.severity} />
-              <span className="font-mono text-[10px] text-muted-foreground">{f.id}</span>
+              <button
+                type="button"
+                onClick={copyFindingId}
+                className="group flex items-center gap-1 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+                title="Click to copy finding ID"
+              >
+                <span>{f.id}</span>
+                {copiedId ? (
+                  <Check className="size-3 text-success" />
+                ) : (
+                  <Copy className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                )}
+              </button>
+              <span className="rounded bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                {rule}
+              </span>
               <span className="ml-auto status-dot">{status}</span>
             </div>
-            <h1 className="mt-4 text-xl font-semibold">{f.title}</h1>
-            <div className="mt-2 flex flex-wrap gap-3 font-mono text-[10px] text-muted-foreground">
-              <span>
+
+            <h1 className="mt-4 text-xl font-semibold text-foreground">{f.title}</h1>
+
+            <div className="mt-3 flex flex-wrap items-center gap-3 font-mono text-[11px] text-muted-foreground">
+              <span className="flex items-center gap-1 font-medium text-foreground">
+                <FileCode2 className="size-3.5 text-primary" />
                 {f.file}:{f.line}
               </span>
-              <span>{f.category}</span>
+              <span>·</span>
+              <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] uppercase font-semibold text-foreground/80">
+                {f.category}
+              </span>
+              <span>·</span>
               <span>{f.confidence}% confidence</span>
-            </div>
-            <p className="mt-5 text-sm leading-6 text-muted-foreground">{f.description}</p>
-          </section>
-
-          <CodeEvidence rawFinding={rawFinding} finding={f} />
-
-          <section className="panel overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-              <Bot className="size-4 text-ai" />
-              <h2 className="text-xs font-semibold">Explanation</h2>
-              {rawFinding?.aiAnalysis && (
-                <span className="rounded border border-ai/30 bg-ai/10 px-1.5 py-0.5 text-[9px] text-ai">
-                  AI-GENERATED
-                </span>
+              {rawFinding?.createdAt && (
+                <>
+                  <span>·</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Detected: {new Date(rawFinding.createdAt).toLocaleString()}
+                  </span>
+                </>
               )}
             </div>
-            <div className="p-5 text-sm leading-6 text-muted-foreground">
-              <p>{aiExplanation}</p>
+
+            <div className="mt-4 border-t border-border/60 pt-4">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</h3>
+              <p className="mt-2 text-sm leading-6 text-foreground/90">{f.description}</p>
             </div>
           </section>
 
-          {fixDiff && (
+          {/* Code Evidence / Location */}
+          <CodeEvidence rawFinding={rawFinding} finding={f} />
+
+          {/* AI Explanation & Deep Dive */}
+          <section className="panel overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Bot className="size-4 text-ai" />
+                <h2 className="text-xs font-semibold">AI Analysis & Explanation</h2>
+                <span className="rounded border border-ai/30 bg-ai/10 px-1.5 py-0.5 text-[9px] font-semibold text-ai">
+                  AI-GENERATED
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {aiModelInfo && (
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {aiModelInfo.provider?.toUpperCase()} ({aiModelInfo.model})
+                  </span>
+                )}
+                {aiAssessment && (
+                  <span
+                    className={cn(
+                      "rounded px-2 py-0.5 font-mono text-[10px] font-semibold uppercase",
+                      aiAssessment === "confirmed"
+                        ? "bg-critical/10 text-critical border border-critical/30"
+                        : aiAssessment === "likely"
+                          ? "bg-warning/10 text-warning border border-warning/30"
+                          : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    Assessment: {aiAssessment}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="p-5 text-sm leading-6 text-foreground/90 space-y-3">
+              <p>{aiExplanation}</p>
+              {aiImprovement?.reason && aiImprovement.reason !== aiExplanation && (
+                <div className="rounded border border-border/80 bg-accent/20 p-3 text-xs leading-5 text-muted-foreground">
+                  <span className="font-semibold text-foreground">Why this matters: </span>
+                  {aiImprovement.reason}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Remediation Guidance & Suggested Fix */}
+          {(remediationGuidance || fixDiff) && (
             <section className="panel overflow-hidden">
-              <div className="flex items-center border-b border-border px-4 py-3">
-                <h2 className="text-xs font-semibold">Suggested fix</h2>
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="size-4 text-primary" />
+                  <h2 className="text-xs font-semibold">Remediation & Suggested Fix</h2>
+                </div>
+                {status !== "Resolved" && (
+                  <Button size="sm" onClick={() => setStatus("Resolved")} className="h-7 text-xs">
+                    <Check className="size-3 mr-1" />
+                    Mark as Resolved
+                  </Button>
+                )}
               </div>
-              <div className="h-52 bg-editor">
-                <Suspense
-                  fallback={
-                    <div className="grid h-full place-items-center text-xs text-muted-foreground">
-                      Loading editor…
-                    </div>
-                  }
-                >
-                  <Editor
-                    height="100%"
-                    theme="vs-dark"
-                    language="typescript"
-                    value={typeof fixDiff === "string" ? fixDiff : JSON.stringify(fixDiff, null, 2)}
-                    options={{
-                      readOnly: true,
-                      minimap: { enabled: false },
-                      fontFamily: "JetBrains Mono",
-                      fontSize: 12,
-                      lineHeight: 21,
-                      lineNumbers: "off",
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                    }}
-                  />
-                </Suspense>
-              </div>
-              <div className="flex items-center justify-end gap-2 border-t border-border p-3">
-                <Button variant="outline" onClick={() => setStatus("False Positive")}>
-                  <X />
-                  Reject
+
+              {remediationGuidance && (
+                <div className="border-b border-border/60 bg-muted/20 p-4 text-xs leading-5 text-foreground/90">
+                  <p className="font-semibold text-primary mb-1">Recommended Action:</p>
+                  <p>{remediationGuidance}</p>
+                </div>
+              )}
+
+              {fixDiff && (
+                <div className="bg-editor">
+                  <div className="border-b border-border/40 px-4 py-2 font-mono text-[10px] text-muted-foreground flex items-center justify-between">
+                    <span>Proposed Code Changes</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const text = typeof fixDiff === "string" ? fixDiff : JSON.stringify(fixDiff, null, 2);
+                        navigator.clipboard.writeText(text);
+                        toast.success("Fix code copied to clipboard");
+                      }}
+                      className="h-6 text-[10px]"
+                    >
+                      <Copy className="size-3 mr-1" />
+                      Copy code
+                    </Button>
+                  </div>
+                  <div className="h-56">
+                    <Suspense
+                      fallback={
+                        <div className="grid h-full place-items-center text-xs text-muted-foreground">
+                          Loading editor…
+                        </div>
+                      }
+                    >
+                      <Editor
+                        height="100%"
+                        theme="vs-dark"
+                        language="typescript"
+                        value={typeof fixDiff === "string" ? fixDiff : JSON.stringify(fixDiff, null, 2)}
+                        options={{
+                          readOnly: true,
+                          minimap: { enabled: false },
+                          fontFamily: "JetBrains Mono",
+                          fontSize: 12,
+                          lineHeight: 21,
+                          lineNumbers: "on",
+                          scrollBeyondLastLine: false,
+                          automaticLayout: true,
+                        }}
+                      />
+                    </Suspense>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border p-3 bg-card">
+                <Button variant="outline" size="sm" onClick={() => setStatus("False Positive")}>
+                  <X className="size-3 mr-1" />
+                  Reject as False Positive
                 </Button>
-                <Button onClick={() => setStatus("Accepted")}>
-                  <Check />
-                  Accept fix
+                <Button size="sm" onClick={() => setStatus("Accepted")}>
+                  <Check className="size-3 mr-1" />
+                  Accept Fix
                 </Button>
               </div>
             </section>
           )}
         </div>
 
+        {/* ── Sidebar: Status, Metadata & Standards ── */}
         <aside className="space-y-4">
+          {/* Status Switcher */}
           <div className="panel p-4">
-            <h2 className="text-xs font-semibold">Finding status</h2>
+            <h2 className="text-xs font-semibold">Finding Status</h2>
             <div className="mt-3 space-y-2">
               {["Detected", "Accepted", "Resolved", "False Positive"].map((x) => (
                 <button
                   onClick={() => setStatus(x)}
                   key={x}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded border px-3 py-2 text-xs",
+                    "flex w-full items-center gap-2.5 rounded border px-3 py-2 text-xs transition-colors",
                     status === x
-                      ? "border-primary bg-primary/10"
-                      : "border-border text-muted-foreground",
+                      ? "border-primary bg-primary/10 font-medium text-foreground"
+                      : "border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground",
                   )}
                 >
                   <span
@@ -2853,31 +3369,101 @@ function FindingDetail() {
             </div>
           </div>
 
+          {/* Rules, Standards & Compliance */}
           <div className="panel p-4">
             <h2 className="text-xs font-semibold">Evidence & Rules</h2>
             <dl className="mt-3 space-y-3 text-[11px]">
               <div>
-                <dt className="text-muted-foreground">Rule</dt>
-                <dd className="mt-1 font-mono">{rule}</dd>
+                <dt className="text-muted-foreground">Rule Identifier</dt>
+                <dd className="mt-1 font-mono font-medium text-foreground">{rule}</dd>
               </div>
-              {cwe && (
+              <div>
+                <dt className="text-muted-foreground">Category</dt>
+                <dd className="mt-1 font-mono uppercase text-foreground">{f.category}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Severity</dt>
+                <dd className="mt-1">
+                  <SeverityBadge severity={f.severity} />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Confidence Score</dt>
+                <dd className="mt-1 font-mono font-medium text-foreground">{f.confidence}%</dd>
+              </div>
+              {standards.cwe && (
                 <div>
-                  <dt className="text-muted-foreground">CWE</dt>
-                  <dd className="mt-1 font-mono text-primary">{cwe}</dd>
+                  <dt className="text-muted-foreground">CWE Reference</dt>
+                  <dd className="mt-1 font-mono font-medium text-primary">{standards.cwe}</dd>
                 </div>
               )}
-              {owasp && (
+              {standards.owasp && (
                 <div>
-                  <dt className="text-muted-foreground">OWASP</dt>
-                  <dd className="mt-1 font-mono">{owasp}</dd>
+                  <dt className="text-muted-foreground">OWASP Top 10</dt>
+                  <dd className="mt-1 font-mono font-medium text-foreground">{standards.owasp}</dd>
                 </div>
               )}
               <div>
-                <dt className="text-muted-foreground">Category</dt>
-                <dd className="mt-1 font-mono">{f.category}</dd>
+                <dt className="text-muted-foreground">File Path</dt>
+                <dd className="mt-1 break-all font-mono text-[10px] text-foreground">{f.file}</dd>
               </div>
+              <div>
+                <dt className="text-muted-foreground">Line Coordinates</dt>
+                <dd className="mt-1 font-mono text-foreground">
+                  {rawFinding?.lineStart
+                    ? rawFinding.lineEnd && rawFinding.lineEnd !== rawFinding.lineStart
+                      ? `Lines ${rawFinding.lineStart} – ${rawFinding.lineEnd}`
+                      : `Line ${rawFinding.lineStart}`
+                    : `Line ${f.line}`}
+                </dd>
+              </div>
+              {targetReviewId && (
+                <div>
+                  <dt className="text-muted-foreground">Review ID</dt>
+                  <dd className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
+                    {targetReviewId}
+                  </dd>
+                </div>
+              )}
+              {rawFinding?.createdAt && (
+                <div>
+                  <dt className="text-muted-foreground">First Detected</dt>
+                  <dd className="mt-1 text-[10px] text-muted-foreground">
+                    {new Date(rawFinding.createdAt).toLocaleString()}
+                  </dd>
+                </div>
+              )}
+              {rawFinding?.updatedAt && (
+                <div>
+                  <dt className="text-muted-foreground">Last Updated</dt>
+                  <dd className="mt-1 text-[10px] text-muted-foreground">
+                    {new Date(rawFinding.updatedAt).toLocaleString()}
+                  </dd>
+                </div>
+              )}
             </dl>
           </div>
+
+          {/* Review Summary Context */}
+          {apiDetails?.review && (
+            <div className="panel p-4">
+              <h2 className="text-xs font-semibold">Review Context</h2>
+              <dl className="mt-3 space-y-2 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Review Status</dt>
+                  <dd className="font-mono uppercase text-foreground">{apiDetails.review.status}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Review Score</dt>
+                  <dd className="font-mono font-semibold text-primary">{apiDetails.review.score ?? "--"}/100</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Total Findings</dt>
+                  <dd className="font-mono text-foreground">{apiDetails.findings?.length ?? allFindings.length}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
         </aside>
       </div>
     </>
@@ -2943,6 +3529,8 @@ function SeveritySummary({
   );
 }
 
+const DASHBOARD_PREVIEW_LIMIT = 5;
+
 /** Full "Recent reviews" card for the Member dashboard. */
 function RecentReviewsCard({
   reviews,
@@ -2979,7 +3567,7 @@ function RecentReviewsCard({
       ) : (
         /* Review rows */
         <div className="divide-y divide-border">
-          {reviews.map((r) => (
+          {reviews.slice(0, DASHBOARD_PREVIEW_LIMIT).map((r) => (
             <button
               key={r.id}
               type="button"
@@ -3368,7 +3956,7 @@ function Dashboard() {
                 <span>No open findings in the latest reviews</span>
               </div>
             ) : (
-              openFindings.map((f) => (
+              openFindings.slice(0, DASHBOARD_PREVIEW_LIMIT).map((f) => (
                 <button
                   key={f.id}
                   onClick={() => {
@@ -3407,7 +3995,7 @@ function Dashboard() {
                 <span>No recent review activity</span>
               </div>
             ) : (
-              recentReviews.map((r) => (
+              recentReviews.slice(0, DASHBOARD_PREVIEW_LIMIT).map((r) => (
                 <button
                   key={r.id}
                   onClick={() => handleSelectReview(r.id)}
@@ -3810,6 +4398,9 @@ function CompanyDashboard() {
                 {openFindings.length}
               </span>
             </h2>
+            <Button variant="ghost" size="sm" onClick={() => setView("history")}>
+              View all
+            </Button>
             {critCount > 0 && (
               <span
                 className={cn(
@@ -3829,7 +4420,7 @@ function CompanyDashboard() {
                 <p className="text-[10px]">No open findings across team reviews.</p>
               </div>
             ) : (
-              openFindings.map((f, i) => (
+              openFindings.slice(0, DASHBOARD_PREVIEW_LIMIT).map((f, i) => (
                 <div key={f.id || i} className="flex items-start gap-3 px-4 py-3">
                   <SeverityBadge severity={f.severity as Severity} />
                   <div className="min-w-0 flex-1">
@@ -3859,7 +4450,7 @@ function CompanyDashboard() {
                 <p className="text-[10px]">Team reviews will appear here once submitted.</p>
               </div>
             ) : (
-              recentReviews.map((r) => (
+              recentReviews.slice(0, DASHBOARD_PREVIEW_LIMIT).map((r) => (
                 <button
                   key={r.reviewId || r.id}
                   onClick={() => handleSelectReview(r.reviewId || r.id)}
@@ -3927,7 +4518,9 @@ function UsersView() {
   };
 
   const handleDeleteUser = async (userId: string, userName: string) => {
-    if (!window.confirm(`Are you sure you want to delete user "${userName}"? This cannot be undone.`)) {
+    if (
+      !window.confirm(`Are you sure you want to delete user "${userName}"? This cannot be undone.`)
+    ) {
       return;
     }
     try {
@@ -5187,6 +5780,9 @@ function Profile() {
       role: state.role,
     })),
   );
+  const authUser = useAuthStore((state) => state.user);
+  const hasPassword =
+    authUser?.hasPassword ?? !["google", "github"].includes(authUser?.provider ?? "local");
 
   const [name, setName] = useState(userName);
   const [email, setEmail] = useState(userEmail);
@@ -5227,9 +5823,13 @@ function Profile() {
     }
     setSavingProfile(true);
     try {
-      await updateProfile({ name: name.trim(), email: email.trim() });
-      useReviewStore.getState().setUserName(name.trim());
-      useReviewStore.getState().setUserEmail(email.trim());
+      const result = await updateProfile({ name: name.trim(), email: email.trim() });
+      if (result.user) {
+        useAuthStore.getState().setUser(result.user);
+      } else {
+        useReviewStore.getState().setUserName(name.trim());
+        useReviewStore.getState().setUserEmail(email.trim());
+      }
       toast.success("Profile updated successfully");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update profile");
@@ -5240,12 +5840,20 @@ function Profile() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!oldPassword || !newPassword) {
-      toast.error("Please enter both your current and new password");
+    if ((hasPassword && !oldPassword) || !newPassword) {
+      toast.error(
+        hasPassword
+          ? "Please enter both your current and new password"
+          : "Please enter a new password",
+      );
       return;
     }
     if (newPassword.length < 8) {
       toast.error("New password must be at least 8 characters");
+      return;
+    }
+    if (getPasswordStrength(newPassword) === "weak") {
+      toast.error("New password is weak. Use at least 8 characters and a mix of character types.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -5254,7 +5862,11 @@ function Profile() {
     }
     setSavingPassword(true);
     try {
-      await changePassword({ oldPassword, newPassword });
+      await changePassword({
+        ...(hasPassword ? { oldPassword } : {}),
+        newPassword,
+      });
+      useAuthStore.getState().setHasPassword(true);
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -5356,31 +5968,44 @@ function Profile() {
             </div>
           </form>
 
-          {/* Change Password */}
+          {/* Password setup and updates */}
           <form onSubmit={handleChangePassword} className="panel p-5 space-y-4">
-            <h2 className="text-sm font-semibold">Security & Password</h2>
+            <h2 className="text-sm font-semibold">
+              {hasPassword ? "Change password" : "Set password"}
+            </h2>
             <div className="space-y-3">
-              <label className="text-[11px] text-muted-foreground block">
-                Current password
-                <Input
-                  type="password"
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  placeholder="Enter current password"
-                  className="mt-1.5 text-foreground"
-                />
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
+              {hasPassword && (
                 <label className="text-[11px] text-muted-foreground block">
-                  New password
+                  Current password
                   <Input
+                    type="password"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    placeholder="Enter current password"
+                    className="mt-1.5 text-foreground"
+                  />
+                </label>
+              )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="account-new-password"
+                    className="text-[11px] text-muted-foreground block"
+                  >
+                    New password
+                  </label>
+                  <Input
+                    id="account-new-password"
+                    minLength={8}
+                    maxLength={128}
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Min 8 characters"
                     className="mt-1.5 text-foreground"
                   />
-                </label>
+                  <PasswordStrengthIndicator password={newPassword} />
+                </div>
                 <label className="text-[11px] text-muted-foreground block">
                   Confirm new password
                   <Input
@@ -5394,9 +6019,13 @@ function Profile() {
               </div>
             </div>
             <div className="pt-2 flex justify-end">
-              <Button type="submit" variant="outline" disabled={savingPassword || !oldPassword || !newPassword}>
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={savingPassword || (hasPassword && !oldPassword) || !newPassword}
+              >
                 {savingPassword && <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />}
-                Update password
+                {hasPassword ? "Change password" : "Set password"}
               </Button>
             </div>
           </form>
@@ -5405,7 +6034,8 @@ function Profile() {
           <div className="panel p-5 border-destructive/20 space-y-3">
             <h2 className="text-sm font-semibold text-destructive">Danger zone</h2>
             <p className="text-xs text-muted-foreground">
-              Permanently delete your account and all associated personal data. This action cannot be undone.
+              Permanently delete your account and all associated personal data. This action cannot
+              be undone.
             </p>
             {showDeleteConfirm ? (
               <div className="space-y-3 pt-2">

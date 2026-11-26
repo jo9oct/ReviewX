@@ -14,7 +14,9 @@ import {
 import { type ReactNode } from "react";
 
 import { Toaster } from "@/components/toaster";
+import { FeedbackWidget } from "@/components/feedback-widget";
 import { STORAGE_KEYS } from "@/lib/constants";
+import { useAuthStore } from "@/lib/auth-store";
 
 import appCss from "../styles.css?url";
 
@@ -173,11 +175,15 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const isAuthenticated = useAuthStore(
+    (state) => state.status === "authenticated" && state.user !== null,
+  );
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      {isAuthenticated && <FeedbackWidget />}
       <Toaster />
     </QueryClientProvider>
   );

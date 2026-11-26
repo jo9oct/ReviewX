@@ -32,7 +32,7 @@ export function PrivacyPage() {
       <LegalSection title="Account data">
         <p>
           When you create an account we collect your name, email address, and a hashed password (or
-          an OAuth token if you sign in with Google). We use this to identify you, send
+          an OAuth identity if you sign in with Google or GitHub). We use this to identify you, send
           transactional emails (confirmation, password reset), and manage your subscription.
         </p>
         <p>We do not sell your personal data. We do not share it with advertisers.</p>
@@ -73,10 +73,10 @@ export function PrivacyPage() {
           personal data we hold about you, or to object to its processing. To exercise these rights,
           contact us at{" "}
           <a
-            href="mailto:privacy@reviewx.dev"
+            href="mailto:jops7326@gmail.com"
             className="font-medium text-foreground underline-offset-4 hover:underline"
           >
-            privacy@reviewx.dev
+            jops7326@gmail.com
           </a>
           .
         </p>
@@ -94,10 +94,10 @@ export function PrivacyPage() {
         <p>
           Questions about this policy?{" "}
           <a
-            href="mailto:privacy@reviewx.dev"
+            href="mailto:jops7326@gmail.com"
             className="font-medium text-foreground underline-offset-4 hover:underline"
           >
-            privacy@reviewx.dev
+            jops7326@gmail.com
           </a>
         </p>
       </LegalSection>

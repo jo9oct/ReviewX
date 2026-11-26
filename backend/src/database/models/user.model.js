@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: function () {
-        return !this.googleId;
+        return !this.googleId && !this.githubId;
       },
     },
 
@@ -89,10 +89,15 @@ const userSchema = new mongoose.Schema(
       sparse: true,
     },
 
-    // Authentication provider: local or Google
+    githubId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+
     provider: {
       type: String,
-      enum: ["local", "google"],
+      enum: ["local", "google", "github"],
       default: "local",
     },
 
@@ -215,6 +220,7 @@ userSchema.methods.toPublic = function () {
     lastLogin: this.lastLogin,
     lastLoginAt: this.lastLoginAt || this.lastLogin,
     provider: this.provider,
+    hasPassword: Boolean(this.password),
     Photo: this.Photo,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,

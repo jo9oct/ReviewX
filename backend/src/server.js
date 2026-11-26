@@ -21,6 +21,8 @@ import {
 
 import authRoutes from './routes/auth.routes.js';
 
+import feedbackRoutes from './routes/feedback.routes.js';
+
 import googleAuthRoutes from './routes/google-auth.routes.js';
 
 import reviewRoutes from './routes/review.routes.js';
@@ -150,6 +152,11 @@ app.use(
 app.use(
   '/api/auth',
   authRoutes,
+);
+
+app.use(
+  '/api/v1/feedback',
+  feedbackRoutes,
 );
 
 /*
@@ -359,6 +366,7 @@ const startServer =
       );
 
       process.exitCode = 1;
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   };
 

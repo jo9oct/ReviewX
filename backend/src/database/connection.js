@@ -1,8 +1,121 @@
+import dns from 'node:dns';
 import mongoose from 'mongoose';
 import environment from '../config/environment.js';
 import { logger } from '../utils/logger.js';
 
 let connectionPromise = null;
+let dnsFallbackAttempted = false;
+
+/**
+ * Mask credentials in MongoDB URI for safe logging.
+ */
+const maskUri = (uri) => {
+  if (!uri || typeof uri !== 'string') return '';
+  return uri.replace(/\/\/(.*?)@/, (_, userinfo) => {
+    const parts = userinfo.split(':');
+    const user = parts[0] ? `${parts[0].slice(0, 3)}***` : '***';
+    return `//${user}:******@`;
+  });
+};
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const applyDnsFallback = () => {
+  if (dnsFallbackAttempted) return;
+  try {
+    const configuredServers = process.env.DNS_SERVERS
+      ? process.env.DNS_SERVERS.split(',').map((s) => s.trim()).filter(Boolean)
+      : ['1.1.1.1', '8.8.8.8', '1.0.0.1', '8.8.4.4'];
+
+    if (configuredServers.length > 0) {
+      dns.setServers(configuredServers);
+      dnsFallbackAttempted = true;
+      if (logger && typeof logger.info === 'function') {
+        logger.info('Applied DNS fallback servers for SRV resolution', {
+          servers: configuredServers,
+        });
+      }
+    }
+  } catch (dnsErr) {
+    if (logger && typeof logger.warn === 'function') {
+      logger.warn('Failed to configure fallback DNS servers', {
+        error: dnsErr.message,
+      });
+    }
+  }
+};
+
+const attemptMongooseConnect = async (retries = 5, initialDelay = 2000) => {
+  let attempt = 0;
+  let delay = initialDelay;
+  const timeoutMs =
+    environment.database.serverSelectionTimeoutMS ||
+    environment.database.serverSelectionTimeoutMs ||
+    10000;
+
+  while (attempt <= retries) {
+    try {
+      if (mongoose.connection.readyState === 1) {
+        return mongoose.connection;
+      }
+
+      const connection = await mongoose.connect(environment.database.uri, {
+        serverSelectionTimeoutMS: timeoutMs,
+        maxPoolSize: environment.database.maxPoolSize,
+        minPoolSize: environment.database.minPoolSize,
+        autoIndex: environment.database.autoIndex,
+      });
+
+      if (logger && typeof logger.info === 'function') {
+        logger.info('MongoDB connection established', {
+          database: connection.connection.name,
+          host: connection.connection.host,
+        });
+      }
+
+      return mongoose.connection;
+    } catch (error) {
+      attempt++;
+      const isDnsError =
+        error.message?.includes('querySrv') ||
+        error.code === 'ECONNREFUSED' ||
+        error.code === 'ENOTFOUND' ||
+        error.code === 'ETIMEOUT';
+
+      if (isDnsError && !dnsFallbackAttempted) {
+        applyDnsFallback();
+      }
+
+      if (attempt > retries) {
+        if (logger && typeof logger.error === 'function') {
+          logger.error('MongoDB connection failed after all retries', {
+            error: error.message,
+            uri: maskUri(environment.database.uri),
+            attempts: attempt,
+          });
+        }
+        throw error;
+      }
+
+      if (logger && typeof logger.warn === 'function') {
+        logger.warn(
+          `MongoDB connection attempt ${attempt}/${retries} failed. Retrying in ${delay}ms...`,
+          {
+            error: error.message,
+            nextRetryDelayMs: delay,
+          },
+        );
+      } else {
+        process.stderr.write(
+          `[database] Connection attempt ${attempt}/${retries} failed (${error.message}). Retrying in ${delay}ms...\n`,
+        );
+      }
+
+      await wait(delay);
+      delay = Math.min(Math.round(delay * 1.5), 10000);
+    }
+  }
+};
 
 const connectDatabase = async () => {
   if (mongoose.connection.readyState === 1) {
@@ -13,32 +126,25 @@ const connectDatabase = async () => {
     return connectionPromise;
   }
 
-  connectionPromise = mongoose.connect(environment.database.uri, {
-    serverSelectionTimeoutMS: environment.database.serverSelectionTimeoutMs,
-    maxPoolSize: environment.database.maxPoolSize,
-    minPoolSize: environment.database.minPoolSize,
-    autoIndex: environment.database.autoIndex
+  connectionPromise = attemptMongooseConnect().catch((error) => {
+    connectionPromise = null;
+    throw error;
   });
 
-  try {
-    const connection = await connectionPromise;
-    if (logger && typeof logger.info === 'function') {
-      logger.info('MongoDB connection established', {
-        database: connection.connection.name,
-        host: connection.connection.host
-      });
-    }
-    return mongoose.connection;
-  } catch (error) {
-    connectionPromise = null;
-    if (logger && typeof logger.error === 'function') {
-      logger.error('MongoDB connection failed', {
-        error: error.message
-      });
-    }
-    throw error;
-  }
+  return connectionPromise;
 };
+
+mongoose.connection.on('disconnected', () => {
+  if (logger && typeof logger.warn === 'function') {
+    logger.warn('MongoDB disconnected');
+  }
+});
+
+mongoose.connection.on('error', (err) => {
+  if (logger && typeof logger.error === 'function') {
+    logger.error('MongoDB connection error', { error: err.message });
+  }
+});
 
 const disconnectDatabase = async () => {
   connectionPromise = null;

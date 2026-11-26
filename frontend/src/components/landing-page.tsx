@@ -27,6 +27,7 @@ import {
   FileText,
   Gauge,
   Github,
+  Linkedin,
   Lock,
   Menu,
   Moon,
@@ -34,7 +35,6 @@ import {
   Sparkles,
   Sun,
   TrendingUp,
-  Twitter,
   WandSparkles,
   Workflow,
   X,
@@ -46,6 +46,7 @@ import { Button } from "@/components/primitives";
 import { useFadeIn } from "@/lib/use-fade-in";
 import { useTheme } from "@/lib/use-theme";
 import { cn } from "@/lib/utils";
+import { SUPPORTED_LANGUAGES, SUPPORTED_LANGUAGE_COUNT } from "@/lib/languages";
 
 /* ───────────────────────────────────────────── shared types ─── */
 
@@ -70,6 +71,13 @@ type Plan = {
 type FaqItem = {
   q: string;
   a: string;
+};
+
+type BlogArticle = {
+  slug: string;
+  title: string;
+  summary: string;
+  details: string[];
 };
 
 /* ─────────────────────────────────────────── static content ─── */
@@ -148,8 +156,7 @@ const REPORT_FEATURE = {
 const STEPS = [
   {
     label: "Paste or upload a file",
-    detail:
-      "Drop in a source file or paste code directly. Supports JavaScript, TypeScript, Python, Java, and PHP.",
+    detail: `Drop in a source file or paste code directly. ReviewX supports ${SUPPORTED_LANGUAGE_COUNT} languages.`,
   },
   {
     label: "Analyze in seconds",
@@ -163,13 +170,8 @@ const STEPS = [
   },
 ];
 
-const SUPPORTED_LANGUAGES = [
-  { label: "JavaScript", mono: "JS", color: "text-[#f7df1e]" },
-  { label: "TypeScript", mono: "TS", color: "text-[#3178c6]" },
-  { label: "Python", mono: "PY", color: "text-[#4b8bbe]" },
-  { label: "Java", mono: "JV", color: "text-[#ed8b00]" },
-  { label: "PHP", mono: "PHP", color: "text-[#8892be]" },
-];
+const CONTACT_EMAIL = "jops7326@gmail.com";
+const CONTACT_HREF = `mailto:${CONTACT_EMAIL}`;
 
 const PLANS: Plan[] = [
   {
@@ -222,7 +224,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "What languages are supported?",
-    a: "JavaScript, TypeScript, Python, Java, and PHP are supported today. Additional language support is on the roadmap.",
+    a: `ReviewX supports ${SUPPORTED_LANGUAGE_COUNT} languages: ${SUPPORTED_LANGUAGES.map((language) => language.label).join(", ")}.`,
   },
   {
     q: "Can I use my own company's coding rules?",
@@ -238,9 +240,39 @@ const FAQ: FaqItem[] = [
   },
 ];
 
+const BLOG_ARTICLES: BlogArticle[] = [
+  {
+    slug: "static-analysis",
+    title: "Why static analysis?",
+    summary: "Understand how code can be inspected without running it.",
+    details: [
+      "Static analysis examines source code without executing it. This lets a team look for potential issues during review, before the code runs in a test or production environment.",
+      "ReviewX checks submitted code for security, bug, quality, and performance concerns. Findings are guidance for reviewers to validate in the context of their application.",
+    ],
+  },
+  {
+    slug: "findings-to-fixes",
+    title: "From findings to fixes",
+    summary: "See how clear explanations turn review results into next steps.",
+    details: [
+      "A useful review should explain why a finding matters, not just point at a line of code. ReviewX presents findings with explanations and suggested fixes so developers can assess the issue and decide what to change.",
+      "Review every suggested change against your project requirements and tests before shipping it.",
+    ],
+  },
+  {
+    slug: "review-workflow",
+    title: "A focused review workflow",
+    summary: "Follow a source file from upload through actionable findings.",
+    details: [
+      `Paste or upload a source file, choose from ${SUPPORTED_LANGUAGE_COUNT} supported languages, and run a review for security, bugs, quality, and performance.`,
+      "Inspect the results, act on the findings, and share or export a report when you need to bring others into the review.",
+    ],
+  },
+];
+
 const SOCIAL_LINKS = [
-  { label: "ReviewX on GitHub", href: "https://github.com", icon: Github },
-  { label: "ReviewX on X / Twitter", href: "https://twitter.com", icon: Twitter },
+  { label: "ReviewX on GitHub", href: "https://github.com/jo9oct", icon: Github },
+  { label: "ReviewX on LinkedIn", href: "https://www.linkedin.com/in/jo9oct/", icon: Linkedin },
 ];
 
 const FOOTER_LINKS = [
@@ -250,15 +282,15 @@ const FOOTER_LINKS = [
       { label: "Features", href: "#features" },
       { label: "Pricing", href: "#pricing" },
       { label: "Security", href: "#security" },
-      { label: "Changelog", href: "#" },
+      { label: "Changelog", href: "#changelog" },
     ],
   },
   {
     heading: "Company",
     links: [
-      { label: "About", href: "#" },
-      { label: "Blog", href: "#" },
-      { label: "Contact", href: "#" },
+      { label: "About", href: "#about" },
+      { label: "Blog", href: "#blog" },
+      { label: "Contact", href: "#contact" },
     ],
   },
   {
@@ -538,10 +570,17 @@ function PlanCard({ plan, index = 0 }: { plan: Plan; index?: number }) {
                 : "border border-border bg-card/60 text-foreground hover:bg-accent hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] dark:hover:border-purple-500/30",
             )}
           >
-            <Link to="/register">
-              {plan.cta}
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
+            {plan.name === "Company" ? (
+              <a href={CONTACT_HREF}>
+                {plan.cta}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </a>
+            ) : (
+              <Link to="/register">
+                {plan.cta}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            )}
           </Button>
         </div>
       </div>
@@ -588,6 +627,42 @@ function FaqRow({ item, delay = 0 }: { item: FaqItem; delay?: number }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function BlogArticleCard({ article }: { article: BlogArticle }) {
+  const [expanded, setExpanded] = useState(false);
+  const detailsId = `blog-details-${article.slug}`;
+
+  return (
+    <article className="rounded-2xl border border-border bg-card/80 p-6 transition-colors hover:border-primary/40">
+      <h3 className="text-sm font-semibold text-foreground">{article.title}</h3>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{article.summary}</p>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={detailsId}
+        onClick={() => setExpanded((value) => !value)}
+        className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        {expanded ? "Read less" : "Read more"}
+        <ChevronDown
+          className={cn("size-3.5 transition-transform", expanded && "rotate-180")}
+          aria-hidden="true"
+        />
+      </button>
+      <div
+        id={detailsId}
+        role="region"
+        aria-label={`${article.title} details`}
+        hidden={!expanded}
+        className="mt-4 space-y-3 border-t border-border pt-4 text-sm leading-6 text-muted-foreground"
+      >
+        {article.details.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+      </div>
+    </article>
   );
 }
 
@@ -887,7 +962,7 @@ export function LandingPage() {
                 {[
                   { stat: "94%", desc: "Security findings caught" },
                   { stat: "< 2 min", desc: "Average review time" },
-                  { stat: "5", desc: "Languages supported" },
+                  { stat: `${SUPPORTED_LANGUAGE_COUNT}`, desc: "Languages supported" },
                   { stat: "89%", desc: "Fix acceptance rate" },
                 ].map(({ stat, desc }) => (
                   <div
@@ -916,6 +991,39 @@ export function LandingPage() {
                     <span className="text-muted-foreground">{lang.label}</span>
                   </span>
                 ))}
+              </div>
+            </div>
+          </section>
+
+          <section
+            id="about"
+            aria-labelledby="about-heading"
+            className="bg-surface/30 px-5 py-20 sm:px-6 lg:px-8"
+          >
+            <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1fr_1.2fr] lg:items-center">
+              <div>
+                <SectionLabel>About ReviewX</SectionLabel>
+                <SectionHeading id="about-heading">
+                  Code reviews with more clarity and confidence.
+                </SectionHeading>
+              </div>
+              <div className="space-y-4 text-sm leading-7 text-muted-foreground">
+                <p>
+                  ReviewX is an automated static code review service. It analyzes source code
+                  without executing it and highlights security, bug, quality, and performance issues
+                  with clear explanations and suggested fixes.
+                </p>
+                <p>
+                  ReviewX supports {SUPPORTED_LANGUAGE_COUNT} programming languages and helps
+                  developers turn review findings into practical next steps.
+                </p>
+                <a
+                  href="#features"
+                  className="inline-flex items-center gap-2 font-medium text-primary hover:underline"
+                >
+                  Explore features
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </a>
               </div>
             </div>
           </section>
@@ -973,7 +1081,7 @@ export function LandingPage() {
               >
                 {[
                   { stat: "6+", desc: "Finding categories checked" },
-                  { stat: "5", desc: "Languages supported" },
+                  { stat: `${SUPPORTED_LANGUAGE_COUNT}`, desc: "Languages supported" },
                   { stat: "24+", desc: "Built-in security rules" },
                   { stat: "2 min", desc: "Average review time" },
                 ].map(({ stat, desc }) => (
@@ -1225,7 +1333,7 @@ export function LandingPage() {
               <p ref={prNoteRef} className="mt-8 text-center text-xs text-muted-foreground">
                 Need a custom volume plan?{" "}
                 <a
-                  href="#"
+                  href={CONTACT_HREF}
                   className="font-medium text-foreground underline-offset-4 hover:underline"
                 >
                   Get in touch
@@ -1292,6 +1400,97 @@ export function LandingPage() {
             </div>
           </section>
 
+          <section
+            id="changelog"
+            aria-labelledby="changelog-heading"
+            className="bg-surface/30 px-5 py-20 sm:px-6 lg:px-8"
+          >
+            <div className="mx-auto max-w-7xl">
+              <div className="mx-auto max-w-2xl text-center">
+                <SectionLabel>Changelog</SectionLabel>
+                <SectionHeading id="changelog-heading">Current product highlights.</SectionHeading>
+                <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                  ReviewX supports {SUPPORTED_LANGUAGE_COUNT} languages and provides security, bug,
+                  quality, and performance analysis, plus shareable reports.
+                </p>
+              </div>
+              <div className="mt-10 grid gap-4 md:grid-cols-3">
+                {[
+                  {
+                    title: "Multi-language reviews",
+                    detail: `Analyze code in ${SUPPORTED_LANGUAGE_COUNT} supported languages.`,
+                    href: "#features",
+                  },
+                  {
+                    title: "Actionable findings",
+                    detail: "Review clear explanations and suggested fixes for detected issues.",
+                    href: "#workflow",
+                  },
+                  {
+                    title: "Security-first analysis",
+                    detail: "Inspect code without executing it, with findings mapped to standards.",
+                    href: "#security",
+                  },
+                ].map((item) => (
+                  <a
+                    key={item.title}
+                    href={item.href}
+                    className="rounded-2xl border border-border bg-card/80 p-6 transition-colors hover:border-primary/40"
+                  >
+                    <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.detail}</p>
+                    <span className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                      Explore
+                      <ArrowRight className="size-3.5" aria-hidden="true" />
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section id="blog" aria-labelledby="blog-heading" className="px-5 py-20 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl">
+              <div className="mx-auto max-w-2xl text-center">
+                <SectionLabel>Blog</SectionLabel>
+                <SectionHeading id="blog-heading">
+                  Practical notes for safer code reviews.
+                </SectionHeading>
+                <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                  Explore the ideas behind the ReviewX workflow.
+                </p>
+              </div>
+              <div className="mt-10 grid gap-4 md:grid-cols-3">
+                {BLOG_ARTICLES.map((article) => (
+                  <BlogArticleCard key={article.slug} article={article} />
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section
+            id="contact"
+            aria-labelledby="contact-heading"
+            className="bg-surface/30 px-5 py-20 sm:px-6 lg:px-8"
+          >
+            <div className="mx-auto max-w-7xl">
+              <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-card/80 px-8 py-12 text-center shadow-sm">
+                <SectionLabel>Contact</SectionLabel>
+                <SectionHeading id="contact-heading">Get in touch with ReviewX.</SectionHeading>
+                <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                  For questions about the product or your account, email us at:
+                </p>
+                <a
+                  href={CONTACT_HREF}
+                  className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  {CONTACT_EMAIL}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </a>
+              </div>
+            </div>
+          </section>
+
           {/* ════════════════════════════════════════════ FAQ ═══ */}
           {/* bg: dark — directly above footer */}
           <section id="faq" aria-labelledby="faq-heading" className="px-5 py-24 sm:px-6 lg:px-8">
@@ -1310,7 +1509,7 @@ export function LandingPage() {
                   <p className="mt-4 text-sm leading-7 text-muted-foreground">
                     Can't find what you need?{" "}
                     <a
-                      href="#"
+                      href={CONTACT_HREF}
                       className="font-medium text-foreground underline-offset-4 hover:underline"
                     >
                       Get in touch

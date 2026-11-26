@@ -8,6 +8,10 @@ import {
   getBranches,
   getRepository,
 } from '../services/github.service.js';
+import {
+  completeGithubLogin,
+  isGithubLoginState,
+} from './github-auth.controller.js';
 
 const connectGithub = (
   req,
@@ -42,6 +46,10 @@ const githubCallback = async (
       error_description:
         errorDescription,
     } = req.query;
+
+    if (isGithubLoginState(state)) {
+      return completeGithubLogin(req, res, next);
+    }
 
     if (error) {
       const callbackError =
