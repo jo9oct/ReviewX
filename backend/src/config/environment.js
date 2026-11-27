@@ -73,6 +73,39 @@ const normalizeString = (
   return normalized || defaultValue;
 };
 
+const normalizeHttpOrigin = (value, name) => {
+  const configuredOrigin = normalizeString(value);
+
+  if (!configuredOrigin) {
+    return '';
+  }
+
+  let parsedUrl;
+
+  try {
+    parsedUrl = new URL(configuredOrigin);
+  } catch {
+    throw new Error(
+      `${name} must be a valid absolute HTTP(S) origin.`,
+    );
+  }
+
+  if (
+    !['http:', 'https:'].includes(parsedUrl.protocol) ||
+    parsedUrl.username ||
+    parsedUrl.password ||
+    parsedUrl.pathname !== '/' ||
+    parsedUrl.search ||
+    parsedUrl.hash
+  ) {
+    throw new Error(
+      `${name} must be a valid absolute HTTP(S) origin without credentials, path, query, or fragment.`,
+    );
+  }
+
+  return parsedUrl.origin;
+};
+
 const nodeEnv = normalizeString(
   process.env.NODE_ENV,
   'development',
@@ -531,14 +564,14 @@ const environment = Object.freeze({
       '',
     ),
 
-    backendUrl: normalizeString(
+    backendUrl: normalizeHttpOrigin(
       process.env.BACKEND_URL,
-      'http://localhost:5000',
+      'BACKEND_URL',
     ),
 
-    frontendUrl: normalizeString(
+    frontendUrl: normalizeHttpOrigin(
       process.env.FRONTEND_URL,
-      'http://localhost:5173',
+      'FRONTEND_URL',
     ),
 
     currency: normalizeString(

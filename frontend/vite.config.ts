@@ -9,13 +9,13 @@ import { defineConfig, loadEnv } from "vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
 
-  const configuredBackendUrl = env["VITE_API_BASE_URL"] || env["VITE_API_URL"];
+  const configuredBackendUrl = env["VITE_API_BASE_URL"];
   const backendUrl = configuredBackendUrl
     ? configuredBackendUrl.replace(/\/api\/v1\/?$/, "").replace(/\/$/, "")
     : "";
 
   if (!backendUrl && (mode === "development" || process.env["VERCEL"])) {
-    throw new Error("Set VITE_API_BASE_URL or VITE_API_URL to the backend API URL.");
+    throw new Error("Set VITE_API_BASE_URL to the backend API URL.");
   }
 
   const proxyRules = backendUrl

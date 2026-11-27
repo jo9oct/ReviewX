@@ -62,9 +62,9 @@ function hashResetToken(token) {
 }
 
 function getFrontendBaseUrl() {
-  const baseUrl = process.env.FRONTEND_URL || process.env.FRONT_END_BASE_URL;
+  const baseUrl = process.env.FRONTEND_URL;
   if (!baseUrl) {
-    throw new Error("FRONTEND_URL or FRONT_END_BASE_URL must be configured.");
+    throw new Error("FRONTEND_URL must be configured.");
   }
   return baseUrl.trim().replace(/\/+$/, "");
 }

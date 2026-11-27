@@ -432,10 +432,10 @@ import { createServerFn } from "@tanstack/react-start";
 export const getGithubConnectUrlFn = createServerFn({ method: "GET" })
   .validator((token: string) => token)
   .handler(async ({ data: token }) => {
-    const backendUrl = process.env["VITE_API_BASE_URL"] || process.env["VITE_API_URL"];
+    const backendUrl = process.env["VITE_API_BASE_URL"];
 
     if (!backendUrl) {
-      throw new Error("VITE_API_BASE_URL or VITE_API_URL must be set to the backend API URL.");
+      throw new Error("VITE_API_BASE_URL must be set to the backend API URL.");
     }
 
     const absoluteUrl = backendUrl.replace(/\/$/, "") + "/github/connect";

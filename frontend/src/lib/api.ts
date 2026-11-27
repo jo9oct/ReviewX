@@ -211,7 +211,7 @@ function normalizeApiOrigin(apiUrl: string): string {
     .replace(/\/api\/v1$/, "");
 }
 
-const configuredApiUrl = import.meta.env["VITE_API_BASE_URL"] || import.meta.env["VITE_API_URL"];
+const configuredApiUrl = import.meta.env["VITE_API_BASE_URL"];
 const configuredApiOrigin = normalizeApiOrigin(
   configuredApiUrl || (import.meta.env.DEV ? "/api/v1" : ""),
 );
@@ -228,7 +228,7 @@ export function getApiOrigin(): string {
       return "";
     }
 
-    throw new Error("VITE_API_BASE_URL or VITE_API_URL must be set to the backend API URL.");
+    throw new Error("VITE_API_BASE_URL must be set to the backend API URL.");
   }
 
   return normalizeApiOrigin(configuredApiUrl);

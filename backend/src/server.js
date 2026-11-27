@@ -78,7 +78,7 @@ app.use(
 );
 
 const frontendOrigin = resolveFrontendOrigin(
-  process.env.FRONTEND_URL,
+  environment.payment.frontendUrl,
   isProductionEnvironment(),
 );
 
@@ -343,7 +343,7 @@ const startServer =
         appConfig.host,
         () => {
           process.stdout.write(
-            `${appConfig.name} listening on ${appConfig.host}:http://localhost:${appConfig.port}\n`,
+            `${appConfig.name} listening on ${appConfig.host}:${appConfig.port} (${environment.payment.backendUrl})\n`,
           );
         },
       );

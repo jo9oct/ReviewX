@@ -7,6 +7,7 @@ import {
   isProductionEnvironment,
   resolveFrontendOrigin,
 } from "../config/cors.config.js";
+import environment from "../config/environment.js";
 
 function makeUniqueUsername(baseName) {
   const nameStr = String(baseName || "user");
@@ -17,7 +18,7 @@ function makeUniqueUsername(baseName) {
 
 const clientID = process.env.GOOGLE_CLIENT_ID;
 const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-const backendUrl = process.env.BACKEND_URL?.trim().replace(/\/+$/, "");
+const backendUrl = environment.payment.backendUrl;
 const callbackURL =
   process.env.GOOGLE_CALLBACK_URL?.trim() ||
   (backendUrl ? `${backendUrl}/api/v1/auth/google/callback` : "");
